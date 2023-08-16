@@ -1,6 +1,7 @@
 const std = @import("std");
+const ArrayList = std.ArrayList;
 
-const String = []const u8;
+pub const String = []const u8;
 const FILES = [1]String{"wordlist/english.txt"};
 pub const MNEMONIC_LENGTH = 24;
 
@@ -32,19 +33,13 @@ pub const WordList = struct {
     }
 };
 
-pub fn getMnemonic(wordlist: WordList) []String {
+pub fn getMnemonic(buffer: []String, wordlist: WordList) void {
     const words = wordlist.getWords();
-    _ = words;
-    var mnemonic: []String = undefined;
+    const rand = std.crypto.random;
     for (0..24) |i| {
-        _ = i;
-        // Generate random number between 0 and 2048
-        // Get word at index
-        // Append to mnemonic
-
+        const r = rand.intRangeAtMost(u16, 0, 2047);
+        buffer[i] = words[r];
     }
-
-    return mnemonic;
 }
 
 test "wordlist" {

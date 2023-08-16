@@ -10,6 +10,11 @@ pub fn main() !void {
 
     const wordlist = try bip39.WordList.init(allocator, "wordlist/english.txt");
     defer wordlist.deinit();
-    const words = wordlist.getWords();
-    std.debug.print("{s}\n", .{words[0]});
+
+    var buffer: [24]bip39.String = undefined;
+    bip39.getMnemonic(&buffer, wordlist);
+
+    for (buffer) |word| {
+        std.debug.print("{s}\n", .{word});
+    }
 }
