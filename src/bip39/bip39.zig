@@ -53,13 +53,13 @@ pub fn generateMnemonic(buffer: [][]const u8, entropy: u264, wordlist: WordList,
     }
 }
 
-// test "wordlist" {
-//     const allocator = std.testing.allocator;
-//     const wordlist = try WordList.init(allocator, "wordlist/test.txt");
-//     defer wordlist.deinit();
-//     const words: [2048][]u8 = wordlist.getWords();
-//     try std.testing.expectEqualStrings(words[0], "Test");
-// }
+test "wordlist" {
+    const allocator = std.testing.allocator;
+    const wordlist = try WordList.init(allocator, "wordlist/test.txt");
+    defer wordlist.deinit();
+    const words: [2048][]const u8 = wordlist.getWords();
+    try std.testing.expectEqualStrings(words[0], "Test");
+}
 
 test "generateMnemonic" {
     const allocator = std.testing.allocator;
