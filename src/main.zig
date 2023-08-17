@@ -10,7 +10,7 @@ pub fn main() !void {
     const wordlist = try bip39.WordList.init(allocator, "wordlist/english.txt");
 
     var buffer: [24][]u8 = undefined;
-    try bip39.getMnemonic(&buffer, wordlist, allocator);
+    try bip39.generateMnemonic(&buffer, wordlist, allocator);
     wordlist.deinit();
     defer for (buffer) |word| allocator.free(word);
 

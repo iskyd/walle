@@ -31,12 +31,21 @@ pub const WordList = struct {
     }
 };
 
-pub fn getMnemonic(buffer: [][]const u8, wordlist: WordList, allocator: std.mem.Allocator) !void {
-    const words = wordlist.getWords();
+pub fn generateMnemonic(buffer: [][]const u8, wordlist: WordList, allocator: std.mem.Allocator) !void {
     const rand = std.crypto.random;
+    const ent: u16 = 256; // Entropy length in bits
+    var init: [ent / 8]u8 = undefined;
+    rand.bytes(&init);
+    var checksum: [ent / 8]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(&init, &checksum, .{});
+    const entropy = init ++ checksum[0..1];
+    const u_entropy = @as(u264, @bitCast(entropy.*));
+    const mask: u64 = (1 << 11) - 1;
+
     for (0..24) |i| {
-        const r = rand.intRangeAtMost(u16, 0, 2047);
-        buffer[i] = try allocator.dupe(u8, words[r]);
+        const s = @as(u8, @intCast(i)) * @as(u9, @intCast(11));
+        const bits = u_entropy >> s & mask;
+        buffer[i] = try allocator.dupe(u8, wordlist.getWords()[@intCast(bits)]);
     }
 }
 
