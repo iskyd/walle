@@ -1,8 +1,6 @@
 const std = @import("std");
-const ArrayList = std.ArrayList;
 
-pub const String = []const u8;
-const FILES = [1]String{"wordlist/english.txt"};
+const FILES = [1][]u8{"wordlist/english.txt"};
 pub const MNEMONIC_LENGTH = 24;
 
 pub const WordList = struct {
@@ -19,9 +17,9 @@ pub const WordList = struct {
         self.allocator.free(self.data);
     }
 
-    pub fn getWords(self: WordList) [2048]String {
+    pub fn getWords(self: WordList) [2048][]const u8 {
         var lines = std.mem.split(u8, self.data, "\n");
-        var words: [2048]String = undefined;
+        var words: [2048][]const u8 = undefined;
         var index: u16 = 0;
 
         while (lines.next()) |line| {
@@ -33,12 +31,12 @@ pub const WordList = struct {
     }
 };
 
-pub fn getMnemonic(buffer: []String, wordlist: WordList) void {
+pub fn getMnemonic(buffer: [][]const u8, wordlist: WordList, allocator: std.mem.Allocator) !void {
     const words = wordlist.getWords();
     const rand = std.crypto.random;
     for (0..24) |i| {
         const r = rand.intRangeAtMost(u16, 0, 2047);
-        buffer[i] = words[r];
+        buffer[i] = try allocator.dupe(u8, words[r]);
     }
 }
 
@@ -46,6 +44,6 @@ test "wordlist" {
     const allocator = std.testing.allocator;
     const wordlist = try WordList.init(allocator, "wordlist/test.txt");
     defer wordlist.deinit();
-    const words: [2048]String = wordlist.getWords();
+    const words: [2048][]u8 = wordlist.getWords();
     try std.testing.expectEqualStrings(words[0], "Test");
 }

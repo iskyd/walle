@@ -9,10 +9,12 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     const wordlist = try bip39.WordList.init(allocator, "wordlist/english.txt");
-    defer wordlist.deinit();
+    // defer wordlist.deinit();
 
-    var buffer: [24]bip39.String = undefined;
-    bip39.getMnemonic(&buffer, wordlist);
+    var buffer: [24][]u8 = undefined;
+    try bip39.getMnemonic(&buffer, wordlist, allocator);
+    wordlist.deinit();
+    defer for (buffer) |word| allocator.free(word);
 
     for (buffer) |word| {
         std.debug.print("{s}\n", .{word});
