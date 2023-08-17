@@ -49,6 +49,7 @@ pub fn generateMnemonic(buffer: [][]const u8, entropy: u264, wordlist: WordList,
     for (0..24) |i| {
         const s = @as(u8, @intCast(i)) * @as(u9, @intCast(11));
         const bits = entropy >> s & mask;
+        // We're using right shift, so we need to reverse the order of the words
         buffer[23 - i] = try allocator.dupe(u8, words[@intCast(bits)]);
     }
 }
