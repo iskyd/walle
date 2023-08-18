@@ -1,5 +1,6 @@
 const std = @import("std");
 const bip39 = @import("bip39/bip39.zig");
+const bip32 = @import("bip32/bip32.zig");
 
 pub fn main() !void {
     std.debug.print("WALL-E. Bitcoin Wallet written in Zig\n", .{});
@@ -33,4 +34,6 @@ pub fn main() !void {
     std.debug.print("Seed: {b}\n", .{seed});
     const x = std.mem.readIntBig(u512, &seed);
     std.debug.print("{d}\n", .{x});
+
+    bip32.generateMasterPrivateKey(seed);
 }
