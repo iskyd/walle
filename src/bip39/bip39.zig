@@ -55,8 +55,12 @@ pub fn generateMnemonic(buffer: [][]const u8, entropy: u264, wordlist: WordList,
     }
 }
 
-pub fn mnemonicToSeed(allocator: std.mem.Allocator, buffer: []u8, mnemonic: [24][]const u8, comptime passphrase: []const u8) !void {
-    const salt = "mnemonic" ++ passphrase;
+pub fn mnemonicToSeed(allocator: std.mem.Allocator, buffer: []u8, mnemonic: [24][]const u8, passphrase: []const u8) !void {
+    var salt = try allocator.alloc(u8, "mnemonic".len + passphrase.len);
+    defer allocator.free(salt);
+    std.mem.copy(u8, salt[0..], "mnemonic");
+    std.mem.copy(u8, salt["mnemonic".len..], passphrase);
+
     const prf = std.crypto.auth.hmac.sha2.HmacSha512;
 
     const m: []u8 = try std.mem.join(allocator, " ", &mnemonic);
