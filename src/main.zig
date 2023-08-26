@@ -24,16 +24,18 @@ pub fn main() !void {
     wordlist.deinit();
     defer for (mnemonic) |word| allocator.free(word);
 
+    std.debug.print("Mnemonic: ", .{});
     for (mnemonic) |word| {
-        std.debug.print("{s}\n", .{word});
+        std.debug.print("{s}, ", .{word});
     }
+    std.debug.print("\n", .{});
 
     var seed: [64]u8 = undefined;
-    try bip39.mnemonicToSeed(allocator, &seed, mnemonic, "TREZOR");
+    try bip39.mnemonicToSeed(allocator, &seed, mnemonic, "");
 
-    std.debug.print("Seed: {b}\n", .{seed});
+    // std.debug.print("Seed: {b}\n", .{seed});
     const x = std.mem.readIntBig(u512, &seed);
-    std.debug.print("{d}\n", .{x});
+    std.debug.print("Seed 0x{x}\n", .{x});
 
     bip32.generateMasterPrivateKey(seed);
 }
