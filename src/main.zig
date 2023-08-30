@@ -31,11 +31,21 @@ pub fn main() !void {
     std.debug.print("\n", .{});
 
     var seed: [64]u8 = undefined;
-    try bip39.mnemonicToSeed(allocator, &seed, mnemonic, "");
+    try bip39.mnemonicToSeed(allocator, &seed, mnemonic, "TREZOR");
 
     // std.debug.print("Seed: {b}\n", .{seed});
     const x = std.mem.readIntBig(u512, &seed);
     std.debug.print("Seed 0x{x}\n", .{x});
 
-    bip32.generateMasterPrivateKey(seed);
+    var masterPrivateKey: [32]u8 = undefined;
+    var masterChainCode: [32]u8 = undefined;
+    bip32.generateMasterPrivateKey(seed, &masterPrivateKey, &masterChainCode);
+
+    std.debug.print("Master private key: {b}\n", .{masterPrivateKey});
+    const mi = std.mem.readIntBig(u256, &masterPrivateKey);
+    std.debug.print("Master secret {x}\n", .{mi});
+    const mc = std.mem.readIntBig(u256, &masterChainCode);
+    std.debug.print("Master chain {x}\n", .{mc});
+
+    try bip32.generatePublicKey(masterPrivateKey);
 }
