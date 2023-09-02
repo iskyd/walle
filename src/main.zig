@@ -1,6 +1,7 @@
 const std = @import("std");
 const bip39 = @import("bip39/bip39.zig");
 const bip32 = @import("bip32/bip32.zig");
+const secp256k1 = @import("secp256k1/secp256k1.zig");
 
 pub fn main() !void {
     std.debug.print("WALL-E. Bitcoin Wallet written in Zig\n", .{});
@@ -48,4 +49,14 @@ pub fn main() !void {
     std.debug.print("Master chain {x}\n", .{mc});
 
     try bip32.generatePublicKey(masterPrivateKey);
+
+    const math = std.math;
+    _ = math;
+    // const modinv = try math.mod(u256, 100, secp256k1.PRIME_MODULUS);
+    const modinv = secp256k1.modinv(i32, 15, 26);
+    std.debug.print("Modulo: {d}\n", .{modinv});
+
+    var point = secp256k1.Point{ .x = 100, .y = 100 };
+    secp256k1.double(&point);
+    std.debug.print("Point: x={d}, y={d}\n", .{ point.x, point.y });
 }

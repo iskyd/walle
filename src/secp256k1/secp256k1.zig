@@ -1,0 +1,60 @@
+const std = @import("std");
+const math = @import("std").math;
+
+pub const PRIME_MODULUS = math.pow(u512, 2, 256) - math.pow(u256, 2, 32) - math.pow(u256, 2, 9) - math.pow(u256, 2, 8) - math.pow(u256, 2, 7) - math.pow(u256, 2, 6) - math.pow(u256, 2, 4) - 1;
+pub const NUMBER_OF_POINTS = 115792089237316195423570985008687907852837564279074904382605163141518161494337;
+
+pub const Point = struct {
+    x: i512,
+    y: i512,
+};
+
+pub const BASE_POINT = Point{ .x = 55066263022277343669578718895168534326250603453777594175500187360389116729240, .y = 32670510020758816978083085130507043184471273380659243275938904335757337482424 };
+
+pub fn modinv(comptime T: type, _a: T, _m: T) T {
+    var prevy: T = 0;
+    var y: T = 1;
+    var a: T = _a;
+    var m: T = _m;
+    while (a > 1) {
+        var q: T = @divFloor(m, a);
+        var tmp_y = y;
+        y = prevy - q * y;
+        prevy = tmp_y;
+        var tmp_a = a;
+        a = @mod(m, a);
+        m = tmp_a;
+    }
+
+    return y;
+}
+
+// Double - Add a point on the curve to itself.
+pub fn double(p: *Point) void {
+    // slope = (3x^2 + a) / 2y
+    const slope = @mod(((3 * math.pow(i512, p.x, 2)) * modinv(i512, 2 * p.y, PRIME_MODULUS)), PRIME_MODULUS);
+
+    const x = @mod(math.pow(i512, slope, 2) - (2 * p.x), PRIME_MODULUS);
+    const y = @mod(slope * (p.x - x) - p.y, PRIME_MODULUS);
+
+    p.x = x;
+    p.y = y;
+}
+
+test "modinv" {
+    try std.testing.expectEqual(modinv(i32, 15, 26), 7);
+    try std.testing.expectEqual(modinv(i32, 26, 15), -4);
+}
+
+test "double" {
+    var point = Point{ .x = 100, .y = 100 };
+    double(&point);
+    try std.testing.expectEqual(
+        point.x,
+        22300,
+    );
+    try std.testing.expectEqual(
+        point.y,
+        115792089237316195423570985008687907853269984665640564039457584007908831341563,
+    );
+}
