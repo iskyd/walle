@@ -4,11 +4,6 @@ const math = @import("std").math;
 pub const PRIME_MODULUS = math.pow(u512, 2, 256) - math.pow(u256, 2, 32) - math.pow(u256, 2, 9) - math.pow(u256, 2, 8) - math.pow(u256, 2, 7) - math.pow(u256, 2, 6) - math.pow(u256, 2, 4) - 1;
 pub const NUMBER_OF_POINTS = 115792089237316195423570985008687907852837564279074904382605163141518161494337;
 
-pub const Point = struct {
-    x: i512,
-    y: i512,
-};
-
 pub const BASE_POINT = Point{ .x = 55066263022277343669578718895168534326250603453777594175500187360389116729240, .y = 32670510020758816978083085130507043184471273380659243275938904335757337482424 };
 
 pub fn modinv(comptime T: type, _a: T, _m: T) T {
@@ -29,17 +24,43 @@ pub fn modinv(comptime T: type, _a: T, _m: T) T {
     return y;
 }
 
-// Double - Add a point on the curve to itself.
-pub fn double(p: *Point) void {
-    // slope = (3x^2 + a) / 2y
-    const slope = @mod(((3 * math.pow(i512, p.x, 2)) * modinv(i512, 2 * p.y, PRIME_MODULUS)), PRIME_MODULUS);
+pub const Point = struct {
+    x: i512,
+    y: i512,
 
-    const x = @mod(math.pow(i512, slope, 2) - (2 * p.x), PRIME_MODULUS);
-    const y = @mod(slope * (p.x - x) - p.y, PRIME_MODULUS);
+    pub fn isEqual(self: *Point, other: Point) bool {
+        return self.x == other.x and self.y == other.y;
+    }
 
-    p.x = x;
-    p.y = y;
-}
+    pub fn double(self: *Point) void {
+        // slope = (3x^2 + a) / 2y
+        const slope = @mod(((3 * math.pow(i512, self.x, 2)) * modinv(i512, 2 * self.y, PRIME_MODULUS)), PRIME_MODULUS);
+
+        const x = @mod(math.pow(i512, slope, 2) - (2 * self.x), PRIME_MODULUS);
+        const y = @mod(slope * (self.x - x) - self.y, PRIME_MODULUS);
+
+        self.x = x;
+        self.y = y;
+    }
+
+    pub fn add(self: *Point, other: Point) void {
+        if (self.isEqual(other)) {
+            self.double();
+        } else {
+            const slope = @mod(((self.y - other.y) * modinv(i512, self.x - other.x, PRIME_MODULUS)), PRIME_MODULUS);
+            const x = @mod(math.pow(i512, slope, 2) - self.x - other.x, PRIME_MODULUS);
+            const y = @mod((slope * (self.x - x)) - self.x, PRIME_MODULUS);
+
+            self.x = x;
+            self.y = y;
+        }
+    }
+
+    pub fn multiply(self: *Point, k: i512) void {
+        _ = k;
+        _ = self;
+    }
+};
 
 test "modinv" {
     try std.testing.expectEqual(modinv(i32, 15, 26), 7);
@@ -48,7 +69,7 @@ test "modinv" {
 
 test "double" {
     var point = Point{ .x = 100, .y = 100 };
-    double(&point);
+    point.double();
     try std.testing.expectEqual(
         point.x,
         22300,
@@ -57,4 +78,18 @@ test "double" {
         point.y,
         115792089237316195423570985008687907853269984665640564039457584007908831341563,
     );
+}
+
+test "add" {
+    var p1 = Point{ .x = 100, .y = 100 };
+    var p2 = Point{ .x = 100, .y = 100 };
+    p1.add(p2);
+    try std.testing.expectEqual(p1.x, 22300);
+    try std.testing.expectEqual(p1.y, 115792089237316195423570985008687907853269984665640564039457584007908831341563);
+
+    p1 = Point{ .x = 100, .y = 100 };
+    p2 = Point{ .x = 200, .y = 100 };
+    p1.add(p2);
+    try std.testing.expectEqual(p1.x, 115792089237316195423570985008687907853269984665640564039457584007908834671363);
+    try std.testing.expectEqual(p1.y, 115792089237316195423570985008687907853269984665640564039457584007908834671563);
 }
