@@ -56,9 +56,23 @@ pub const Point = struct {
         }
     }
 
-    pub fn multiply(self: *Point, k: i512) void {
-        _ = k;
-        _ = self;
+    pub fn multiply(self: *Point, k: u32) void {
+        var current = Point{ .x = self.x, .y = self.y };
+        // std.math.log2(x) + 1 -> number of bits required to represent k
+        // We need to discard the first bit
+        // So we loop from 0 to log2(x)
+        for (0..(std.math.log2(k))) |i| {
+            var y = std.math.shr(u32, k, i) & 1;
+
+            current.double();
+
+            if (y == 1) {
+                current.add(self.*);
+            }
+        }
+
+        self.x = current.x;
+        self.y = current.y;
     }
 };
 
@@ -92,4 +106,11 @@ test "add" {
     p1.add(p2);
     try std.testing.expectEqual(p1.x, 115792089237316195423570985008687907853269984665640564039457584007908834671363);
     try std.testing.expectEqual(p1.y, 115792089237316195423570985008687907853269984665640564039457584007908834671563);
+}
+
+test "multiply" {
+    var p1 = Point{ .x = 100, .y = 100 };
+    p1.multiply(4);
+    try std.testing.expectEqual(p1.x, 83958751277781481219825361860495351419593385084310388531537482022592812456470);
+    try std.testing.expectEqual(p1.y, 91813336768047772184641076719937475964665959333856505805054708940286741019295);
 }

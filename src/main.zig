@@ -57,6 +57,13 @@ pub fn main() !void {
     std.debug.print("Modulo: {d}\n", .{modinv});
 
     var point = secp256k1.Point{ .x = 100, .y = 100 };
-    secp256k1.double(&point);
+    point.double();
     std.debug.print("Point: x={d}, y={d}\n", .{ point.x, point.y });
+
+    point.x = 100;
+    point.y = 100;
+    var k: u32 = 4;
+    point.multiply(k);
+
+    std.debug.print("x={d}, y={d}\n", .{ point.x, point.y });
 }
