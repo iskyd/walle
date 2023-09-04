@@ -1,5 +1,5 @@
 const std = @import("std");
-const Secp256k1 = std.crypto.ecc.Secp256k1;
+const secp256k1 = @import("../secp256k1/secp256k1.zig");
 
 pub fn generateMasterPrivateKey(seed: [64]u8, masterPrivateKey: *[32]u8, masterChainCode: *[32]u8) void {
     var I: [std.crypto.auth.hmac.sha2.HmacSha512.mac_length]u8 = undefined;
@@ -9,15 +9,16 @@ pub fn generateMasterPrivateKey(seed: [64]u8, masterPrivateKey: *[32]u8, masterC
     masterChainCode[0..32].* = I[32..].*;
 }
 
-pub fn generatePublicKey(privateKey: [32]u8) !void {
-    const res = try Secp256k1.mul(Secp256k1.basePoint, privateKey, std.builtin.Endian.Big);
-    const x: u256 = res.x.toInt();
-    const y: u256 = res.y.toInt();
+pub fn generateCompressedPublicKey(privateKey: [32]u8) void {
+    const k = std.mem.readIntBig(u256, &privateKey);
+    var point = secp256k1.Point{ .x = secp256k1.BASE_POINT.x, .y = secp256k1.BASE_POINT.y };
+    point.multiply(k);
+
     std.debug.print("Public key ", .{});
-    if (y % 2 == 0) {
-        std.debug.print("02{x}", .{x});
+    if (@mod(point.y, 2) == 0) {
+        std.debug.print("02{x}", .{point.x});
     } else {
-        std.debug.print("03{x}", .{x});
+        std.debug.print("03{x}", .{point.x});
     }
 }
 
@@ -36,3 +37,8 @@ test "generateMasterPrivateKey" {
     try std.testing.expectEqual(actualMasterPrivateKey, mi);
     try std.testing.expectEqual(actualMasterChainCode, mc);
 }
+
+// test "generateCompressedPublicKey" {
+//     const masterPrivateKey = [32]u8{0b10111001, 0b00010001, 0b01110001, 0b11001001, 0b10011111, 0b01110000, 0b10010111, 0b11111101, 0b01110101, 0b01001011, 0b01001000, 0b11110010, 0b01010010, 0b00010001, 0b00110011, 0b10100001, 0b11100000, 0b10100110, 0b10010100, 0b10111000, 0b01101110, 0b10100101, 0b11011110, 0b01101011, 0b10111010, 0b01100000, 0b00000100, 0b01011011, 0b00001111, 0b00100101, 0b01001100, 0b01100001};
+//     generateCompressedPublicKey(masterPrivateKey);
+// }

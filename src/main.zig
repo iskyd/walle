@@ -48,22 +48,5 @@ pub fn main() !void {
     const mc = std.mem.readIntBig(u256, &masterChainCode);
     std.debug.print("Master chain {x}\n", .{mc});
 
-    try bip32.generatePublicKey(masterPrivateKey);
-
-    const math = std.math;
-    _ = math;
-    // const modinv = try math.mod(u256, 100, secp256k1.PRIME_MODULUS);
-    const modinv = secp256k1.modinv(i32, 15, 26);
-    std.debug.print("Modulo: {d}\n", .{modinv});
-
-    var point = secp256k1.Point{ .x = 100, .y = 100 };
-    point.double();
-    std.debug.print("Point: x={d}, y={d}\n", .{ point.x, point.y });
-
-    point.x = 100;
-    point.y = 100;
-    var k: u32 = 4;
-    point.multiply(k);
-
-    std.debug.print("x={d}, y={d}\n", .{ point.x, point.y });
+    bip32.generateCompressedPublicKey(masterPrivateKey);
 }

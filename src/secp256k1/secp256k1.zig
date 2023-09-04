@@ -1,7 +1,7 @@
 const std = @import("std");
 const math = @import("std").math;
 
-pub const PRIME_MODULUS = math.pow(u512, 2, 256) - math.pow(u256, 2, 32) - math.pow(u256, 2, 9) - math.pow(u256, 2, 8) - math.pow(u256, 2, 7) - math.pow(u256, 2, 6) - math.pow(u256, 2, 4) - 1;
+pub const PRIME_MODULUS: u512 = math.pow(u512, 2, 256) - math.pow(u256, 2, 32) - math.pow(u256, 2, 9) - math.pow(u256, 2, 8) - math.pow(u256, 2, 7) - math.pow(u256, 2, 6) - math.pow(u256, 2, 4) - 1;
 pub const NUMBER_OF_POINTS = 115792089237316195423570985008687907852837564279074904382605163141518161494337;
 
 pub const BASE_POINT = Point{ .x = 55066263022277343669578718895168534326250603453777594175500187360389116729240, .y = 32670510020758816978083085130507043184471273380659243275938904335757337482424 };
@@ -11,6 +11,11 @@ pub fn modinv(comptime T: type, _a: T, _m: T) T {
     var y: T = 1;
     var a: T = _a;
     var m: T = _m;
+
+    if (a < 0) {
+        a = @mod(a, m);
+    }
+
     while (a > 1) {
         var q: T = @divFloor(m, a);
         var tmp_y = y;
@@ -25,8 +30,8 @@ pub fn modinv(comptime T: type, _a: T, _m: T) T {
 }
 
 pub const Point = struct {
-    x: i512,
-    y: i512,
+    x: i1024,
+    y: i1024,
 
     pub fn isEqual(self: *Point, other: Point) bool {
         return self.x == other.x and self.y == other.y;
@@ -34,9 +39,9 @@ pub const Point = struct {
 
     pub fn double(self: *Point) void {
         // slope = (3x^2 + a) / 2y
-        const slope = @mod(((3 * math.pow(i512, self.x, 2)) * modinv(i512, 2 * self.y, PRIME_MODULUS)), PRIME_MODULUS);
+        const slope = @mod(((3 * math.pow(i1024, self.x, 2)) * modinv(i1024, 2 * self.y, PRIME_MODULUS)), PRIME_MODULUS);
 
-        const x = @mod(math.pow(i512, slope, 2) - (2 * self.x), PRIME_MODULUS);
+        const x = @mod(math.pow(i1024, slope, 2) - (2 * self.x), PRIME_MODULUS);
         const y = @mod(slope * (self.x - x) - self.y, PRIME_MODULUS);
 
         self.x = x;
@@ -47,23 +52,23 @@ pub const Point = struct {
         if (self.isEqual(other)) {
             self.double();
         } else {
-            const slope = @mod(((self.y - other.y) * modinv(i512, self.x - other.x, PRIME_MODULUS)), PRIME_MODULUS);
-            const x = @mod(math.pow(i512, slope, 2) - self.x - other.x, PRIME_MODULUS);
-            const y = @mod((slope * (self.x - x)) - self.x, PRIME_MODULUS);
+            const slope = @mod(((self.y - other.y) * modinv(i1024, self.x - other.x, PRIME_MODULUS)), PRIME_MODULUS);
+            const x = @mod(math.pow(i1024, slope, 2) - self.x - other.x, PRIME_MODULUS);
+            const y = @mod((slope * (self.x - x)) - self.y, PRIME_MODULUS);
 
             self.x = x;
             self.y = y;
         }
     }
 
-    pub fn multiply(self: *Point, k: u32) void {
+    pub fn multiply(self: *Point, k: u256) void {
         var current = Point{ .x = self.x, .y = self.y };
         // std.math.log2(x) + 1 -> number of bits required to represent k
         // We need to discard the first bit
         // So we loop from 0 to log2(x)
-        for (0..(std.math.log2(k))) |i| {
-            var y = std.math.shr(u32, k, i) & 1;
-
+        const bits = std.math.log2_int(u256, k);
+        for (0..bits) |i| {
+            var y = std.math.shr(u256, k, bits - i - 1) & 1;
             current.double();
 
             if (y == 1) {
