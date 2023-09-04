@@ -9,17 +9,36 @@ pub fn generateMasterPrivateKey(seed: [64]u8, masterPrivateKey: *[32]u8, masterC
     masterChainCode[0..32].* = I[32..].*;
 }
 
-pub fn generateCompressedPublicKey(privateKey: [32]u8) void {
+pub fn generateCompressedPublicKey(privateKey: [32]u8) !u512 {
     const k = std.mem.readIntBig(u256, &privateKey);
     var point = secp256k1.Point{ .x = secp256k1.BASE_POINT.x, .y = secp256k1.BASE_POINT.y };
     point.multiply(k);
 
-    std.debug.print("Public key ", .{});
+    var strCompressedPublicKey: [66]u8 = undefined;
     if (@mod(point.y, 2) == 0) {
-        std.debug.print("02{x}", .{point.x});
+        _ = try std.fmt.bufPrint(&strCompressedPublicKey, "02{x}", .{point.x});
     } else {
-        std.debug.print("03{x}", .{point.x});
+        _ = try std.fmt.bufPrint(&strCompressedPublicKey, "03{x}", .{point.x});
     }
+
+    std.debug.print("Str compressed public key {s}\n", .{strCompressedPublicKey});
+
+    const compressedPublicKey = try std.fmt.parseInt(u512, &strCompressedPublicKey, 16);
+    return compressedPublicKey;
+}
+
+pub fn generateUncompressedPublicKey(privateKey: [32]u8) !u1024 {
+    const k = std.mem.readIntBig(u256, &privateKey);
+    var point = secp256k1.Point{ .x = secp256k1.BASE_POINT.x, .y = secp256k1.BASE_POINT.y };
+    point.multiply(k);
+
+    var strUnompressedPublicKey: [130]u8 = undefined;
+    _ = try std.fmt.bufPrint(&strUnompressedPublicKey, "04{x}{x}", .{ point.x, point.y });
+
+    std.debug.print("Str uncompressed public key {s}\n", .{strUnompressedPublicKey});
+
+    const uncompressedPublicKey = try std.fmt.parseInt(u1024, &strUnompressedPublicKey, 16);
+    return uncompressedPublicKey;
 }
 
 test "generateMasterPrivateKey" {

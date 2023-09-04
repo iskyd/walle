@@ -48,5 +48,9 @@ pub fn main() !void {
     const mc = std.mem.readIntBig(u256, &masterChainCode);
     std.debug.print("Master chain {x}\n", .{mc});
 
-    bip32.generateCompressedPublicKey(masterPrivateKey);
+    const compressedPublicKey = try bip32.generateCompressedPublicKey(masterPrivateKey);
+    std.debug.print("Compressed public key: {x}\n", .{compressedPublicKey});
+
+    const uncompressedPublicKey = try bip32.generateUncompressedPublicKey(masterPrivateKey);
+    std.debug.print("Uncompressed public key: {x}\n", .{uncompressedPublicKey});
 }
