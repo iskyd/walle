@@ -9,7 +9,7 @@ pub fn generateMasterPrivateKey(seed: [64]u8, masterPrivateKey: *[32]u8, masterC
     masterChainCode[0..32].* = I[32..].*;
 }
 
-pub fn generateCompressedPublicKey(privateKey: [32]u8) !u512 {
+pub fn generateCompressedPublicKey(privateKey: [32]u8) ![33]u8 {
     const k = std.mem.readIntBig(u256, &privateKey);
     var point = secp256k1.Point{ .x = secp256k1.BASE_POINT.x, .y = secp256k1.BASE_POINT.y };
     point.multiply(k);
@@ -21,24 +21,31 @@ pub fn generateCompressedPublicKey(privateKey: [32]u8) !u512 {
         _ = try std.fmt.bufPrint(&strCompressedPublicKey, "03{x}", .{point.x});
     }
 
-    std.debug.print("Str compressed public key {s}\n", .{strCompressedPublicKey});
+    const intCompressedPublicKey = try std.fmt.parseInt(u264, &strCompressedPublicKey, 16);
+    const compressedPublicKey: [33]u8 = @bitCast(intCompressedPublicKey);
 
-    const compressedPublicKey = try std.fmt.parseInt(u512, &strCompressedPublicKey, 16);
     return compressedPublicKey;
 }
 
-pub fn generateUncompressedPublicKey(privateKey: [32]u8) !u1024 {
+pub fn generateUncompressedPublicKey(privateKey: [32]u8) ![65]u8 {
     const k = std.mem.readIntBig(u256, &privateKey);
     var point = secp256k1.Point{ .x = secp256k1.BASE_POINT.x, .y = secp256k1.BASE_POINT.y };
     point.multiply(k);
 
-    var strUnompressedPublicKey: [130]u8 = undefined;
-    _ = try std.fmt.bufPrint(&strUnompressedPublicKey, "04{x}{x}", .{ point.x, point.y });
+    var strUncompressedPublicKey: [130]u8 = undefined;
+    _ = try std.fmt.bufPrint(&strUncompressedPublicKey, "04{x}{x}", .{ point.x, point.y });
 
-    std.debug.print("Str uncompressed public key {s}\n", .{strUnompressedPublicKey});
+    std.debug.print("Str uncompressed public key {s}\n", .{strUncompressedPublicKey});
 
-    const uncompressedPublicKey = try std.fmt.parseInt(u1024, &strUnompressedPublicKey, 16);
+    const intUncompressedPublicKey = try std.fmt.parseInt(u520, &strUncompressedPublicKey, 16);
+    const uncompressedPublicKey: [65]u8 = @bitCast(intUncompressedPublicKey);
     return uncompressedPublicKey;
+}
+
+pub fn deriveChild(privateKey: [32]u8, publicKey: [32]u8, chainCode: []u8) void {
+    _ = chainCode;
+    _ = publicKey;
+    _ = privateKey;
 }
 
 test "generateMasterPrivateKey" {
@@ -59,12 +66,14 @@ test "generateMasterPrivateKey" {
 
 test "generateCompressedPublicKey" {
     const masterPrivateKey = [32]u8{ 0b10111001, 0b00010001, 0b01110001, 0b11001001, 0b10011111, 0b01110000, 0b10010111, 0b11111101, 0b01110101, 0b01001011, 0b01001000, 0b11110010, 0b01010010, 0b00010001, 0b00110011, 0b10100001, 0b11100000, 0b10100110, 0b10010100, 0b10111000, 0b01101110, 0b10100101, 0b11011110, 0b01101011, 0b10111010, 0b01100000, 0b00000100, 0b01011011, 0b00001111, 0b00100101, 0b01001100, 0b01100001 };
-    const compressedPublicKey = generateCompressedPublicKey(masterPrivateKey);
-    try std.testing.expectEqual(compressedPublicKey, 371021088148843091519123278369699840892534340640782334706731698887367669696056);
+    const compressedPublicKey = try generateCompressedPublicKey(masterPrivateKey);
+    const intCompressedPublicKey: u264 = std.mem.readIntNative(u264, &compressedPublicKey);
+    try std.testing.expectEqual(intCompressedPublicKey, 371021088148843091519123278369699840892534340640782334706731698887367669696056);
 }
 
 test "generateUncompressedPublicKey" {
     const masterPrivateKey = [32]u8{ 0b10111001, 0b00010001, 0b01110001, 0b11001001, 0b10011111, 0b01110000, 0b10010111, 0b11111101, 0b01110101, 0b01001011, 0b01001000, 0b11110010, 0b01010010, 0b00010001, 0b00110011, 0b10100001, 0b11100000, 0b10100110, 0b10010100, 0b10111000, 0b01101110, 0b10100101, 0b11011110, 0b01101011, 0b10111010, 0b01100000, 0b00000100, 0b01011011, 0b00001111, 0b00100101, 0b01001100, 0b01100001 };
-    const uncompressedPublicKey = generateUncompressedPublicKey(masterPrivateKey);
-    try std.testing.expectEqual(uncompressedPublicKey, 56369114877799594661188296746717703076673813647934040365584748932532373788020011766136440806660229408156383305013228873759763532598787701125186219479120245);
+    const uncompressedPublicKey = try generateUncompressedPublicKey(masterPrivateKey);
+    const intUncompressedPublicKey: u520 = std.mem.readIntNative(u520, &uncompressedPublicKey);
+    try std.testing.expectEqual(intUncompressedPublicKey, 56369114877799594661188296746717703076673813647934040365584748932532373788020011766136440806660229408156383305013228873759763532598787701125186219479120245);
 }

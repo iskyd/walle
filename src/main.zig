@@ -49,8 +49,11 @@ pub fn main() !void {
     std.debug.print("Master chain {x}\n", .{mc});
 
     const compressedPublicKey = try bip32.generateCompressedPublicKey(masterPrivateKey);
-    std.debug.print("Compressed public key: {x}\n", .{compressedPublicKey});
+    // std.debug.print("Compressed public key: {d}\n", .{compressedPublicKey});
+    const cpk = std.mem.readIntNative(u264, &compressedPublicKey);
+    std.debug.print("Compressed public key {x}\n", .{cpk});
 
     const uncompressedPublicKey = try bip32.generateUncompressedPublicKey(masterPrivateKey);
-    std.debug.print("Uncompressed public key: {x}\n", .{uncompressedPublicKey});
+    const ucpk = std.mem.readIntNative(u520, &uncompressedPublicKey);
+    std.debug.print("Uncompressed public key: {x}\n", .{ucpk});
 }
