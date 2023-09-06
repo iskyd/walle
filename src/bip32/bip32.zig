@@ -42,9 +42,22 @@ pub fn generateUncompressedPublicKey(privateKey: [32]u8) ![65]u8 {
     return uncompressedPublicKey;
 }
 
-pub fn deriveChild(privateKey: [32]u8, publicKey: [32]u8, chainCode: []u8) void {
-    _ = chainCode;
-    _ = publicKey;
+pub fn deriveChild(privateKey: [32]u8, publicKey: [33]u8, chainCode: [32]u8, index: u32, childPrivateKey: *[32]u8, childChainCode: *[32]u8, childPublicKey: *[33]u8) void {
+    const indexBytes: [4]u8 = @bitCast(index);
+
+    const data: [37]u8 = indexBytes ++ publicKey;
+
+    var I: [std.crypto.auth.hmac.sha2.HmacSha512.mac_length]u8 = undefined;
+    std.crypto.auth.hmac.sha2.HmacSha512.create(I[0..], &data, &chainCode);
+
+    childChainCode[0..32].* = I[32..].*;
+    // std.debug.print("I {s}\n", .{I[0..]});
+    const res = std.mem.readIntBig(u512, I[0..]);
+
+    std.debug.print("HMAC res {x}\n", .{res});
+
+    _ = childPublicKey;
+    _ = childPrivateKey;
     _ = privateKey;
 }
 

@@ -37,19 +37,21 @@ pub fn generateEntropy(buffer: []u8, ent: u16) void {
     rand.bytes(buffer);
 }
 
-pub fn generateChecksum(data: []u8) [1]u8 {
+pub fn generateChecksum(data: []const u8) [1]u8 {
     var checksum: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(data, &checksum, .{});
     return checksum[0..1].*;
 }
 
-pub fn generateMnemonic(buffer: [][]const u8, entropy: u264, wordlist: WordList, allocator: std.mem.Allocator) !void {
+pub fn generateMnemonic(buffer: [][]const u8, entropy: [32]u8, wordlist: WordList, allocator: std.mem.Allocator) !void {
+    const checksum = generateChecksum(&entropy);
+    const u_entropy = std.mem.readIntBig(u264, &(entropy ++ checksum));
     const mask: u64 = (1 << 11) - 1;
     const words = wordlist.getWords();
 
     for (0..24) |i| {
         const s = @as(u8, @intCast(i)) * @as(u9, @intCast(11));
-        const bits = entropy >> s & mask;
+        const bits = u_entropy >> s & mask;
         // We're using right shift, so we need to reverse the order of the words
         buffer[23 - i] = try allocator.dupe(u8, words[@intCast(bits)]);
     }
