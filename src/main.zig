@@ -57,5 +57,5 @@ pub fn main() !void {
     var childPrivateKey: [32]u8 = undefined;
     var childChainCode: [32]u8 = undefined;
     var childPublicKey: [33]u8 = undefined;
-    bip32.deriveChild(masterPrivateKey, compressedPublicKey, masterChainCode, 0, &childPrivateKey, &childChainCode, &childPublicKey);
+    try bip32.deriveChild(masterPrivateKey, compressedPublicKey, masterChainCode, 0, &childPrivateKey, &childChainCode, &childPublicKey);
 }
