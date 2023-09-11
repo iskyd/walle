@@ -58,4 +58,12 @@ pub fn main() !void {
     var childChainCode: [32]u8 = undefined;
     var childPublicKey: [33]u8 = undefined;
     try bip32.deriveChild(masterPrivateKey, compressedPublicKey, masterChainCode, 0, &childPrivateKey, &childChainCode, &childPublicKey);
+
+    const childPrivateKeyInt = std.mem.readIntBig(u256, &childPrivateKey);
+    const childChainCodeInt = std.mem.readIntBig(u256, &childChainCode);
+    const childPublicKeyInt = std.mem.readIntNative(u264, &childPublicKey);
+
+    std.debug.print("Child private key {x}\n", .{childPrivateKeyInt});
+    std.debug.print("Child chain code {x}\n", .{childChainCodeInt});
+    std.debug.print("Child public key {x}\n", .{childPublicKeyInt});
 }

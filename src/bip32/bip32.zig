@@ -64,7 +64,7 @@ pub fn deriveChild(privateKey: [32]u8, publicKey: [33]u8, chainCode: [32]u8, ind
     charactersForData = @intCast(math.log(u256, 16, uchaincode) + 1);
     missingCharacters = 64 - charactersForData;
     for (0..missingCharacters) |i| {
-        bufdata[i] = '0';
+        bufchaincode[i] = '0';
     }
     _ = try std.fmt.bufPrint(bufchaincode[missingCharacters..], "{x}", .{uchaincode});
 
@@ -74,11 +74,15 @@ pub fn deriveChild(privateKey: [32]u8, publicKey: [33]u8, chainCode: [32]u8, ind
     childChainCode[0..32].* = I[32..].*;
     const res = std.mem.readIntBig(u512, I[0..]);
 
-    std.debug.print("HMAC res {x}\n", .{res});
+    const uprivate: u256 = std.mem.readIntBig(u256, &privateKey);
+    const random: u256 = std.mem.readIntBig(u256, I[0..32]);
+    const tmp: u512 = @as(u512, uprivate) + random;
+    const k: u256 = @intCast(@mod(tmp, secp256k1.NUMBER_OF_POINTS));
+    childPrivateKey[0..32].* = @bitCast(k);
 
-    _ = childPublicKey;
-    _ = childPrivateKey;
-    _ = privateKey;
+    childPublicKey[0..].* = try generateCompressedPublicKey(childPrivateKey.*);
+
+    std.debug.print("HMAC res {x}\n", .{res});
 }
 
 test "generateMasterPrivateKey" {
