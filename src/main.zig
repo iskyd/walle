@@ -56,8 +56,8 @@ pub fn main() !void {
 
     var childPrivateKey: [32]u8 = undefined;
     var childChainCode: [32]u8 = undefined;
-    var childPublicKey: [33]u8 = undefined;
-    try bip32.deriveChild(masterPrivateKey, compressedPublicKey, masterChainCode, 0, &childPrivateKey, &childChainCode, &childPublicKey);
+    try bip32.deriveChild(masterPrivateKey, compressedPublicKey, masterChainCode, 0, &childPrivateKey, &childChainCode);
+    const childPublicKey = try bip32.generateCompressedPublicKey(childPrivateKey);
 
     const childPrivateKeyInt = std.mem.readIntBig(u256, &childPrivateKey);
     const childChainCodeInt = std.mem.readIntBig(u256, &childChainCode);
@@ -66,4 +66,17 @@ pub fn main() !void {
     std.debug.print("Child private key {x}\n", .{childPrivateKeyInt});
     std.debug.print("Child chain code {x}\n", .{childChainCodeInt});
     std.debug.print("Child public key {x}\n", .{childPublicKeyInt});
+
+    var hardenedChildPrivateKey: [32]u8 = undefined;
+    var hardenedChildChainCode: [32]u8 = undefined;
+    try bip32.deriveChildHardened(masterPrivateKey, masterChainCode, 0, &hardenedChildPrivateKey, &hardenedChildChainCode);
+    const hardenedChildPublicKey = try bip32.generateCompressedPublicKey(hardenedChildPrivateKey);
+
+    const hardenedChildPrivateKeyInt = std.mem.readIntBig(u256, &hardenedChildPrivateKey);
+    const hardenedChildChainCodeInt = std.mem.readIntBig(u256, &hardenedChildChainCode);
+    const hardenedChildPublicKeyInt = std.mem.readIntNative(u264, &hardenedChildPublicKey);
+
+    std.debug.print("Hardened Child private key {x}\n", .{hardenedChildPrivateKeyInt});
+    std.debug.print("Hardened Child chain code {x}\n", .{hardenedChildChainCodeInt});
+    std.debug.print("Hardened Child public key {x}\n", .{hardenedChildPublicKeyInt});
 }

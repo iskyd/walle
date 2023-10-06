@@ -1,6 +1,7 @@
 const std = @import("std");
 const secp256k1 = @import("../secp256k1/secp256k1.zig");
 const math = std.math;
+const assert = std.debug.assert;
 
 pub fn generateMasterPrivateKey(seed: [64]u8, masterPrivateKey: *[32]u8, masterChainCode: *[32]u8) void {
     var I: [std.crypto.auth.hmac.sha2.HmacSha512.mac_length]u8 = undefined;
@@ -43,7 +44,9 @@ pub fn generateUncompressedPublicKey(privateKey: [32]u8) ![65]u8 {
     return uncompressedPublicKey;
 }
 
-pub fn deriveChild(privateKey: [32]u8, publicKey: [33]u8, chainCode: [32]u8, index: u32, childPrivateKey: *[32]u8, childChainCode: *[32]u8, childPublicKey: *[33]u8) !void {
+pub fn deriveChild(privateKey: [32]u8, publicKey: [33]u8, chainCode: [32]u8, index: u32, childPrivateKey: *[32]u8, childChainCode: *[32]u8) !void {
+    assert(index >= 0);
+    assert(index <= 2147483647);
     const indexBytes: [4]u8 = @bitCast(index);
 
     const data: [37]u8 = indexBytes ++ publicKey;
@@ -79,7 +82,46 @@ pub fn deriveChild(privateKey: [32]u8, publicKey: [33]u8, chainCode: [32]u8, ind
     const k: u256 = @intCast(@mod(@as(u512, uprivate) + random, secp256k1.NUMBER_OF_POINTS));
     childPrivateKey[0..32].* = @bitCast(k);
 
-    childPublicKey[0..].* = try generateCompressedPublicKey(childPrivateKey.*);
+    std.debug.print("HMAC res {x}\n", .{res});
+}
+
+pub fn deriveChildHardened(privateKey: [32]u8, chainCode: [32]u8, index: u32, childPrivateKey: *[32]u8, childChainCode: *[32]u8) !void {
+    // assert(index >= 2147483647);
+    // assert(index <= 4294967295);
+
+    const indexBytes: [4]u8 = @bitCast(index);
+    const data: [36]u8 = indexBytes ++ privateKey;
+    const udata: u288 = std.mem.readIntNative(u288, &data);
+
+    // Number of characters to represent data in hex
+    // log16(data) + 1
+    var charactersForData: u32 = @intCast(math.log(u288, 16, udata) + 1);
+    var bufdata: [72]u8 = undefined;
+    var missingCharacters: u32 = 72 - charactersForData;
+    for (0..missingCharacters) |i| {
+        bufdata[i] = '0';
+    }
+    _ = try std.fmt.bufPrint(bufdata[missingCharacters..], "{x}", .{udata});
+
+    const uchaincode: u256 = std.mem.readIntBig(u256, &chainCode);
+    var bufchaincode: [64]u8 = undefined;
+    charactersForData = @intCast(math.log(u256, 16, uchaincode) + 1);
+    missingCharacters = 64 - charactersForData;
+    for (0..missingCharacters) |i| {
+        bufchaincode[i] = '0';
+    }
+    _ = try std.fmt.bufPrint(bufchaincode[missingCharacters..], "{x}", .{uchaincode});
+
+    var I: [std.crypto.auth.hmac.sha2.HmacSha512.mac_length]u8 = undefined;
+    std.crypto.auth.hmac.sha2.HmacSha512.create(I[0..], &bufdata, &bufchaincode);
+
+    childChainCode[0..32].* = I[32..].*;
+    const res = std.mem.readIntBig(u512, I[0..]);
+
+    const uprivate: u256 = std.mem.readIntBig(u256, &privateKey);
+    const random: u256 = std.mem.readIntBig(u256, I[0..32]);
+    const k: u256 = @intCast(@mod(@as(u512, uprivate) + random, secp256k1.NUMBER_OF_POINTS));
+    childPrivateKey[0..32].* = @bitCast(k);
 
     std.debug.print("HMAC res {x}\n", .{res});
 }
