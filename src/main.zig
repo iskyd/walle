@@ -50,9 +50,11 @@ pub fn main() !void {
     const cpk = std.mem.readIntNative(u264, &compressedPublicKey);
     std.debug.print("Compressed public key {x}\n", .{cpk});
 
-    // const uncompressedPublicKey = try bip32.generateUncompressedPublicKey(masterPrivateKey);
-    // const ucpk = std.mem.readIntNative(u520, &uncompressedPublicKey);
-    // std.debug.print("Uncompressed public key: {x}\n", .{ucpk});
+    try bip32.deriveAddressFromCompressedPublicKey(compressedPublicKey);
+
+    const uncompressedPublicKey = try bip32.generateUncompressedPublicKey(masterPrivateKey);
+    const ucpk = std.mem.readIntNative(u520, &uncompressedPublicKey);
+    std.debug.print("Uncompressed public key: {x}\n", .{ucpk});
 
     var childPrivateKey: [32]u8 = undefined;
     var childChainCode: [32]u8 = undefined;
@@ -69,7 +71,7 @@ pub fn main() !void {
 
     var hardenedChildPrivateKey: [32]u8 = undefined;
     var hardenedChildChainCode: [32]u8 = undefined;
-    try bip32.deriveChildHardened(masterPrivateKey, masterChainCode, 0, &hardenedChildPrivateKey, &hardenedChildChainCode);
+    try bip32.deriveChildHardened(masterPrivateKey, masterChainCode, 2147483648, &hardenedChildPrivateKey, &hardenedChildChainCode);
     const hardenedChildPublicKey = try bip32.generateCompressedPublicKey(hardenedChildPrivateKey);
 
     const hardenedChildPrivateKeyInt = std.mem.readIntBig(u256, &hardenedChildPrivateKey);

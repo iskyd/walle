@@ -1,5 +1,6 @@
 const std = @import("std");
 const secp256k1 = @import("../secp256k1/secp256k1.zig");
+const utils = @import("../utils.zig");
 const math = std.math;
 const assert = std.debug.assert;
 
@@ -9,6 +10,10 @@ pub fn generateMasterPrivateKey(seed: [64]u8, masterPrivateKey: *[32]u8, masterC
 
     masterPrivateKey[0..32].* = I[0..32].*;
     masterChainCode[0..32].* = I[32..].*;
+}
+
+pub fn toWif(key: [32]u8) void {
+    _ = key;
 }
 
 pub fn generateCompressedPublicKey(privateKey: [32]u8) ![33]u8 {
@@ -44,6 +49,20 @@ pub fn generateUncompressedPublicKey(privateKey: [32]u8) ![65]u8 {
     return uncompressedPublicKey;
 }
 
+pub fn deriveAddressFromCompressedPublicKey(publicKey: [33]u8) !void {
+    var buffer: [66]u8 = undefined;
+    const udata: u264 = std.mem.readIntNative(u264, &publicKey);
+    try utils.intToHexStr(u264, udata, &buffer);
+    var hashed: [32]u8 = undefined;
+
+    var bytes: [33]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytes, &buffer);
+
+    std.crypto.hash.sha2.Sha256.hash(&bytes, &hashed, .{});
+    const uHashed = std.mem.readIntBig(u256, &hashed);
+    std.debug.print("Hashed {x}\n", .{uHashed});
+}
+
 pub fn deriveChild(privateKey: [32]u8, publicKey: [33]u8, chainCode: [32]u8, index: u32, childPrivateKey: *[32]u8, childChainCode: *[32]u8) !void {
     assert(index >= 0);
     assert(index <= 2147483647);
@@ -52,27 +71,21 @@ pub fn deriveChild(privateKey: [32]u8, publicKey: [33]u8, chainCode: [32]u8, ind
     const data: [37]u8 = indexBytes ++ publicKey;
     const udata: u296 = std.mem.readIntNative(u296, &data);
 
-    // Number of characters to represent data in hex
-    // log16(data) + 1
-    var charactersForData: u32 = @intCast(math.log(u296, 16, udata) + 1);
+    // 74 = 37 * 2 (2 hex characters per byte)
     var bufdata: [74]u8 = undefined;
-    var missingCharacters: u32 = 74 - charactersForData;
-    for (0..missingCharacters) |i| {
-        bufdata[i] = '0';
-    }
-    _ = try std.fmt.bufPrint(bufdata[missingCharacters..], "{x}", .{udata});
+    try utils.intToHexStr(u296, udata, &bufdata);
 
     const uchaincode: u256 = std.mem.readIntBig(u256, &chainCode);
     var bufchaincode: [64]u8 = undefined;
-    charactersForData = @intCast(math.log(u256, 16, uchaincode) + 1);
-    missingCharacters = 64 - charactersForData;
-    for (0..missingCharacters) |i| {
-        bufchaincode[i] = '0';
-    }
-    _ = try std.fmt.bufPrint(bufchaincode[missingCharacters..], "{x}", .{uchaincode});
+    try utils.intToHexStr(u256, uchaincode, &bufchaincode);
+
+    var bytesData: [37]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytesData, &bufdata);
+    var bytesChainCode: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytesChainCode, &bufchaincode);
 
     var I: [std.crypto.auth.hmac.sha2.HmacSha512.mac_length]u8 = undefined;
-    std.crypto.auth.hmac.sha2.HmacSha512.create(I[0..], &bufdata, &bufchaincode);
+    std.crypto.auth.hmac.sha2.HmacSha512.create(I[0..], &bytesData, &bytesChainCode);
 
     childChainCode[0..32].* = I[32..].*;
     const res = std.mem.readIntBig(u512, I[0..]);
@@ -86,34 +99,27 @@ pub fn deriveChild(privateKey: [32]u8, publicKey: [33]u8, chainCode: [32]u8, ind
 }
 
 pub fn deriveChildHardened(privateKey: [32]u8, chainCode: [32]u8, index: u32, childPrivateKey: *[32]u8, childChainCode: *[32]u8) !void {
-    // assert(index >= 2147483647);
-    // assert(index <= 4294967295);
+    assert(index >= 2147483647);
+    assert(index <= 4294967295);
 
     const indexBytes: [4]u8 = @bitCast(index);
     const data: [36]u8 = indexBytes ++ privateKey;
     const udata: u288 = std.mem.readIntNative(u288, &data);
 
-    // Number of characters to represent data in hex
-    // log16(data) + 1
-    var charactersForData: u32 = @intCast(math.log(u288, 16, udata) + 1);
     var bufdata: [72]u8 = undefined;
-    var missingCharacters: u32 = 72 - charactersForData;
-    for (0..missingCharacters) |i| {
-        bufdata[i] = '0';
-    }
-    _ = try std.fmt.bufPrint(bufdata[missingCharacters..], "{x}", .{udata});
+    try utils.intToHexStr(u288, udata, &bufdata);
 
     const uchaincode: u256 = std.mem.readIntBig(u256, &chainCode);
     var bufchaincode: [64]u8 = undefined;
-    charactersForData = @intCast(math.log(u256, 16, uchaincode) + 1);
-    missingCharacters = 64 - charactersForData;
-    for (0..missingCharacters) |i| {
-        bufchaincode[i] = '0';
-    }
-    _ = try std.fmt.bufPrint(bufchaincode[missingCharacters..], "{x}", .{uchaincode});
+    try utils.intToHexStr(u256, uchaincode, &bufchaincode);
+
+    var bytesData: [37]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytesData, &bufdata);
+    var bytesChainCode: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytesChainCode, &bufchaincode);
 
     var I: [std.crypto.auth.hmac.sha2.HmacSha512.mac_length]u8 = undefined;
-    std.crypto.auth.hmac.sha2.HmacSha512.create(I[0..], &bufdata, &bufchaincode);
+    std.crypto.auth.hmac.sha2.HmacSha512.create(I[0..], &bytesData, &bytesChainCode);
 
     childChainCode[0..32].* = I[32..].*;
     const res = std.mem.readIntBig(u512, I[0..]);
