@@ -93,6 +93,7 @@ pub fn deriveChild(privateKey: [32]u8, publicKey: [33]u8, chainCode: [32]u8, ind
     const uprivate: u256 = std.mem.readIntBig(u256, &privateKey);
     const random: u256 = std.mem.readIntBig(u256, I[0..32]);
     const k: u256 = @intCast(@mod(@as(u512, uprivate) + random, secp256k1.NUMBER_OF_POINTS));
+    std.debug.print("K {d}\n", .{k});
     childPrivateKey[0..32].* = @bitCast(k);
 
     std.debug.print("HMAC res {x}\n", .{res});

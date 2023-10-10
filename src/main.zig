@@ -61,7 +61,7 @@ pub fn main() !void {
     try bip32.deriveChild(masterPrivateKey, compressedPublicKey, masterChainCode, 0, &childPrivateKey, &childChainCode);
     const childPublicKey = try bip32.generateCompressedPublicKey(childPrivateKey);
 
-    const childPrivateKeyInt = std.mem.readIntBig(u256, &childPrivateKey);
+    const childPrivateKeyInt = std.mem.readIntNative(u256, &childPrivateKey);
     const childChainCodeInt = std.mem.readIntBig(u256, &childChainCode);
     const childPublicKeyInt = std.mem.readIntNative(u264, &childPublicKey);
 
