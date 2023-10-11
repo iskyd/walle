@@ -8,7 +8,7 @@ Wall-E is a Bitcoin Wallet written in Zig.
 #### Testing
 Single file
 ```
-zig test src/utils.zig --main-pkg-path 
+zig test src/utils.zig --main-pkg-path .
 ```
 
 Build test
