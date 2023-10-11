@@ -1,4 +1,5 @@
 const std = @import("std");
+const utils = @import("../utils.zig");
 
 pub const WordList = struct {
     allocator: std.mem.Allocator,
@@ -37,24 +38,25 @@ pub fn generateEntropy(buffer: []u8, ent: u16) void {
     rand.bytes(buffer);
 }
 
-pub fn generateChecksum(data: []const u8, bits: u8) []u8 {
-    var checksum: [32]u8 = undefined;
-    std.crypto.hash.sha2.Sha256.hash(data, &checksum, .{});
-    return checksum[0..bits];
+pub fn generateChecksum(data: []const u8, bits: u8, checksum: []u8) void {
+    var hash_result: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(data, &hash_result, .{});
+    std.mem.copy(u8, checksum[0..], hash_result[0..bits]);
 }
 
 pub fn generateMnemonic(buffer: [][]const u8, entropy: []u8, wordlist: WordList, allocator: std.mem.Allocator) !void {
     const checksum_bits: u8 = @intCast(entropy.len / 32);
-    const checksum = generateChecksum(entropy, checksum_bits);
+    var checksum: []u8 = try allocator.alloc(u8, checksum_bits);
+    generateChecksum(entropy, checksum_bits, checksum);
+    defer allocator.free(checksum);
     // Checksum is 1 bit for every 32 bits of entropy
     var concatenated = try allocator.alloc(u8, entropy.len + checksum_bits);
     defer allocator.free(concatenated);
     std.mem.copy(u8, concatenated[0..entropy.len], entropy);
     std.mem.copy(u8, concatenated[entropy.len..], checksum);
 
-    std.debug.print("concatenated {d}", .{concatenated});
-
-    const u_entropy: u264 = @as(*align(1) u264, @ptrCast(concatenated.ptr)).*;
+    const u_entropy: u264 = @byteSwap(@as(*align(1) u264, @ptrCast(concatenated.ptr)).*);
+    std.debug.print("u_entropy {x}\n", .{u_entropy});
     const mask: u64 = (1 << 11) - 1;
     const words = wordlist.getWords();
 
@@ -95,7 +97,7 @@ test "generateMnemonic" {
     // Test 1
     var e1 = [32]u8{ 0b11110101, 0b10000101, 0b11000001, 0b00011010, 0b11101100, 0b01010010, 0b00001101, 0b10110101, 0b01111101, 0b11010011, 0b01010011, 0b11000110, 0b10010101, 0b01010100, 0b10110010, 0b00011010, 0b10001001, 0b10110010, 0b00001111, 0b10110000, 0b01100101, 0b00001001, 0b01100110, 0b11111010, 0b00001010, 0b10011101, 0b01101111, 0b01110100, 0b11111101, 0b10011000, 0b10011101, 0b10001111 };
     var b1: [24][]u8 = undefined;
-    try generateMnemonic(&b1, &e1, wordlist, allocator);
+    try generateMnemonic(&b1, e1[0..32], wordlist, allocator);
     defer for (b1) |word| allocator.free(word);
 
     const str1 = "void come effort suffer camp survey warrior heavy shoot primary clutch crush open amazing screen patrol group space point ten exist slush involve unfold";

@@ -12,6 +12,12 @@ pub fn intToHexStr(comptime T: type, data: T, buffer: []u8) !void {
     _ = try std.fmt.bufPrint(buffer[missingCharacters..], "{x}", .{data});
 }
 
+pub fn printSliceInHex(comptime T: type, slice: []u8) void {
+    const v1: T = @as(*align(1) T, @ptrCast(slice.ptr)).*;
+    const swapped: T = @byteSwap(v1);
+    std.debug.print("{x}\n", .{swapped});
+}
+
 test "intToHexStr" {
     var buffer: [8]u8 = undefined;
     try intToHexStr(u8, 150, &buffer);
