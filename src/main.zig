@@ -40,26 +40,26 @@ pub fn main() !void {
     const x = std.mem.readIntBig(u512, &seed);
     std.debug.print("Seed {x}\n", .{x});
 
-    // var masterPrivateKey: [32]u8 = undefined;
-    // var masterChainCode: [32]u8 = undefined;
-    // bip32.generateMasterPrivateKey(seed, &masterPrivateKey, &masterChainCode);
+    var masterPrivateKey: [32]u8 = undefined;
+    var masterChainCode: [32]u8 = undefined;
+    bip32.generateMasterPrivateKey(seed, &masterPrivateKey, &masterChainCode);
 
     // // std.debug.print("Master private key: {b}\n", .{masterPrivateKey});
-    // const mi = std.mem.readIntBig(u256, &masterPrivateKey);
-    // std.debug.print("Master private key {x}\n", .{mi});
-    // const mc = std.mem.readIntBig(u256, &masterChainCode);
-    // std.debug.print("Master chain code {x}\n", .{mc});
+    const mi = std.mem.readIntBig(u256, &masterPrivateKey);
+    std.debug.print("Master private key {x}\n", .{mi});
+    const mc = std.mem.readIntBig(u256, &masterChainCode);
+    std.debug.print("Master chain code {x}\n", .{mc});
 
-    // const compressedPublicKey = try bip32.generateCompressedPublicKey(masterPrivateKey);
-    // // std.debug.print("Compressed public key: {d}\n", .{compressedPublicKey});
-    // const cpk = std.mem.readIntNative(u264, &compressedPublicKey);
-    // std.debug.print("Compressed public key {x}\n", .{cpk});
+    const compressedPublicKey = try bip32.generateCompressedPublicKey(masterPrivateKey);
+    // std.debug.print("Compressed public key: {d}\n", .{compressedPublicKey});
+    const cpk = std.mem.readIntBig(u264, &compressedPublicKey);
+    std.debug.print("Compressed public key {x}\n", .{cpk});
 
     // try bip32.deriveAddressFromCompressedPublicKey(compressedPublicKey);
 
-    // const uncompressedPublicKey = try bip32.generateUncompressedPublicKey(masterPrivateKey);
-    // const ucpk = std.mem.readIntNative(u520, &uncompressedPublicKey);
-    // std.debug.print("Uncompressed public key: {x}\n", .{ucpk});
+    const uncompressedPublicKey = try bip32.generateUncompressedPublicKey(masterPrivateKey);
+    const ucpk = std.mem.readIntBig(u520, &uncompressedPublicKey);
+    std.debug.print("Uncompressed public key: {x}\n", .{ucpk});
 
     // var childPrivateKey: [32]u8 = undefined;
     // var childChainCode: [32]u8 = undefined;

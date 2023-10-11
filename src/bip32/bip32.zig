@@ -29,7 +29,7 @@ pub fn generateCompressedPublicKey(privateKey: [32]u8) ![33]u8 {
     }
 
     const intCompressedPublicKey = try std.fmt.parseInt(u264, &strCompressedPublicKey, 16);
-    const compressedPublicKey: [33]u8 = @bitCast(intCompressedPublicKey);
+    const compressedPublicKey: [33]u8 = @bitCast(@byteSwap(intCompressedPublicKey));
 
     return compressedPublicKey;
 }
@@ -42,10 +42,8 @@ pub fn generateUncompressedPublicKey(privateKey: [32]u8) ![65]u8 {
     var strUncompressedPublicKey: [130]u8 = undefined;
     _ = try std.fmt.bufPrint(&strUncompressedPublicKey, "04{x}{x}", .{ point.x, point.y });
 
-    std.debug.print("Str uncompressed public key {s}\n", .{strUncompressedPublicKey});
-
     const intUncompressedPublicKey = try std.fmt.parseInt(u520, &strUncompressedPublicKey, 16);
-    const uncompressedPublicKey: [65]u8 = @bitCast(intUncompressedPublicKey);
+    const uncompressedPublicKey: [65]u8 = @bitCast(@byteSwap(intUncompressedPublicKey));
     return uncompressedPublicKey;
 }
 
@@ -152,13 +150,13 @@ test "generateMasterPrivateKey" {
 test "generateCompressedPublicKey" {
     const masterPrivateKey = [32]u8{ 0b10111001, 0b00010001, 0b01110001, 0b11001001, 0b10011111, 0b01110000, 0b10010111, 0b11111101, 0b01110101, 0b01001011, 0b01001000, 0b11110010, 0b01010010, 0b00010001, 0b00110011, 0b10100001, 0b11100000, 0b10100110, 0b10010100, 0b10111000, 0b01101110, 0b10100101, 0b11011110, 0b01101011, 0b10111010, 0b01100000, 0b00000100, 0b01011011, 0b00001111, 0b00100101, 0b01001100, 0b01100001 };
     const compressedPublicKey = try generateCompressedPublicKey(masterPrivateKey);
-    const intCompressedPublicKey: u264 = std.mem.readIntNative(u264, &compressedPublicKey);
+    const intCompressedPublicKey: u264 = std.mem.readIntBig(u264, &compressedPublicKey);
     try std.testing.expectEqual(intCompressedPublicKey, 371021088148843091519123278369699840892534340640782334706731698887367669696056);
 }
 
 test "generateUncompressedPublicKey" {
     const masterPrivateKey = [32]u8{ 0b10111001, 0b00010001, 0b01110001, 0b11001001, 0b10011111, 0b01110000, 0b10010111, 0b11111101, 0b01110101, 0b01001011, 0b01001000, 0b11110010, 0b01010010, 0b00010001, 0b00110011, 0b10100001, 0b11100000, 0b10100110, 0b10010100, 0b10111000, 0b01101110, 0b10100101, 0b11011110, 0b01101011, 0b10111010, 0b01100000, 0b00000100, 0b01011011, 0b00001111, 0b00100101, 0b01001100, 0b01100001 };
     const uncompressedPublicKey = try generateUncompressedPublicKey(masterPrivateKey);
-    const intUncompressedPublicKey: u520 = std.mem.readIntNative(u520, &uncompressedPublicKey);
+    const intUncompressedPublicKey: u520 = std.mem.readIntBig(u520, &uncompressedPublicKey);
     try std.testing.expectEqual(intUncompressedPublicKey, 56369114877799594661188296746717703076673813647934040365584748932532373788020011766136440806660229408156383305013228873759763532598787701125186219479120245);
 }
