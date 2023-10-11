@@ -37,23 +37,32 @@ pub fn generateEntropy(buffer: []u8, ent: u16) void {
     rand.bytes(buffer);
 }
 
-pub fn generateChecksum(data: []const u8) [1]u8 {
+pub fn generateChecksum(data: []const u8, bits: u8) []u8 {
     var checksum: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(data, &checksum, .{});
-    return checksum[0..1].*;
+    return checksum[0..bits];
 }
 
-pub fn generateMnemonic(buffer: [][]const u8, entropy: [32]u8, wordlist: WordList, allocator: std.mem.Allocator) !void {
-    const checksum = generateChecksum(&entropy);
-    const u_entropy = std.mem.readIntBig(u264, &(entropy ++ checksum));
+pub fn generateMnemonic(buffer: [][]const u8, entropy: []u8, wordlist: WordList, allocator: std.mem.Allocator) !void {
+    const checksum_bits: u8 = @intCast(entropy.len / 32);
+    const checksum = generateChecksum(entropy, checksum_bits);
+    // Checksum is 1 bit for every 32 bits of entropy
+    var concatenated = try allocator.alloc(u8, entropy.len + checksum_bits);
+    defer allocator.free(concatenated);
+    std.mem.copy(u8, concatenated[0..entropy.len], entropy);
+    std.mem.copy(u8, concatenated[entropy.len..], checksum);
+
+    std.debug.print("concatenated {d}", .{concatenated});
+
+    const u_entropy: u264 = @as(*align(1) u264, @ptrCast(concatenated.ptr)).*;
     const mask: u64 = (1 << 11) - 1;
     const words = wordlist.getWords();
 
-    for (0..24) |i| {
+    for (0..buffer.len) |i| {
         const s = @as(u8, @intCast(i)) * @as(u9, @intCast(11));
         const bits = u_entropy >> s & mask;
         // We're using right shift, so we need to reverse the order of the words
-        buffer[23 - i] = try allocator.dupe(u8, words[@intCast(bits)]);
+        buffer[buffer.len - 1 - i] = try allocator.dupe(u8, words[@intCast(bits)]);
     }
 }
 
