@@ -55,7 +55,11 @@ pub fn main() !void {
     const cpk = std.mem.readIntBig(u264, &compressedPublicKey);
     std.debug.print("Compressed public key {x}\n", .{cpk});
 
-    // try bip32.deriveAddressFromCompressedPublicKey(compressedPublicKey);
+    var address: [25]u8 = undefined;
+    try bip32.deriveAddressFromCompressedPublicKey(compressedPublicKey, &address);
+    var address_hex_str: [50]u8 = undefined;
+    _ = try std.fmt.bufPrint(&address_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&address)});
+    std.debug.print("Address: {s}\n", .{address_hex_str});
 
     const uncompressedPublicKey = try bip32.generateUncompressedPublicKey(masterPrivateKey);
     const ucpk = std.mem.readIntBig(u520, &uncompressedPublicKey);

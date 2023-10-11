@@ -2,6 +2,7 @@ const std = @import("std");
 const secp256k1 = @import("../secp256k1/secp256k1.zig");
 const utils = @import("../utils.zig");
 const math = std.math;
+const ripemd = @import("../ripemd160/ripemd160.zig");
 const assert = std.debug.assert;
 
 pub fn generateMasterPrivateKey(seed: [64]u8, masterPrivateKey: *[32]u8, masterChainCode: *[32]u8) void {
@@ -47,9 +48,9 @@ pub fn generateUncompressedPublicKey(privateKey: [32]u8) ![65]u8 {
     return uncompressedPublicKey;
 }
 
-pub fn deriveAddressFromCompressedPublicKey(publicKey: [33]u8) !void {
+pub fn deriveAddressFromCompressedPublicKey(publicKey: [33]u8, address: []u8) !void {
     var buffer: [66]u8 = undefined;
-    const udata: u264 = std.mem.readIntNative(u264, &publicKey);
+    const udata: u264 = std.mem.readIntBig(u264, &publicKey);
     try utils.intToHexStr(u264, udata, &buffer);
     var hashed: [32]u8 = undefined;
 
@@ -57,8 +58,19 @@ pub fn deriveAddressFromCompressedPublicKey(publicKey: [33]u8) !void {
     _ = try std.fmt.hexToBytes(&bytes, &buffer);
 
     std.crypto.hash.sha2.Sha256.hash(&bytes, &hashed, .{});
-    const uHashed = std.mem.readIntBig(u256, &hashed);
-    std.debug.print("Hashed {x}\n", .{uHashed});
+
+    const r = ripemd.Ripemd160.hash(&hashed);
+    var hex_str: [42]u8 = undefined;
+    _ = try std.fmt.bufPrint(&hex_str, "00{x}", .{std.fmt.fmtSliceHexLower(r.bytes[0..])});
+    var bytes_hashed: [21]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytes_hashed, &hex_str);
+
+    var checksum: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(&bytes_hashed, &checksum, .{});
+    std.crypto.hash.sha2.Sha256.hash(&checksum, &checksum, .{});
+
+    std.mem.copy(u8, address[0..21], bytes_hashed[0..21]);
+    std.mem.copy(u8, address[21..], checksum[0..4]);
 }
 
 pub fn deriveChild(privateKey: [32]u8, publicKey: [33]u8, chainCode: [32]u8, index: u32, childPrivateKey: *[32]u8, childChainCode: *[32]u8) !void {
@@ -159,4 +171,14 @@ test "generateUncompressedPublicKey" {
     const uncompressedPublicKey = try generateUncompressedPublicKey(masterPrivateKey);
     const intUncompressedPublicKey: u520 = std.mem.readIntBig(u520, &uncompressedPublicKey);
     try std.testing.expectEqual(intUncompressedPublicKey, 56369114877799594661188296746717703076673813647934040365584748932532373788020011766136440806660229408156383305013228873759763532598787701125186219479120245);
+}
+
+test "deriveAddressFromCompressedPublicKey" {
+    const public_key = [33]u8{ 0b00000010, 0b10101110, 0b10111000, 0b00000011, 0b10101001, 0b10101100, 0b11100110, 0b11011100, 0b11000101, 0b11110001, 0b00011101, 0b00000110, 0b11101000, 0b11110011, 0b00001110, 0b00100100, 0b00011000, 0b01101100, 0b10010000, 0b01001111, 0b01000110, 0b00111011, 0b11101000, 0b01001111, 0b00110000, 0b00111101, 0b00010101, 0b10111011, 0b01111101, 0b01001000, 0b11010001, 0b00100000, 0b00011111 };
+    var address: [25]u8 = undefined;
+    try deriveAddressFromCompressedPublicKey(public_key, &address);
+    var address_hex_str: [50]u8 = undefined;
+    _ = try std.fmt.bufPrint(&address_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&address)});
+
+    try std.testing.expectEqualSlices(u8, "00f57f296d748bb310dc0512b28231e8ebd62454557d5edaef", &address_hex_str);
 }
