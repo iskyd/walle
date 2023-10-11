@@ -45,18 +45,17 @@ pub fn generateChecksum(data: []const u8, bits: u8, checksum: []u8) void {
 }
 
 pub fn generateMnemonic(buffer: [][]const u8, entropy: []u8, wordlist: WordList, allocator: std.mem.Allocator) !void {
-    const checksum_bits: u8 = @intCast(entropy.len / 32);
+    // Checksum is 1 bit for every 32 bits of entropy
+    const checksum_bits: u8 = @intCast(entropy.len / 4);
     var checksum: []u8 = try allocator.alloc(u8, checksum_bits);
     generateChecksum(entropy, checksum_bits, checksum);
     defer allocator.free(checksum);
-    // Checksum is 1 bit for every 32 bits of entropy
     var concatenated = try allocator.alloc(u8, entropy.len + checksum_bits);
     defer allocator.free(concatenated);
     std.mem.copy(u8, concatenated[0..entropy.len], entropy);
     std.mem.copy(u8, concatenated[entropy.len..], checksum);
 
     const u_entropy: u264 = @byteSwap(@as(*align(1) u264, @ptrCast(concatenated.ptr)).*);
-    std.debug.print("u_entropy {x}\n", .{u_entropy});
     const mask: u64 = (1 << 11) - 1;
     const words = wordlist.getWords();
 
