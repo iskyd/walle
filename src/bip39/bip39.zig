@@ -38,22 +38,15 @@ pub fn generateEntropy(buffer: []u8, ent: u16) void {
     rand.bytes(buffer);
 }
 
-pub fn generateChecksum(data: []const u8, bits: u8, checksum: []u8) void {
-    var hash_result: [32]u8 = undefined;
-    std.crypto.hash.sha2.Sha256.hash(data, &hash_result, .{});
-    std.mem.copy(u8, checksum[0..], hash_result[0..bits]);
-}
-
 pub fn generateMnemonic(buffer: [][]const u8, entropy: []u8, wordlist: WordList, allocator: std.mem.Allocator) !void {
     // Checksum is 1 bit for every 32 bits of entropy
     const checksum_bits: u8 = @intCast(entropy.len / 4);
-    var checksum: []u8 = try allocator.alloc(u8, checksum_bits);
-    generateChecksum(entropy, checksum_bits, checksum);
-    defer allocator.free(checksum);
+    var checksum: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(entropy, &checksum, .{});
     var concatenated = try allocator.alloc(u8, entropy.len + checksum_bits);
     defer allocator.free(concatenated);
     std.mem.copy(u8, concatenated[0..entropy.len], entropy);
-    std.mem.copy(u8, concatenated[entropy.len..], checksum);
+    std.mem.copy(u8, concatenated[entropy.len..], checksum[0..checksum_bits]);
 
     const u_entropy: u264 = @byteSwap(@as(*align(1) u264, @ptrCast(concatenated.ptr)).*);
     const mask: u64 = (1 << 11) - 1;
