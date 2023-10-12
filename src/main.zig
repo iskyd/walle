@@ -37,24 +37,25 @@ pub fn main() !void {
     var seed: [64]u8 = undefined;
     try bip39.mnemonicToSeed(allocator, &seed, mnemonic, "");
 
-    // std.debug.print("Seed: {b}\n", .{seed});
-    const x = std.mem.readIntBig(u512, &seed);
-    std.debug.print("Seed {x}\n", .{x});
+    var seed_hex_str: [128]u8 = undefined;
+    _ = try std.fmt.bufPrint(&seed_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&seed)});
+    std.debug.print("Seed {s}\n", .{seed_hex_str});
 
     var masterPrivateKey: [32]u8 = undefined;
     var masterChainCode: [32]u8 = undefined;
     bip32.generateMasterPrivateKey(seed, &masterPrivateKey, &masterChainCode);
 
-    // // std.debug.print("Master private key: {b}\n", .{masterPrivateKey});
-    const mi = std.mem.readIntBig(u256, &masterPrivateKey);
-    std.debug.print("Master private key {x}\n", .{mi});
-    const mc = std.mem.readIntBig(u256, &masterChainCode);
-    std.debug.print("Master chain code {x}\n", .{mc});
+    var master_private_key_hex_str: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&master_private_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&masterPrivateKey)});
+    std.debug.print("Master private key {s}\n", .{master_private_key_hex_str});
+    var master_chain_code_key_hex_str: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&master_chain_code_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&masterChainCode)});
+    std.debug.print("Master chain code {s}\n", .{master_chain_code_key_hex_str});
 
     const compressedPublicKey = try bip32.generateCompressedPublicKey(masterPrivateKey);
-    // std.debug.print("Compressed public key: {d}\n", .{compressedPublicKey});
-    const cpk = std.mem.readIntBig(u264, &compressedPublicKey);
-    std.debug.print("Compressed public key {x}\n", .{cpk});
+    var compressed_public_key_hex_str: [66]u8 = undefined;
+    _ = try std.fmt.bufPrint(&compressed_public_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&compressedPublicKey)});
+    std.debug.print("Compressed public key {s}\n", .{compressed_public_key_hex_str});
 
     var address: [25]u8 = undefined;
     try bip32.deriveAddressFromCompressedPublicKey(compressedPublicKey, &address);
@@ -70,8 +71,9 @@ pub fn main() !void {
     std.debug.print("base58 address {s}\n", .{base58_address});
 
     const uncompressedPublicKey = try bip32.generateUncompressedPublicKey(masterPrivateKey);
-    const ucpk = std.mem.readIntBig(u520, &uncompressedPublicKey);
-    std.debug.print("Uncompressed public key: {x}\n", .{ucpk});
+    var uncompressed_public_key_hex_str: [130]u8 = undefined;
+    _ = try std.fmt.bufPrint(&uncompressed_public_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&uncompressedPublicKey)});
+    std.debug.print("Uncompressed public key: {s}\n", .{uncompressed_public_key_hex_str});
 
     // var childPrivateKey: [32]u8 = undefined;
     // var childChainCode: [32]u8 = undefined;
