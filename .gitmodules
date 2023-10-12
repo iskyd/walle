@@ -1,0 +1,3 @@
+[submodule "lib/base58"]
+	path = lib/base58
+	url = https://github.com/ultd/base58-zig.git

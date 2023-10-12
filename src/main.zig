@@ -2,6 +2,7 @@ const std = @import("std");
 const bip39 = @import("bip39/bip39.zig");
 const bip32 = @import("bip32/bip32.zig");
 const secp256k1 = @import("secp256k1/secp256k1.zig");
+const base58 = @import("base58");
 
 pub fn main() !void {
     std.debug.print("WALL-E. Bitcoin Wallet written in Zig\n", .{});
@@ -60,6 +61,13 @@ pub fn main() !void {
     var address_hex_str: [50]u8 = undefined;
     _ = try std.fmt.bufPrint(&address_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&address)});
     std.debug.print("Address: {s}\n", .{address_hex_str});
+
+    var bytes_address: [25]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytes_address, &address_hex_str);
+    const base58_encoder = base58.Encoder.init(.{});
+    var base58_address: [34]u8 = undefined;
+    _ = try base58_encoder.encode(&bytes_address, &base58_address);
+    std.debug.print("base58 address {s}\n", .{base58_address});
 
     const uncompressedPublicKey = try bip32.generateUncompressedPublicKey(masterPrivateKey);
     const ucpk = std.mem.readIntBig(u520, &uncompressedPublicKey);

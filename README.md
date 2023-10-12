@@ -15,3 +15,7 @@ Build test
 ```
 zig build test
 ```
+
+### Lib
+External libraries such as base58 are installed as git submodule and added to build.zig
+
