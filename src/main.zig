@@ -74,29 +74,35 @@ pub fn main() !void {
     _ = try std.fmt.bufPrint(&uncompressed_public_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&uncompressedPublicKey)});
     std.debug.print("Uncompressed public key: {s}\n", .{uncompressed_public_key_hex_str});
 
-    // var childPrivateKey: [32]u8 = undefined;
-    // var childChainCode: [32]u8 = undefined;
-    // try bip32.deriveChild(masterPrivateKey, compressedPublicKey, masterChainCode, 0, &childPrivateKey, &childChainCode);
-    // const childPublicKey = try bip32.generateCompressedPublicKey(childPrivateKey);
+    var childPrivateKey: [32]u8 = undefined;
+    var childChainCode: [32]u8 = undefined;
+    try bip32.deriveChild(masterPrivateKey, compressedPublicKey, masterChainCode, 0, &childPrivateKey, &childChainCode);
+    const childPublicKey = try bip32.generateCompressedPublicKey(childPrivateKey);
 
-    // const childPrivateKeyInt = std.mem.readIntNative(u256, &childPrivateKey);
-    // const childChainCodeInt = std.mem.readIntBig(u256, &childChainCode);
-    // const childPublicKeyInt = std.mem.readIntNative(u264, &childPublicKey);
+    var child_private_key_hex_str: [64]u8 = undefined;
+    var child_chain_code_key_hex_str: [64]u8 = undefined;
+    var child_public_key_hex_str: [66]u8 = undefined;
+    _ = try std.fmt.bufPrint(&child_private_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&childPrivateKey)});
+    _ = try std.fmt.bufPrint(&child_chain_code_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&childChainCode)});
+    _ = try std.fmt.bufPrint(&child_public_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&childPublicKey)});
 
-    // std.debug.print("Child private key {x}\n", .{childPrivateKeyInt});
-    // std.debug.print("Child chain code {x}\n", .{childChainCodeInt});
-    // std.debug.print("Child public key {x}\n", .{childPublicKeyInt});
+    std.debug.print("Child private key {s}\n", .{child_private_key_hex_str});
+    std.debug.print("Child chain code {s}\n", .{child_chain_code_key_hex_str});
+    std.debug.print("Child public key {s}\n", .{child_public_key_hex_str});
 
-    // var hardenedChildPrivateKey: [32]u8 = undefined;
-    // var hardenedChildChainCode: [32]u8 = undefined;
-    // try bip32.deriveChildHardened(masterPrivateKey, masterChainCode, 2147483648, &hardenedChildPrivateKey, &hardenedChildChainCode);
-    // const hardenedChildPublicKey = try bip32.generateCompressedPublicKey(hardenedChildPrivateKey);
+    var hardenedChildPrivateKey: [32]u8 = undefined;
+    var hardenedChildChainCode: [32]u8 = undefined;
+    try bip32.deriveChildHardened(masterPrivateKey, masterChainCode, 2147483648, &hardenedChildPrivateKey, &hardenedChildChainCode);
+    const hardenedChildPublicKey = try bip32.generateCompressedPublicKey(hardenedChildPrivateKey);
 
-    // const hardenedChildPrivateKeyInt = std.mem.readIntBig(u256, &hardenedChildPrivateKey);
-    // const hardenedChildChainCodeInt = std.mem.readIntBig(u256, &hardenedChildChainCode);
-    // const hardenedChildPublicKeyInt = std.mem.readIntNative(u264, &hardenedChildPublicKey);
+    var child_private_key_hardened_hex_str: [64]u8 = undefined;
+    var child_chain_code_hardened_key_hex_str: [64]u8 = undefined;
+    var child_public_key_hardened_hex_str: [66]u8 = undefined;
+    _ = try std.fmt.bufPrint(&child_private_key_hardened_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&hardenedChildPrivateKey)});
+    _ = try std.fmt.bufPrint(&child_chain_code_hardened_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&hardenedChildChainCode)});
+    _ = try std.fmt.bufPrint(&child_public_key_hardened_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&hardenedChildPublicKey)});
 
-    // std.debug.print("Hardened Child private key {x}\n", .{hardenedChildPrivateKeyInt});
-    // std.debug.print("Hardened Child chain code {x}\n", .{hardenedChildChainCodeInt});
-    // std.debug.print("Hardened Child public key {x}\n", .{hardenedChildPublicKeyInt});
+    std.debug.print("Hardened Child private key {s}\n", .{child_private_key_hardened_hex_str});
+    std.debug.print("Hardened Child chain code {s}\n", .{child_chain_code_hardened_key_hex_str});
+    std.debug.print("Hardened Child public key {s}\n", .{child_public_key_hardened_hex_str});
 }

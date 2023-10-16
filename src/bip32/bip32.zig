@@ -78,16 +78,14 @@ pub fn deriveChild(privateKey: [32]u8, publicKey: [33]u8, chainCode: [32]u8, ind
     assert(index <= 2147483647);
     const indexBytes: [4]u8 = @bitCast(index);
 
-    const data: [37]u8 = indexBytes ++ publicKey;
-    const udata: u296 = std.mem.readIntNative(u296, &data);
+    const data: [37]u8 = publicKey ++ indexBytes;
 
     // 74 = 37 * 2 (2 hex characters per byte)
     var bufdata: [74]u8 = undefined;
-    try utils.intToHexStr(u296, udata, &bufdata);
+    _ = try std.fmt.bufPrint(&bufdata, "{x}", .{std.fmt.fmtSliceHexLower(&data)});
 
-    const uchaincode: u256 = std.mem.readIntBig(u256, &chainCode);
     var bufchaincode: [64]u8 = undefined;
-    try utils.intToHexStr(u256, uchaincode, &bufchaincode);
+    _ = try std.fmt.bufPrint(&bufchaincode, "{x}", .{std.fmt.fmtSliceHexLower(&chainCode)});
 
     var bytesData: [37]u8 = undefined;
     _ = try std.fmt.hexToBytes(&bytesData, &bufdata);
@@ -98,15 +96,11 @@ pub fn deriveChild(privateKey: [32]u8, publicKey: [33]u8, chainCode: [32]u8, ind
     std.crypto.auth.hmac.sha2.HmacSha512.create(I[0..], &bytesData, &bytesChainCode);
 
     childChainCode[0..32].* = I[32..].*;
-    const res = std.mem.readIntBig(u512, I[0..]);
 
     const uprivate: u256 = std.mem.readIntBig(u256, &privateKey);
     const random: u256 = std.mem.readIntBig(u256, I[0..32]);
     const k: u256 = @intCast(@mod(@as(u512, uprivate) + random, secp256k1.NUMBER_OF_POINTS));
-    std.debug.print("K {d}\n", .{k});
-    childPrivateKey[0..32].* = @bitCast(k);
-
-    std.debug.print("HMAC res {x}\n", .{res});
+    childPrivateKey[0..32].* = @bitCast(@byteSwap(k));
 }
 
 pub fn deriveChildHardened(privateKey: [32]u8, chainCode: [32]u8, index: u32, childPrivateKey: *[32]u8, childChainCode: *[32]u8) !void {
@@ -114,15 +108,15 @@ pub fn deriveChildHardened(privateKey: [32]u8, chainCode: [32]u8, index: u32, ch
     assert(index <= 4294967295);
 
     const indexBytes: [4]u8 = @bitCast(index);
-    const data: [36]u8 = indexBytes ++ privateKey;
-    const udata: u288 = std.mem.readIntNative(u288, &data);
+    const data: [36]u8 = privateKey ++ indexBytes;
 
     var bufdata: [72]u8 = undefined;
-    try utils.intToHexStr(u288, udata, &bufdata);
+    _ = try std.fmt.bufPrint(&bufdata, "{x}", .{std.fmt.fmtSliceHexLower(&data)});
+    std.debug.print("bufdata: {s}\n", .{bufdata});
 
-    const uchaincode: u256 = std.mem.readIntBig(u256, &chainCode);
     var bufchaincode: [64]u8 = undefined;
-    try utils.intToHexStr(u256, uchaincode, &bufchaincode);
+    _ = try std.fmt.bufPrint(&bufchaincode, "{x}", .{std.fmt.fmtSliceHexLower(&chainCode)});
+    std.debug.print("bufchaincode: {s}\n", .{bufchaincode});
 
     var bytesData: [37]u8 = undefined;
     _ = try std.fmt.hexToBytes(&bytesData, &bufdata);
@@ -133,14 +127,11 @@ pub fn deriveChildHardened(privateKey: [32]u8, chainCode: [32]u8, index: u32, ch
     std.crypto.auth.hmac.sha2.HmacSha512.create(I[0..], &bytesData, &bytesChainCode);
 
     childChainCode[0..32].* = I[32..].*;
-    const res = std.mem.readIntBig(u512, I[0..]);
 
     const uprivate: u256 = std.mem.readIntBig(u256, &privateKey);
     const random: u256 = std.mem.readIntBig(u256, I[0..32]);
     const k: u256 = @intCast(@mod(@as(u512, uprivate) + random, secp256k1.NUMBER_OF_POINTS));
-    childPrivateKey[0..32].* = @bitCast(k);
-
-    std.debug.print("HMAC res {x}\n", .{res});
+    childPrivateKey[0..32].* = @bitCast(@byteSwap(k));
 }
 
 test "generateMasterPrivateKey" {
