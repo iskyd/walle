@@ -13,12 +13,6 @@ pub fn intToHexStr(comptime T: type, data: T, buffer: []u8) !void {
     _ = try std.fmt.bufPrint(buffer[missingCharacters..], "{x}", .{data});
 }
 
-pub fn printSliceInHex(comptime T: type, slice: []u8) void {
-    const v1: T = @as(*align(1) T, @ptrCast(slice.ptr)).*;
-    const swapped: T = @byteSwap(v1);
-    std.debug.print("{x}\n", .{swapped});
-}
-
 pub fn toBase58(buffer: []u8, str: []u8) !void {
     const base58_encoder = base58.Encoder.init(.{});
     _ = try base58_encoder.encode(str, buffer);
