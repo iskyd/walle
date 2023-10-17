@@ -107,10 +107,11 @@ pub fn deriveChildHardened(privateKey: [32]u8, chainCode: [32]u8, index: u32, ch
     assert(index >= 2147483647);
     assert(index <= 4294967295);
 
-    const indexBytes: [4]u8 = @bitCast(index);
-    const data: [36]u8 = privateKey ++ indexBytes;
+    var prefix: [1]u8 = [1]u8{0b00000000};
+    const indexBytes: [4]u8 = @bitCast(@byteSwap(index));
+    const data: [37]u8 = prefix ++ privateKey ++ indexBytes;
 
-    var bufdata: [72]u8 = undefined;
+    var bufdata: [74]u8 = undefined;
     _ = try std.fmt.bufPrint(&bufdata, "{x}", .{std.fmt.fmtSliceHexLower(&data)});
     std.debug.print("bufdata: {s}\n", .{bufdata});
 
