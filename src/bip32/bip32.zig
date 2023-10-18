@@ -113,11 +113,9 @@ pub fn deriveChildHardened(privateKey: [32]u8, chainCode: [32]u8, index: u32, ch
 
     var bufdata: [74]u8 = undefined;
     _ = try std.fmt.bufPrint(&bufdata, "{x}", .{std.fmt.fmtSliceHexLower(&data)});
-    std.debug.print("bufdata: {s}\n", .{bufdata});
 
     var bufchaincode: [64]u8 = undefined;
     _ = try std.fmt.bufPrint(&bufchaincode, "{x}", .{std.fmt.fmtSliceHexLower(&chainCode)});
-    std.debug.print("bufchaincode: {s}\n", .{bufchaincode});
 
     var bytesData: [37]u8 = undefined;
     _ = try std.fmt.hexToBytes(&bytesData, &bufdata);
@@ -173,4 +171,39 @@ test "deriveAddressFromCompressedPublicKey" {
     _ = try std.fmt.bufPrint(&address_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&address)});
 
     try std.testing.expectEqualSlices(u8, "00f57f296d748bb310dc0512b28231e8ebd62454557d5edaef", &address_hex_str);
+}
+
+test "deriveNormalChild" {
+    const seed = [64]u8{ 0b10111000, 0b01110011, 0b00100001, 0b00101111, 0b10001000, 0b01011100, 0b11001111, 0b11111011, 0b11110100, 0b01101001, 0b00101010, 0b11111100, 0b10111000, 0b01001011, 0b11000010, 0b11100101, 0b01011000, 0b10000110, 0b11011110, 0b00101101, 0b11111010, 0b00000111, 0b11011001, 0b00001111, 0b01011100, 0b00111100, 0b00100011, 0b10011010, 0b10111100, 0b00110001, 0b11000000, 0b10100110, 0b11001110, 0b00000100, 0b01111110, 0b00110000, 0b11111101, 0b10001011, 0b11110110, 0b10100010, 0b10000001, 0b11100111, 0b00010011, 0b10001001, 0b10101010, 0b10000010, 0b11010111, 0b00111101, 0b11110111, 0b01001100, 0b01111011, 0b10111111, 0b10110011, 0b10110000, 0b01101011, 0b01000110, 0b00111001, 0b10100101, 0b11001110, 0b11100111, 0b01110101, 0b11001100, 0b11001101, 0b00111100 };
+    var masterPrivateKey: [32]u8 = undefined;
+    var masterChainCode: [32]u8 = undefined;
+    generateMasterPrivateKey(seed, &masterPrivateKey, &masterChainCode);
+    const compressedPublicKey = try generateCompressedPublicKey(masterPrivateKey);
+    var childPrivateKey: [32]u8 = undefined;
+    var childChainCode: [32]u8 = undefined;
+    try deriveChild(masterPrivateKey, compressedPublicKey, masterChainCode, 0, &childPrivateKey, &childChainCode);
+    var child_private_key_hex_str: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&child_private_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&childPrivateKey)});
+    var child_chain_code_hex_str: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&child_chain_code_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&childChainCode)});
+
+    try std.testing.expectEqualSlices(u8, "f13967de2c2ef9341f1336ab3cb6ff43c2b7b9166e23019ad216e0eba47c4d1d", &child_private_key_hex_str);
+    try std.testing.expectEqualSlices(u8, "a9a319ef6f8f4b0a04513ee111f7683c2d74be1fab6c01bd6c937b985aa60100", &child_chain_code_hex_str);
+}
+
+test "deriveHardenedChild" {
+    const seed = [64]u8{ 0b10111000, 0b01110011, 0b00100001, 0b00101111, 0b10001000, 0b01011100, 0b11001111, 0b11111011, 0b11110100, 0b01101001, 0b00101010, 0b11111100, 0b10111000, 0b01001011, 0b11000010, 0b11100101, 0b01011000, 0b10000110, 0b11011110, 0b00101101, 0b11111010, 0b00000111, 0b11011001, 0b00001111, 0b01011100, 0b00111100, 0b00100011, 0b10011010, 0b10111100, 0b00110001, 0b11000000, 0b10100110, 0b11001110, 0b00000100, 0b01111110, 0b00110000, 0b11111101, 0b10001011, 0b11110110, 0b10100010, 0b10000001, 0b11100111, 0b00010011, 0b10001001, 0b10101010, 0b10000010, 0b11010111, 0b00111101, 0b11110111, 0b01001100, 0b01111011, 0b10111111, 0b10110011, 0b10110000, 0b01101011, 0b01000110, 0b00111001, 0b10100101, 0b11001110, 0b11100111, 0b01110101, 0b11001100, 0b11001101, 0b00111100 };
+    var masterPrivateKey: [32]u8 = undefined;
+    var masterChainCode: [32]u8 = undefined;
+    generateMasterPrivateKey(seed, &masterPrivateKey, &masterChainCode);
+    var childPrivateKey: [32]u8 = undefined;
+    var childChainCode: [32]u8 = undefined;
+    try deriveChildHardened(masterPrivateKey, masterChainCode, 2147483648, &childPrivateKey, &childChainCode);
+    var child_private_key_hex_str: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&child_private_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&childPrivateKey)});
+    var child_chain_code_hex_str: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&child_chain_code_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&childChainCode)});
+
+    try std.testing.expectEqualSlices(u8, "7f03ba6e108da0292e289c308dc716d12334c949384f1dfe9fb5b17389b63297", &child_private_key_hex_str);
+    try std.testing.expectEqualSlices(u8, "cc7b21c95d472561a2092d48c65a0d1e68b772a0e89db188fbe8cbd49dc78bdf", &child_chain_code_hex_str);
 }
