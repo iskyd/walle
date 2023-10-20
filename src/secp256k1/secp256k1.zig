@@ -6,6 +6,38 @@ pub const NUMBER_OF_POINTS = 115792089237316195423570985008687907852837564279074
 
 pub const BASE_POINT = Point{ .x = 55066263022277343669578718895168534326250603453777594175500187360389116729240, .y = 32670510020758816978083085130507043184471273380659243275938904335757337482424 };
 
+// fn powmod(base: u512, exponent: u256, modulus: u512) u512 {
+//     std.debug.print("exponent {d}\n", .{exponent});
+//     std.debug.print("modulus {d}\n", .{modulus});
+//     if (modulus == 1) {
+//         return 0;
+//     }
+//     var c: u512 = 1;
+//     var i: u256 = 0;
+//     while (i != exponent) : (i += 1) {
+//         c = @mod(@as(u512, c) * base, modulus);
+//     }
+
+//     return c;
+// }
+
+fn powmod(base: u512, exponent: u256, modulus: u512) u512 {
+    var result: u512 = 1;
+    var b: u512 = base;
+    var e: u512 = exponent;
+    while (e > 0) {
+        if (@mod(e, 2) == 1) {
+            b = @mod(b, modulus);
+            result = @mod(result * b, modulus);
+        }
+        e = e >> 1;
+        b = @mod(b, modulus);
+        b = @mod(b * b, modulus);
+        b = @mod(b, modulus);
+    }
+    return result;
+}
+
 pub fn modinv(comptime T: type, _a: T, _m: T) T {
     var prevy: T = 0;
     var y: T = 1;
@@ -27,6 +59,19 @@ pub fn modinv(comptime T: type, _a: T, _m: T) T {
     }
 
     return y;
+}
+
+pub fn uncompress(publicKey: [33]u8) !Point {
+    const parity = std.mem.readIntBig(u8, publicKey[0..1]);
+    const public_key_x = std.mem.readIntBig(u256, publicKey[1..]);
+    std.debug.print("parity {d}\n", .{parity});
+    std.debug.print("public_key_x {d}\n", .{public_key_x});
+    const y_sq = @mod(powmod(public_key_x, 3, PRIME_MODULUS) + 7, NUMBER_OF_POINTS);
+    var y = powmod(y_sq, (PRIME_MODULUS + 1) / 4, PRIME_MODULUS);
+    if (@mod(y, 2) != @mod(parity, 2)) {
+        y = PRIME_MODULUS - y;
+    }
+    return Point{ .x = public_key_x, .y = y };
 }
 
 pub const Point = struct {
@@ -78,6 +123,10 @@ pub const Point = struct {
 
         self.x = current.x;
         self.y = current.y;
+    }
+
+    pub fn compress(self: *Point) [33]u8 {
+        _ = self;
     }
 };
 

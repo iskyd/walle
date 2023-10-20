@@ -105,4 +105,16 @@ pub fn main() !void {
     std.debug.print("Hardened Child private key {s}\n", .{child_private_key_hardened_hex_str});
     std.debug.print("Hardened Child chain code {s}\n", .{child_chain_code_hardened_key_hex_str});
     std.debug.print("Hardened Child public key {s}\n", .{child_public_key_hardened_hex_str});
+
+    var childPublicKey2: [33]u8 = undefined;
+    var childChainCode2: [32]u8 = undefined;
+    try bip32.deriveChildFromPublicKey(compressedPublicKey, masterChainCode, 0, &childPublicKey2, &childChainCode2);
+
+    var child_chain_code2_key_hex_str: [64]u8 = undefined;
+    var child_public_key2_hex_str: [66]u8 = undefined;
+    _ = try std.fmt.bufPrint(&child_chain_code2_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&childChainCode2)});
+    _ = try std.fmt.bufPrint(&child_public_key2_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&childPublicKey2)});
+
+    std.debug.print("Child chain code {s}\n", .{child_chain_code2_key_hex_str});
+    std.debug.print("Child public key {s}\n", .{child_public_key2_hex_str});
 }

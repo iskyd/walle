@@ -103,6 +103,45 @@ pub fn deriveChild(privateKey: [32]u8, publicKey: [33]u8, chainCode: [32]u8, ind
     childPrivateKey[0..32].* = @bitCast(@byteSwap(k));
 }
 
+pub fn deriveChildFromPublicKey(publicKey: [33]u8, chainCode: [32]u8, index: u32, childPublicKey: *[33]u8, childChainCode: *[32]u8) !void {
+    assert(index >= 0);
+    assert(index <= 2147483647);
+
+    const indexBytes: [4]u8 = @bitCast(index);
+    const data: [37]u8 = publicKey ++ indexBytes;
+    // 74 = 37 * 2 (2 hex characters per byte)
+    var bufdata: [74]u8 = undefined;
+    _ = try std.fmt.bufPrint(&bufdata, "{x}", .{std.fmt.fmtSliceHexLower(&data)});
+
+    var bufchaincode: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&bufchaincode, "{x}", .{std.fmt.fmtSliceHexLower(&chainCode)});
+
+    var bytesData: [37]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytesData, &bufdata);
+    var bytesChainCode: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytesChainCode, &bufchaincode);
+
+    var I: [std.crypto.auth.hmac.sha2.HmacSha512.mac_length]u8 = undefined;
+    std.crypto.auth.hmac.sha2.HmacSha512.create(I[0..], &bytesData, &bytesChainCode);
+
+    childChainCode[0..32].* = I[32..].*;
+
+    const upublic: u264 = std.mem.readIntBig(u264, &publicKey);
+    const random: u256 = std.mem.readIntBig(u256, I[0..32]);
+    var generator: secp256k1.Point = secp256k1.Point{ .x = secp256k1.BASE_POINT.x, .y = secp256k1.BASE_POINT.y };
+    const point_hmac = generator.multiply(random);
+
+    const public_key_point = try secp256k1.uncompress(publicKey);
+
+    const res_point = public_key_point.add(point_hmac);
+
+    childPublicKey[0..].* = res_point.compress();
+
+    std.debug.print("random: {d}\n", .{random});
+    const k: u256 = @intCast(@mod(@as(u512, upublic) + random, secp256k1.NUMBER_OF_POINTS));
+    childPublicKey[0..32].* = @bitCast(@byteSwap(k));
+}
+
 pub fn deriveChildHardened(privateKey: [32]u8, chainCode: [32]u8, index: u32, childPrivateKey: *[32]u8, childChainCode: *[32]u8) !void {
     assert(index >= 2147483647);
     assert(index <= 4294967295);
