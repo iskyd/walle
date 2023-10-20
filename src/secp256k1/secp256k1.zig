@@ -1,41 +1,26 @@
 const std = @import("std");
 const math = @import("std").math;
 
-pub const PRIME_MODULUS: u512 = math.pow(u512, 2, 256) - math.pow(u256, 2, 32) - math.pow(u256, 2, 9) - math.pow(u256, 2, 8) - math.pow(u256, 2, 7) - math.pow(u256, 2, 6) - math.pow(u256, 2, 4) - 1;
+pub const PRIME_MODULUS: u256 = @intCast(math.pow(u512, 2, 256) - math.pow(u256, 2, 32) - math.pow(u256, 2, 9) - math.pow(u256, 2, 8) - math.pow(u256, 2, 7) - math.pow(u256, 2, 6) - math.pow(u256, 2, 4) - 1);
 pub const NUMBER_OF_POINTS = 115792089237316195423570985008687907852837564279074904382605163141518161494337;
 
 pub const BASE_POINT = Point{ .x = 55066263022277343669578718895168534326250603453777594175500187360389116729240, .y = 32670510020758816978083085130507043184471273380659243275938904335757337482424 };
 
-// fn powmod(base: u512, exponent: u256, modulus: u512) u512 {
-//     std.debug.print("exponent {d}\n", .{exponent});
-//     std.debug.print("modulus {d}\n", .{modulus});
-//     if (modulus == 1) {
-//         return 0;
-//     }
-//     var c: u512 = 1;
-//     var i: u256 = 0;
-//     while (i != exponent) : (i += 1) {
-//         c = @mod(@as(u512, c) * base, modulus);
-//     }
-
-//     return c;
-// }
-
-fn powmod(base: u512, exponent: u256, modulus: u512) u512 {
-    var result: u512 = 1;
-    var b: u512 = base;
-    var e: u512 = exponent;
+fn powmod(base: u256, exponent: u256, modulus: u256) u256 {
+    var result: u256 = 1;
+    var b: u256 = base;
+    var e: u256 = exponent;
     while (e > 0) {
         if (@mod(e, 2) == 1) {
             b = @mod(b, modulus);
-            result = @mod(result * b, modulus);
+            result = @intCast(@mod(@as(u512, result) * b, modulus));
         }
         e = e >> 1;
         b = @mod(b, modulus);
-        b = @mod(b * b, modulus);
+        b = @intCast(@mod(@as(u512, b) * b, modulus));
         b = @mod(b, modulus);
     }
-    return result;
+    return @intCast(result);
 }
 
 pub fn modinv(comptime T: type, _a: T, _m: T) T {
@@ -64,19 +49,17 @@ pub fn modinv(comptime T: type, _a: T, _m: T) T {
 pub fn uncompress(publicKey: [33]u8) !Point {
     const parity = std.mem.readIntBig(u8, publicKey[0..1]);
     const public_key_x = std.mem.readIntBig(u256, publicKey[1..]);
-    std.debug.print("parity {d}\n", .{parity});
-    std.debug.print("public_key_x {d}\n", .{public_key_x});
     const y_sq = @mod(powmod(public_key_x, 3, PRIME_MODULUS) + 7, NUMBER_OF_POINTS);
     var y = powmod(y_sq, (PRIME_MODULUS + 1) / 4, PRIME_MODULUS);
     if (@mod(y, 2) != @mod(parity, 2)) {
-        y = PRIME_MODULUS - y;
+        y = @intCast(PRIME_MODULUS - y);
     }
     return Point{ .x = public_key_x, .y = y };
 }
 
 pub const Point = struct {
-    x: i1024,
-    y: i1024,
+    x: u256,
+    y: u256,
 
     pub fn isEqual(self: *Point, other: Point) bool {
         return self.x == other.x and self.y == other.y;
@@ -84,10 +67,10 @@ pub const Point = struct {
 
     pub fn double(self: *Point) void {
         // slope = (3x^2 + a) / 2y
-        const slope = @mod(((3 * math.pow(i1024, self.x, 2)) * modinv(i1024, 2 * self.y, PRIME_MODULUS)), PRIME_MODULUS);
+        const slope = @mod(((3 * math.pow(i1024, self.x, 2)) * modinv(i1024, 2 * @as(u512, self.y), PRIME_MODULUS)), PRIME_MODULUS);
 
-        const x = @mod(math.pow(i1024, slope, 2) - (2 * self.x), PRIME_MODULUS);
-        const y = @mod(slope * (self.x - x) - self.y, PRIME_MODULUS);
+        const x: u256 = @intCast(@mod(math.pow(i1024, slope, 2) - (2 * @as(u512, self.x)), PRIME_MODULUS));
+        const y: u256 = @intCast(@mod(slope * (@as(i512, self.x) - x) - self.y, PRIME_MODULUS));
 
         self.x = x;
         self.y = y;
@@ -97,9 +80,9 @@ pub const Point = struct {
         if (self.isEqual(other)) {
             self.double();
         } else {
-            const slope = @mod(((self.y - other.y) * modinv(i1024, self.x - other.x, PRIME_MODULUS)), PRIME_MODULUS);
-            const x = @mod(math.pow(i1024, slope, 2) - self.x - other.x, PRIME_MODULUS);
-            const y = @mod((slope * (self.x - x)) - self.y, PRIME_MODULUS);
+            const slope = @mod(((@as(i512, self.y) - other.y) * modinv(i1024, @as(i512, self.x) - other.x, PRIME_MODULUS)), PRIME_MODULUS);
+            const x: u256 = @intCast(@mod(math.pow(i1024, slope, 2) - self.x - other.x, PRIME_MODULUS));
+            const y: u256 = @intCast(@mod((slope * (@as(i512, self.x) - x)) - self.y, PRIME_MODULUS));
 
             self.x = x;
             self.y = y;
@@ -125,8 +108,16 @@ pub const Point = struct {
         self.y = current.y;
     }
 
-    pub fn compress(self: *Point) [33]u8 {
-        _ = self;
+    pub fn compress(self: *Point) ![33]u8 {
+        var buffer: [66]u8 = undefined;
+        if (@mod(self.y, 2) == 0) {
+            _ = try std.fmt.bufPrint(&buffer, "02{x}", .{self.x});
+        } else {
+            _ = try std.fmt.bufPrint(&buffer, "03{x}", .{self.x});
+        }
+        const v = try std.fmt.parseInt(u264, &buffer, 16);
+        const compressed: [33]u8 = @bitCast(@byteSwap(v));
+        return compressed;
     }
 };
 
@@ -168,3 +159,13 @@ test "multiply" {
     try std.testing.expectEqual(p1.x, 83958751277781481219825361860495351419593385084310388531537482022592812456470);
     try std.testing.expectEqual(p1.y, 91813336768047772184641076719937475964665959333856505805054708940286741019295);
 }
+
+test "powmod" {
+    try std.testing.expectEqual(powmod(2, 3, 5), 3);
+    try std.testing.expectEqual(powmod(2, 3, 15), 8);
+    try std.testing.expectEqual(powmod(49001864144210927699347487322952736965656659160088668794646536877889645920220, 28948022309329048855892746252171976963317496166410141009864396001977208667916, 115792089237316195423570985008687907853269984665640564039457584007908834671663), 45693184488322129798941181810986065111841230370876872108753010948356676618535);
+}
+
+test "compress" {}
+
+test "uncompress" {}
