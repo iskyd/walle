@@ -37,84 +37,50 @@ pub fn main() !void {
     var seed: [64]u8 = undefined;
     try bip39.mnemonicToSeed(allocator, mnemonic, "", &seed);
 
-    var seed_hex_str: [128]u8 = undefined;
-    _ = try std.fmt.bufPrint(&seed_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&seed)});
-    std.debug.print("Seed {s}\n", .{seed_hex_str});
+    var seed_str: [128]u8 = undefined;
+    _ = try std.fmt.bufPrint(&seed_str, "{x}", .{std.fmt.fmtSliceHexLower(&seed)});
+    std.debug.print("Seed: {s}\n", .{seed_str});
 
-    var masterPrivateKey: [32]u8 = undefined;
-    var masterChainCode: [32]u8 = undefined;
-    bip32.generateMasterPrivateKey(seed, &masterPrivateKey, &masterChainCode);
+    const private: bip32.ExtendedPrivateKey = bip32.generateExtendedMasterPrivateKey(seed);
 
-    var master_private_key_hex_str: [64]u8 = undefined;
-    _ = try std.fmt.bufPrint(&master_private_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&masterPrivateKey)});
-    std.debug.print("Master private key {s}\n", .{master_private_key_hex_str});
-    var master_chain_code_key_hex_str: [64]u8 = undefined;
-    _ = try std.fmt.bufPrint(&master_chain_code_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&masterChainCode)});
-    std.debug.print("Master chain code {s}\n", .{master_chain_code_key_hex_str});
+    const str_private = try private.toStrPrivate();
+    std.debug.print("Master private key: {s}\n", .{str_private});
+    const str_chain = try private.toStrChainCode();
+    std.debug.print("Master chain code: {s}\n", .{str_chain});
 
-    const compressedPublicKey = try bip32.generateCompressedPublicKey(masterPrivateKey);
-    var compressed_public_key_hex_str: [66]u8 = undefined;
-    _ = try std.fmt.bufPrint(&compressed_public_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&compressedPublicKey)});
-    std.debug.print("Compressed public key {s}\n", .{compressed_public_key_hex_str});
+    const public: secp256k1.Point = bip32.generatePublicKey(private.privatekey);
+    const str_compressed = try public.toStrCompressed();
+    std.debug.print("Compressed public key: {s}\n", .{str_compressed});
+    const str_uncompressed = try public.toStrUncompressed();
+    std.debug.print("Uncompressed public key: {s}\n", .{str_uncompressed});
 
-    var address: [25]u8 = undefined;
-    try bip32.deriveAddressFromCompressedPublicKey(compressedPublicKey, &address);
-    var address_hex_str: [50]u8 = undefined;
-    _ = try std.fmt.bufPrint(&address_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&address)});
-    std.debug.print("Address: {s}\n", .{address_hex_str});
+    const address: [25]u8 = try bip32.deriveAddress(public);
+    var str_addr: [50]u8 = undefined;
+    _ = try std.fmt.bufPrint(&str_addr, "{x}", .{std.fmt.fmtSliceHexLower(&address)});
+    std.debug.print("Address: {s}\n", .{str_addr});
 
-    var bytes_address: [25]u8 = undefined;
-    _ = try std.fmt.hexToBytes(&bytes_address, &address_hex_str);
-    var base58_address: [34]u8 = undefined;
-    try utils.toBase58(&base58_address, &bytes_address);
-    std.debug.print("base58 address {s}\n", .{base58_address});
+    var bytes_addr: [25]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytes_addr, &str_addr);
+    var base58_addr: [34]u8 = undefined;
+    try utils.toBase58(&base58_addr, &bytes_addr);
+    std.debug.print("base58 address: {s}\n", .{base58_addr});
 
-    const uncompressedPublicKey = try bip32.generateUncompressedPublicKey(masterPrivateKey);
-    var uncompressed_public_key_hex_str: [130]u8 = undefined;
-    _ = try std.fmt.bufPrint(&uncompressed_public_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&uncompressedPublicKey)});
-    std.debug.print("Uncompressed public key: {s}\n", .{uncompressed_public_key_hex_str});
+    const child = try bip32.deriveChildFromExtendedPrivateKey(private, 0);
+    const str_child_private = try child.toStrPrivate();
+    std.debug.print("Child private key for index {d}: {s}\n", .{ 0, str_child_private });
+    const str_child_chain = try child.toStrChainCode();
+    std.debug.print("Child chain code for index {d}: {s}\n", .{ 0, str_child_chain });
 
-    var childPrivateKey: [32]u8 = undefined;
-    var childChainCode: [32]u8 = undefined;
-    try bip32.deriveChild(masterPrivateKey, compressedPublicKey, masterChainCode, 0, &childPrivateKey, &childChainCode);
-    const childPublicKey = try bip32.generateCompressedPublicKey(childPrivateKey);
+    const hardened_child = try bip32.deriveHardenedChild(private, 2147483648);
+    const str_hardened_child = try hardened_child.toStrPrivate();
+    std.debug.print("Hardened child private key for index {d}: {s}\n", .{ 2147483648, str_hardened_child });
+    const str_hardened_chain = try hardened_child.toStrChainCode();
+    std.debug.print("Hardened child chain code for index {d}: {s}\n", .{ 2147483648, str_hardened_chain });
 
-    var child_private_key_hex_str: [64]u8 = undefined;
-    var child_chain_code_key_hex_str: [64]u8 = undefined;
-    var child_public_key_hex_str: [66]u8 = undefined;
-    _ = try std.fmt.bufPrint(&child_private_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&childPrivateKey)});
-    _ = try std.fmt.bufPrint(&child_chain_code_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&childChainCode)});
-    _ = try std.fmt.bufPrint(&child_public_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&childPublicKey)});
-
-    std.debug.print("Child private key {s}\n", .{child_private_key_hex_str});
-    std.debug.print("Child chain code {s}\n", .{child_chain_code_key_hex_str});
-    std.debug.print("Child public key {s}\n", .{child_public_key_hex_str});
-
-    var hardenedChildPrivateKey: [32]u8 = undefined;
-    var hardenedChildChainCode: [32]u8 = undefined;
-    try bip32.deriveChildHardened(masterPrivateKey, masterChainCode, 2147483648, &hardenedChildPrivateKey, &hardenedChildChainCode);
-    const hardenedChildPublicKey = try bip32.generateCompressedPublicKey(hardenedChildPrivateKey);
-
-    var child_private_key_hardened_hex_str: [64]u8 = undefined;
-    var child_chain_code_hardened_key_hex_str: [64]u8 = undefined;
-    var child_public_key_hardened_hex_str: [66]u8 = undefined;
-    _ = try std.fmt.bufPrint(&child_private_key_hardened_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&hardenedChildPrivateKey)});
-    _ = try std.fmt.bufPrint(&child_chain_code_hardened_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&hardenedChildChainCode)});
-    _ = try std.fmt.bufPrint(&child_public_key_hardened_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&hardenedChildPublicKey)});
-
-    std.debug.print("Hardened Child private key {s}\n", .{child_private_key_hardened_hex_str});
-    std.debug.print("Hardened Child chain code {s}\n", .{child_chain_code_hardened_key_hex_str});
-    std.debug.print("Hardened Child public key {s}\n", .{child_public_key_hardened_hex_str});
-
-    var childPublicKey2: [33]u8 = undefined;
-    var childChainCode2: [32]u8 = undefined;
-    try bip32.deriveChildFromPublicKey(compressedPublicKey, masterChainCode, 0, &childPublicKey2, &childChainCode2);
-
-    var child_chain_code2_key_hex_str: [64]u8 = undefined;
-    var child_public_key2_hex_str: [66]u8 = undefined;
-    _ = try std.fmt.bufPrint(&child_chain_code2_key_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&childChainCode2)});
-    _ = try std.fmt.bufPrint(&child_public_key2_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&childPublicKey2)});
-
-    std.debug.print("Child chain code {s}\n", .{child_chain_code2_key_hex_str});
-    std.debug.print("Child public key {s}\n", .{child_public_key2_hex_str});
+    const epublic = bip32.ExtendedPublicKey{ .publickey = public, .chaincode = private.chaincode };
+    const child_public = try bip32.deriveChildFromExtendedPublicKey(epublic, 0);
+    const str_child_public = try child_public.toStrCompressedPublic();
+    std.debug.print("Child public key for index {d}: {s}\n", .{ 0, str_child_public });
+    const str_child_chain_public = try child_public.toStrChainCode();
+    std.debug.print("Child chain code for index {d}: {s}\n", .{ 0, str_child_chain_public });
 }

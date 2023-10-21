@@ -13,9 +13,9 @@ pub fn intToHexStr(comptime T: type, data: T, buffer: []u8) !void {
     _ = try std.fmt.bufPrint(buffer[missing..], "{x}", .{data});
 }
 
-pub fn toBase58(buffer: []u8, str: []u8) !void {
+pub fn toBase58(buffer: []u8, bytes: []u8) !void {
     const encoder = base58.Encoder.init(.{});
-    _ = try encoder.encode(str, buffer);
+    _ = try encoder.encode(bytes, buffer);
 }
 
 test "intToHexStr" {
