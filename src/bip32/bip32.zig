@@ -20,6 +20,15 @@ pub const ExtendedPrivateKey = struct {
         _ = try std.fmt.bufPrint(&str, "{x}", .{std.fmt.fmtSliceHexLower(&self.chaincode)});
         return str;
     }
+
+    pub fn format(self: ExtendedPrivateKey, actual_fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = actual_fmt;
+        _ = options;
+
+        const private = try self.toStrPrivate();
+        const chaincode = try self.toStrChainCode();
+        try writer.print("Private key: {s}\nChain Code: {s}\n", .{ private, chaincode });
+    }
 };
 
 pub const ExtendedPublicKey = struct {
@@ -31,7 +40,7 @@ pub const ExtendedPublicKey = struct {
         return str;
     }
 
-    pub fn toStrUncompressedPublic(self: ExtendedPublicKey) ![66]u8 {
+    pub fn toStrUncompressedPublic(self: ExtendedPublicKey) ![130]u8 {
         const str = self.publickey.toStrUncompressed();
         return str;
     }
@@ -40,6 +49,15 @@ pub const ExtendedPublicKey = struct {
         var str: [64]u8 = undefined;
         _ = try std.fmt.bufPrint(&str, "{x}", .{std.fmt.fmtSliceHexLower(&self.chaincode)});
         return str;
+    }
+
+    pub fn format(self: ExtendedPublicKey, actual_fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = actual_fmt;
+        _ = options;
+
+        const public_uncompressed = try self.toStrUncompressedPublic();
+        const chaincode = try self.toStrChainCode();
+        try writer.print("Public uncompressed key: {s}\nChain Code: {s}\n", .{ public_uncompressed, chaincode });
     }
 };
 

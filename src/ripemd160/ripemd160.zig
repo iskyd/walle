@@ -87,13 +87,13 @@ fn compress(hash: *[5]u32, words: [16]u32) void {
     std.mem.copy(u32, left[0..], hash[0..5]);
     std.mem.copy(u32, right[0..], hash[0..5]);
 
-    round(bfn1, -0, 0x00000000, permutations[0], shifts[0], &left, words);
+    round(bfn1, 0, 0x00000000, permutations[0], shifts[0], &left, words);
     round(bfn2, -1, 0x5a827999, permutations[1], shifts[1], &left, words);
     round(bfn3, -2, 0x6ed9eba1, permutations[2], shifts[2], &left, words);
     round(bfn4, -3, 0x8f1bbcdc, permutations[3], shifts[3], &left, words);
     round(bfn5, -4, 0xa953fd4e, permutations[4], shifts[4], &left, words);
 
-    round(bfn5, -0, 0x50a28be6, permutations[5], shifts[5], &right, words);
+    round(bfn5, 0, 0x50a28be6, permutations[5], shifts[5], &right, words);
     round(bfn4, -1, 0x5c4dd124, permutations[6], shifts[6], &right, words);
     round(bfn3, -2, 0x6d703ef3, permutations[7], shifts[7], &right, words);
     round(bfn2, -3, 0x7a6d76e9, permutations[8], shifts[8], &right, words);

@@ -132,6 +132,14 @@ pub const Point = struct {
         _ = try std.fmt.bufPrint(&str, "04{x}{x}", .{ self.x, self.y });
         return str;
     }
+
+    pub fn format(self: Point, actual_fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = actual_fmt;
+        _ = options;
+
+        const uncompressed = try self.toStrUncompressed();
+        try writer.print("Uncompressed: {s}", .{uncompressed});
+    }
 };
 
 test "modinv" {

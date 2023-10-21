@@ -42,17 +42,10 @@ pub fn main() !void {
     std.debug.print("Seed: {s}\n", .{seed_str});
 
     const private: bip32.ExtendedPrivateKey = bip32.generateExtendedMasterPrivateKey(seed);
-
-    const str_private = try private.toStrPrivate();
-    std.debug.print("Master private key: {s}\n", .{str_private});
-    const str_chain = try private.toStrChainCode();
-    std.debug.print("Master chain code: {s}\n", .{str_chain});
+    std.debug.print("{}", .{private});
 
     const public: secp256k1.Point = bip32.generatePublicKey(private.privatekey);
-    const str_compressed = try public.toStrCompressed();
-    std.debug.print("Compressed public key: {s}\n", .{str_compressed});
-    const str_uncompressed = try public.toStrUncompressed();
-    std.debug.print("Uncompressed public key: {s}\n", .{str_uncompressed});
+    std.debug.print("{}", .{public});
 
     const address: [25]u8 = try bip32.deriveAddress(public);
     var str_addr: [50]u8 = undefined;
@@ -66,21 +59,12 @@ pub fn main() !void {
     std.debug.print("base58 address: {s}\n", .{base58_addr});
 
     const child = try bip32.deriveChildFromExtendedPrivateKey(private, 0);
-    const str_child_private = try child.toStrPrivate();
-    std.debug.print("Child private key for index {d}: {s}\n", .{ 0, str_child_private });
-    const str_child_chain = try child.toStrChainCode();
-    std.debug.print("Child chain code for index {d}: {s}\n", .{ 0, str_child_chain });
+    std.debug.print("#### Child ####\n{s}", .{child});
 
     const hardened_child = try bip32.deriveHardenedChild(private, 2147483648);
-    const str_hardened_child = try hardened_child.toStrPrivate();
-    std.debug.print("Hardened child private key for index {d}: {s}\n", .{ 2147483648, str_hardened_child });
-    const str_hardened_chain = try hardened_child.toStrChainCode();
-    std.debug.print("Hardened child chain code for index {d}: {s}\n", .{ 2147483648, str_hardened_chain });
+    std.debug.print("#### Hardened Child ####\n{s}", .{hardened_child});
 
     const epublic = bip32.ExtendedPublicKey{ .publickey = public, .chaincode = private.chaincode };
     const child_public = try bip32.deriveChildFromExtendedPublicKey(epublic, 0);
-    const str_child_public = try child_public.toStrCompressedPublic();
-    std.debug.print("Child public key for index {d}: {s}\n", .{ 0, str_child_public });
-    const str_child_chain_public = try child_public.toStrChainCode();
-    std.debug.print("Child chain code for index {d}: {s}\n", .{ 0, str_child_chain_public });
+    std.debug.print("#### Child ####\n{s}", .{child_public});
 }
