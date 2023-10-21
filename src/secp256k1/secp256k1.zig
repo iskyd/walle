@@ -115,7 +115,7 @@ pub const Point = struct {
         } else {
             _ = try std.fmt.bufPrint(&buffer, "03{x}", .{self.x});
         }
-        const v = try std.fmt.parseInt(u264, &buffer, 16);
+        const v: u264 = try std.fmt.parseInt(u264, &buffer, 16);
         const compressed: [33]u8 = @bitCast(@byteSwap(v));
         return compressed;
     }
@@ -138,7 +138,7 @@ pub const Point = struct {
         _ = options;
 
         const uncompressed = try self.toStrUncompressed();
-        try writer.print("Uncompressed: {s}", .{uncompressed});
+        try writer.print("Uncompressed: {s}\n", .{uncompressed});
     }
 };
 

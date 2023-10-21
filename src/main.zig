@@ -45,12 +45,14 @@ pub fn main() !void {
     std.debug.print("{}", .{private});
 
     const public: secp256k1.Point = bip32.generatePublicKey(private.privatekey);
-    std.debug.print("{}", .{public});
+    std.debug.print("#### Public key ####\n{}", .{public});
+    const compressed = try public.toStrCompressed();
+    std.debug.print("Compressed {s}\n", .{compressed});
 
     const address: [25]u8 = try bip32.deriveAddress(public);
     var str_addr: [50]u8 = undefined;
     _ = try std.fmt.bufPrint(&str_addr, "{x}", .{std.fmt.fmtSliceHexLower(&address)});
-    std.debug.print("Address: {s}\n", .{str_addr});
+    std.debug.print("#### Address: #### \n{s}\n", .{str_addr});
 
     var bytes_addr: [25]u8 = undefined;
     _ = try std.fmt.hexToBytes(&bytes_addr, &str_addr);
@@ -66,5 +68,7 @@ pub fn main() !void {
 
     const epublic = bip32.ExtendedPublicKey{ .publickey = public, .chaincode = private.chaincode };
     const child_public = try bip32.deriveChildFromExtendedPublicKey(epublic, 0);
+    const compressed_child = try child_public.publickey.toStrCompressed();
     std.debug.print("#### Child ####\n{s}", .{child_public});
+    std.debug.print("Compressed {s}\n", .{compressed_child});
 }
