@@ -24,7 +24,7 @@ pub fn main() !void {
     // var entropy = [32]u8{ 0b00000110, 0b01101101, 0b11001010, 0b00011010, 0b00101011, 0b10110111, 0b11101000, 0b10100001, 0b11011011, 0b00101000, 0b00110010, 0b00010100, 0b10001100, 0b11101001, 0b10010011, 0b00111110, 0b11101010, 0b00001111, 0b00111010, 0b11001001, 0b01010100, 0b10001101, 0b01111001, 0b00110001, 0b00010010, 0b11011001, 0b10101001, 0b01011100, 0b10010100, 0b00000111, 0b11101111, 0b10101101 };
 
     var mnemonic: [24][]u8 = undefined;
-    try bip39.generateMnemonic(&mnemonic, &entropy, wordlist, allocator);
+    try bip39.generateMnemonic(allocator, &entropy, wordlist, &mnemonic);
     wordlist.deinit();
     defer for (mnemonic) |word| allocator.free(word);
 
@@ -35,7 +35,7 @@ pub fn main() !void {
     std.debug.print("\n", .{});
 
     var seed: [64]u8 = undefined;
-    try bip39.mnemonicToSeed(allocator, &seed, mnemonic, "");
+    try bip39.mnemonicToSeed(allocator, mnemonic, "", &seed);
 
     var seed_hex_str: [128]u8 = undefined;
     _ = try std.fmt.bufPrint(&seed_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&seed)});

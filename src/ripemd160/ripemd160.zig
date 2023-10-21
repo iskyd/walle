@@ -1,4 +1,5 @@
 // https://homes.esat.kuleuven.be/~bosselae/ripemd160.html
+// https://github.com/ziglang/zig/pull/10434
 
 const std = @import("std");
 

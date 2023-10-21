@@ -108,7 +108,7 @@ pub const Point = struct {
         self.y = current.y;
     }
 
-    pub fn compress(self: *Point) ![33]u8 {
+    pub fn compress(self: Point) ![33]u8 {
         var buffer: [66]u8 = undefined;
         if (@mod(self.y, 2) == 0) {
             _ = try std.fmt.bufPrint(&buffer, "02{x}", .{self.x});
@@ -118,6 +118,19 @@ pub const Point = struct {
         const v = try std.fmt.parseInt(u264, &buffer, 16);
         const compressed: [33]u8 = @bitCast(@byteSwap(v));
         return compressed;
+    }
+
+    pub fn toStringCompressed(self: Point) ![66]u8 {
+        const compressed: [33]u8 = try self.compress();
+        var str: [66]u8 = undefined;
+        _ = try std.fmt.bufPrint(&str, "{x}", .{std.fmt.fmtSliceHexLower(&compressed)});
+        return str;
+    }
+
+    pub fn toStringUncompressed(self: Point) ![130]u8 {
+        var str: [130]u8 = undefined;
+        _ = try std.fmt.bufPrint(&str, "04{x}{x}", .{ self.x, self.y });
+        return str;
     }
 };
 

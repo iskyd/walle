@@ -5,17 +5,17 @@ const base58 = @import("base58");
 pub fn intToHexStr(comptime T: type, data: T, buffer: []u8) !void {
     // Number of characters to represent data in hex
     // log16(data) + 1
-    const nCharacters: u32 = @intCast(math.log(T, 16, data) + 1);
-    const missingCharacters: u32 = @intCast(buffer.len - nCharacters);
-    for (0..missingCharacters) |i| {
+    const n: u32 = @intCast(math.log(T, 16, data) + 1);
+    const missing: u32 = @intCast(buffer.len - n);
+    for (0..missing) |i| {
         buffer[i] = '0';
     }
-    _ = try std.fmt.bufPrint(buffer[missingCharacters..], "{x}", .{data});
+    _ = try std.fmt.bufPrint(buffer[missing..], "{x}", .{data});
 }
 
 pub fn toBase58(buffer: []u8, str: []u8) !void {
-    const base58_encoder = base58.Encoder.init(.{});
-    _ = try base58_encoder.encode(str, buffer);
+    const encoder = base58.Encoder.init(.{});
+    _ = try encoder.encode(str, buffer);
 }
 
 test "intToHexStr" {
