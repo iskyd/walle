@@ -61,7 +61,7 @@ pub const Point = struct {
     x: u256,
     y: u256,
 
-    pub fn isEqual(self: *Point, other: Point) bool {
+    pub fn isEqual(self: Point, other: Point) bool {
         return self.x == other.x and self.y == other.y;
     }
 
@@ -120,14 +120,14 @@ pub const Point = struct {
         return compressed;
     }
 
-    pub fn toStringCompressed(self: Point) ![66]u8 {
+    pub fn toStrCompressed(self: Point) ![66]u8 {
         const compressed: [33]u8 = try self.compress();
         var str: [66]u8 = undefined;
         _ = try std.fmt.bufPrint(&str, "{x}", .{std.fmt.fmtSliceHexLower(&compressed)});
         return str;
     }
 
-    pub fn toStringUncompressed(self: Point) ![130]u8 {
+    pub fn toStrUncompressed(self: Point) ![130]u8 {
         var str: [130]u8 = undefined;
         _ = try std.fmt.bufPrint(&str, "04{x}{x}", .{ self.x, self.y });
         return str;
@@ -196,4 +196,20 @@ test "uncompress" {
     const p = try uncompress(compressed);
     try std.testing.expectEqual(p.x, 79027560793086286861659885563794118884743103107570705965389288630856279203871);
     try std.testing.expectEqual(p.y, 70098904748994065624629803197701842741428754294763691930704573059552158053128);
+}
+
+test "toStrCompressed" {
+    const x = 79027560793086286861659885563794118884743103107570705965389288630856279203871;
+    const y = 70098904748994065624629803197701842741428754294763691930704573059552158053128;
+    var p: Point = Point{ .x = x, .y = y };
+    const str = try p.toStrCompressed();
+    try std.testing.expectEqualSlices(u8, &str, "02aeb803a9ace6dcc5f11d06e8f30e24186c904f463be84f303d15bb7d48d1201f");
+}
+
+test "toStrUncompressed" {
+    const x = 79027560793086286861659885563794118884743103107570705965389288630856279203871;
+    const y = 70098904748994065624629803197701842741428754294763691930704573059552158053128;
+    var p: Point = Point{ .x = x, .y = y };
+    const str = try p.toStrUncompressed();
+    try std.testing.expectEqualSlices(u8, &str, "04aeb803a9ace6dcc5f11d06e8f30e24186c904f463be84f303d15bb7d48d1201f9afa92f683a2ed207bcba8f4c3354190cb5eb416802016c5c432b22a00c67308");
 }

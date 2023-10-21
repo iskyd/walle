@@ -27,12 +27,12 @@ pub const ExtendedPublicKey = struct {
     chaincode: [32]u8, // Chain Code
 
     pub fn toStrCompressedPublic(self: ExtendedPublicKey) ![66]u8 {
-        const str = try self.publickey.toStringCompressed();
+        const str = try self.publickey.toStrCompressed();
         return str;
     }
 
     pub fn toStrUncompressedPublic(self: ExtendedPublicKey) ![66]u8 {
-        const str = self.publickey.toStringUncompressed();
+        const str = self.publickey.toStrUncompressed();
         return str;
     }
 
@@ -62,7 +62,7 @@ pub fn generatePublicKey(pk: [32]u8) secp256k1.Point {
 }
 
 pub fn deriveAddress(public: secp256k1.Point) ![25]u8 {
-    const str: [66]u8 = try public.toStringCompressed();
+    const str: [66]u8 = try public.toStrCompressed();
     var bytes: [33]u8 = undefined;
     _ = try std.fmt.hexToBytes(&bytes, &str);
 
