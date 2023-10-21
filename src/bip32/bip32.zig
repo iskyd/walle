@@ -198,8 +198,32 @@ pub fn deriveHardenedChild(epk: ExtendedPrivateKey, index: u32) !ExtendedPrivate
     };
 }
 
-pub fn toWif(key: [32]u8) void {
-    _ = key;
+pub fn toWif(key: [32]u8) ![52]u8 {
+    var extended: [34]u8 = undefined;
+    var version: [1]u8 = [1]u8{0b10000000}; // Mainnet
+    var suffix: [1]u8 = [1]u8{0b00000001}; // Used to generate compressed public key
+    std.mem.copy(u8, extended[0..], version[0..]);
+    std.mem.copy(u8, extended[1..33], key[0..]);
+    std.mem.copy(u8, extended[33..], suffix[0..]);
+
+    var str: [68]u8 = undefined;
+    _ = try std.fmt.bufPrint(&str, "{x}", .{std.fmt.fmtSliceHexLower(&extended)});
+
+    var bytes: [34]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytes, &str);
+
+    var checksum: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(&bytes, &checksum, .{});
+    std.crypto.hash.sha2.Sha256.hash(&checksum, &checksum, .{});
+
+    var wif: [38]u8 = undefined;
+    std.mem.copy(u8, wif[0..34], bytes[0..]);
+    std.mem.copy(u8, wif[34..], checksum[0..4]);
+
+    var wif_base58: [52]u8 = undefined;
+    try utils.toBase58(&wif_base58, &wif);
+
+    return wif_base58;
 }
 
 test "generateExtendedMasterPrivateKey" {
@@ -271,4 +295,11 @@ test "deriveHardenedChild" {
     const str2: [64]u8 = try child.toStrChainCode();
     try std.testing.expectEqualSlices(u8, "7f03ba6e108da0292e289c308dc716d12334c949384f1dfe9fb5b17389b63297", &str);
     try std.testing.expectEqualSlices(u8, "cc7b21c95d472561a2092d48c65a0d1e68b772a0e89db188fbe8cbd49dc78bdf", &str2);
+}
+
+test "toWif" {
+    const seed = [64]u8{ 0b10111000, 0b01110011, 0b00100001, 0b00101111, 0b10001000, 0b01011100, 0b11001111, 0b11111011, 0b11110100, 0b01101001, 0b00101010, 0b11111100, 0b10111000, 0b01001011, 0b11000010, 0b11100101, 0b01011000, 0b10000110, 0b11011110, 0b00101101, 0b11111010, 0b00000111, 0b11011001, 0b00001111, 0b01011100, 0b00111100, 0b00100011, 0b10011010, 0b10111100, 0b00110001, 0b11000000, 0b10100110, 0b11001110, 0b00000100, 0b01111110, 0b00110000, 0b11111101, 0b10001011, 0b11110110, 0b10100010, 0b10000001, 0b11100111, 0b00010011, 0b10001001, 0b10101010, 0b10000010, 0b11010111, 0b00111101, 0b11110111, 0b01001100, 0b01111011, 0b10111111, 0b10110011, 0b10110000, 0b01101011, 0b01000110, 0b00111001, 0b10100101, 0b11001110, 0b11100111, 0b01110101, 0b11001100, 0b11001101, 0b00111100 };
+    const epk: ExtendedPrivateKey = generateExtendedMasterPrivateKey(seed);
+    const wif = try toWif(epk.privatekey);
+    try std.testing.expectEqualSlices(u8, "L3BxhCBNNLihRFeZVEa6846is2Qe5YHpvddiLb83aNyUDpGumiiq", &wif);
 }

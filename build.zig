@@ -27,7 +27,11 @@ pub fn build(b: *std.Build) void {
     const base58 = b.addModule("base58", .{
         .source_file = .{ .path = "lib/base58/src/lib.zig" },
     });
+    const clap = b.addModule("clap", .{
+        .source_file = .{ .path = "lib/clap/clap.zig" },
+    });
     exe.addModule("base58", base58);
+    exe.addModule("clap", clap);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default

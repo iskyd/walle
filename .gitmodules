@@ -1,3 +1,6 @@
 [submodule "lib/base58"]
 	path = lib/base58
 	url = https://github.com/ultd/base58-zig.git
+[submodule "lib/clap"]
+	path = lib/clap
+	url = https://github.com/Hejsil/zig-clap
