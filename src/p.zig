@@ -4,6 +4,7 @@ const bip39 = @import("bip39/bip39.zig");
 const bip32 = @import("bip32/bip32.zig");
 const secp256k1 = @import("secp256k1/secp256k1.zig");
 const utils = @import("utils.zig");
+const Network = @import("const.zig").Network;
 
 pub fn main() !void {
     std.debug.print("WALL-E. Bitcoin Wallet written in Zig\n", .{});
@@ -44,8 +45,10 @@ pub fn main() !void {
 
     const private: bip32.ExtendedPrivateKey = bip32.generateExtendedMasterPrivateKey(seed);
     std.debug.print("{}", .{private});
-    const wif = try bip32.toWif(private.privatekey);
+    const wpk = bip32.WifPrivateKey.fromPrivateKey(private.privatekey, Network.MAINNET, true);
+    const wif = try bip32.toWif(wpk);
     std.debug.print("WIF: {s}\n", .{wif});
+    _ = try bip32.fromWif(wif);
 
     const public: secp256k1.Point = bip32.generatePublicKey(private.privatekey);
     std.debug.print("#### Public key ####\n{}", .{public});

@@ -18,6 +18,19 @@ pub fn toBase58(buffer: []u8, bytes: []u8) !void {
     _ = try encoder.encode(bytes, buffer);
 }
 
+pub fn fromBase58(encoded: []u8, buffer: []u8) !void {
+    const decoder = base58.Decoder.init(.{});
+    _ = try decoder.decode(encoded, buffer);
+}
+
+pub fn verifyChecksum(bytes: []u8, checksum: [4]u8) !bool {
+    var buffer: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(bytes, &buffer, .{});
+    std.crypto.hash.sha2.Sha256.hash(&buffer, &buffer, .{});
+
+    return std.mem.eql(u8, buffer[0..4], checksum[0..4]);
+}
+
 test "intToHexStr" {
     var buffer: [8]u8 = undefined;
     try intToHexStr(u8, 150, &buffer);
