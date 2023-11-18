@@ -53,10 +53,10 @@ pub fn generateMnemonic(allocator: std.mem.Allocator, entropy: []u8, wordlist: W
     const words = wordlist.getWords();
 
     for (0..buffer.len) |i| {
-        const s = @as(u8, @intCast(i)) * @as(u9, @intCast(11));
+        // u_entropy is 264 bits
+        const s = 264 - ((@as(u8, @intCast(i)) + 1) * @as(u9, @intCast(11)));
         const bits = u_entropy >> s & mask;
-        // We're using right shift, so we need to reverse the order of the words
-        buffer[buffer.len - 1 - i] = try allocator.dupe(u8, words[@intCast(bits)]);
+        buffer[i] = try allocator.dupe(u8, words[@intCast(bits)]);
     }
 }
 
@@ -111,6 +111,19 @@ test "generateMnemonic" {
     i = 0;
     while (expected2.next()) |word| {
         try std.testing.expectEqualStrings(word, b2[i]);
+        i += 1;
+    }
+
+    // Test 3, 12 words mnemonic
+    var e3 = [16]u8{ 0b10001011, 0b10010100, 0b11110100, 0b10111001, 0b01110110, 0b11101111, 0b00111101, 0b10000101, 0b10001000, 0b00111101, 0b00001110, 0b10001111, 0b00001000, 0b01110000, 0b11010001, 0b11110011 };
+    var b3: [12][]u8 = undefined;
+    try generateMnemonic(allocator, &e3, wordlist, &b3);
+    defer for (b3) |word| allocator.free(word);
+    const str3 = "merit police comic universe video security can peace monitor drum crucial traffic";
+    var expected3 = std.mem.split(u8, str3, " ");
+    i = 0;
+    while (expected3.next()) |word| {
+        try std.testing.expectEqualStrings(word, b3[i]);
         i += 1;
     }
 }
