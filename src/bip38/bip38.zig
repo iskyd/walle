@@ -3,16 +3,20 @@ const bip32 = @import("../bip32/bip32.zig");
 const scrypt = std.crypto.pwhash.scrypt;
 const aes = std.crypto.core.aes;
 
+const EC_MULTIPLY_FLAG_NO_PREFIX = [2]u8{ 0b00000001, 0b01000010 };
+const FLAG_BYTE = [1]u8{0b11000000};
+
 pub fn encrypt(allocator: std.mem.Allocator, wpk: bip32.WifPrivateKey, passphrase: []const u8) !void {
     const public_key = bip32.generatePublicKey(wpk.key);
     const address = try bip32.deriveAddress(public_key);
     var addresshash: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(&address, &addresshash, .{});
     std.crypto.hash.sha2.Sha256.hash(&addresshash, &addresshash, .{});
+    const salt = addresshash[0..4];
     var derived: [64]u8 = undefined;
     // ln is log2(N) where N=16384 as specified here https://en.bitcoin.it/wiki/BIP_0038
     const params = scrypt.Params{ .ln = 14, .r = 8, .p = 8 };
-    try scrypt.kdf(allocator, &derived, passphrase, &addresshash, params);
+    try scrypt.kdf(allocator, &derived, passphrase, salt, params);
     const derivedhalf1 = derived[0..32];
     const derivedhalf2 = derived[32..64];
     std.debug.print("ADDRESS HASHED\n", .{});
@@ -51,8 +55,8 @@ pub fn encrypt(allocator: std.mem.Allocator, wpk: bip32.WifPrivateKey, passphras
     _ = try std.fmt.bufPrint(&strblock1, "{x}", .{ub1});
     _ = try std.fmt.bufPrint(&strblock2, "{x}", .{ub2});
 
-    std.debug.print("Block 1 {s}", .{strblock1});
-    std.debug.print("Block 2 {s}", .{strblock2});
+    std.debug.print("Block 1 {s}\n", .{strblock1});
+    std.debug.print("Block 2 {s}\n", .{strblock2});
 
     var block1: [16]u8 = undefined;
     var block2: [16]u8 = undefined;
@@ -63,4 +67,15 @@ pub fn encrypt(allocator: std.mem.Allocator, wpk: bip32.WifPrivateKey, passphras
 
     ctx.encrypt(&encryptedhalf1, &block1);
     ctx.encrypt(&encryptedhalf2, &block2);
+
+    var encryptedpk: [39]u8 = undefined;
+    std.mem.copy(u8, encryptedpk[0..2], EC_MULTIPLY_FLAG_NO_PREFIX[0..2]);
+    std.mem.copy(u8, encryptedpk[2..3], FLAG_BYTE[0..]);
+    std.mem.copy(u8, encryptedpk[3..7], salt);
+    std.mem.copy(u8, encryptedpk[7..23], encryptedhalf1[0..16]);
+    std.mem.copy(u8, encryptedpk[23..39], encryptedhalf2[0..16]);
+
+    var encryptedpkstr: [78]u8 = undefined;
+    _ = try std.fmt.bufPrint(&encryptedpkstr, "{x}", .{std.fmt.fmtSliceHexLower(&encryptedpk)});
+    std.debug.print("Encrypted private key: {s}\n", .{encryptedpkstr});
 }
