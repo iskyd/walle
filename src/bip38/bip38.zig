@@ -2,11 +2,12 @@ const std = @import("std");
 const bip32 = @import("../bip32/bip32.zig");
 const scrypt = std.crypto.pwhash.scrypt;
 const aes = std.crypto.core.aes;
+const utils = @import("../utils.zig");
 
 const EC_MULTIPLY_FLAG_NO_PREFIX = [2]u8{ 0b00000001, 0b01000010 };
 const FLAG_BYTE = [1]u8{0b11000000};
 
-pub fn encrypt(allocator: std.mem.Allocator, wpk: bip32.WifPrivateKey, passphrase: []const u8) !void {
+pub fn encrypt(allocator: std.mem.Allocator, wpk: bip32.WifPrivateKey, passphrase: []const u8) ![58]u8 {
     const public_key = bip32.generatePublicKey(wpk.key);
     const address = try bip32.deriveAddress(public_key);
     var addresshash: [32]u8 = undefined;
@@ -68,14 +69,19 @@ pub fn encrypt(allocator: std.mem.Allocator, wpk: bip32.WifPrivateKey, passphras
     ctx.encrypt(&encryptedhalf1, &block1);
     ctx.encrypt(&encryptedhalf2, &block2);
 
-    var encryptedpk: [39]u8 = undefined;
+    var encryptedpk: [43]u8 = undefined;
     std.mem.copy(u8, encryptedpk[0..2], EC_MULTIPLY_FLAG_NO_PREFIX[0..2]);
     std.mem.copy(u8, encryptedpk[2..3], FLAG_BYTE[0..]);
     std.mem.copy(u8, encryptedpk[3..7], salt);
     std.mem.copy(u8, encryptedpk[7..23], encryptedhalf1[0..16]);
     std.mem.copy(u8, encryptedpk[23..39], encryptedhalf2[0..16]);
 
-    var encryptedpkstr: [78]u8 = undefined;
-    _ = try std.fmt.bufPrint(&encryptedpkstr, "{x}", .{std.fmt.fmtSliceHexLower(&encryptedpk)});
-    std.debug.print("Encrypted private key: {s}\n", .{encryptedpkstr});
+    const checksum = utils.calculateChecksum(encryptedpk[0..39]);
+    std.mem.copy(u8, encryptedpk[39..43], checksum[0..4]);
+
+    var encoded: [58]u8 = undefined;
+    _ = try utils.toBase58(&encoded, &encryptedpk);
+
+    std.debug.print("Base58 res {s}\n", .{encoded});
+    return encoded;
 }

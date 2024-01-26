@@ -23,6 +23,13 @@ pub fn fromBase58(encoded: []u8, buffer: []u8) !void {
     _ = try decoder.decode(encoded, buffer);
 }
 
+pub fn calculateChecksum(bytes: []u8) [4]u8 {
+    var buffer: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(bytes, &buffer, .{});
+    std.crypto.hash.sha2.Sha256.hash(&buffer, &buffer, .{});
+    return buffer[0..4].*;
+}
+
 pub fn verifyChecksum(bytes: []u8, checksum: [4]u8) !bool {
     var buffer: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(bytes, &buffer, .{});
