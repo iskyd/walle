@@ -6,6 +6,7 @@ Wall•E is a Bitcoin Wallet written in Zig.
 
 #### Run
 ```
+zig build run-p
 zig run --mod base58::lib/base58/src/lib.zig src/p.zig --deps base58
 ```
 
