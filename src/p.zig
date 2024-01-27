@@ -55,6 +55,8 @@ pub fn main() !void {
     std.debug.print("WIF: {s}\n", .{wif});
     const bip38key = try bip38.encrypt(allocator, private.privatekey, "password");
     std.debug.print("BIP 38 KEY: {s}\n", .{bip38key});
+
+    try bip38.decrypt(allocator, bip38key, "password");
     // _ = try bip32.fromWif(wif);
 
     // const public: secp256k1.Point = bip32.generatePublicKey(private.privatekey);

@@ -8,9 +8,14 @@ const Network = @import("../const.zig").Network;
 const EC_MULTIPLY_FLAG_NO_PREFIX = [2]u8{ 0b00000001, 0b01000010 };
 const FLAG_BYTE = [1]u8{0b11000000};
 
+pub const DecryptError = error{
+    InvalidChecksumError,
+    InvalidPassphraseError,
+};
+
 pub fn encrypt(allocator: std.mem.Allocator, privatekey: [32]u8, passphrase: []const u8) ![58]u8 {
-    const public_key = bip32.generatePublicKey(privatekey);
-    const address = try bip32.deriveAddress(public_key);
+    const publickey = bip32.generatePublicKey(privatekey);
+    const address = try bip32.deriveAddress(publickey);
     var addresshash: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(&address, &addresshash, .{});
     std.crypto.hash.sha2.Sha256.hash(&addresshash, &addresshash, .{});
@@ -70,6 +75,64 @@ pub fn encrypt(allocator: std.mem.Allocator, privatekey: [32]u8, passphrase: []c
     _ = try utils.toBase58(&encoded, &encryptedpk);
 
     return encoded;
+}
+
+pub fn decrypt(allocator: std.mem.Allocator, encoded: [58]u8, passphrase: []const u8) !void {
+    var encrypted: [43]u8 = undefined;
+    try utils.fromBase58(&encoded, &encrypted);
+    const checksum = encrypted[39..43];
+    const isvalid = try utils.verifyChecksum(encrypted[0..39], checksum[0..4].*);
+    if (isvalid == false) {
+        return DecryptError.InvalidChecksumError;
+    }
+
+    const prefix = encrypted[0..2];
+    _ = prefix;
+    const flag = encrypted[2..3];
+    _ = flag;
+    const addresshash = encrypted[3..7];
+
+    var derived: [64]u8 = undefined;
+    // ln is log2(N) where N=16384 as specified here https://en.bitcoin.it/wiki/BIP_0038
+    const params = scrypt.Params{ .ln = 14, .r = 8, .p = 8 };
+    _ = try scrypt.kdf(allocator, &derived, passphrase, addresshash, params);
+    const derivedhalf1 = derived[0..32];
+    const derivedhalf2 = derived[32..64];
+    const encryptedhalf1 = encrypted[7..23];
+    const encryptedhalf2 = encrypted[23..39];
+    var ctx = aes.Aes256.initDec(derivedhalf2.*);
+    var block1: [16]u8 = undefined;
+    var block2: [16]u8 = undefined;
+    ctx.decrypt(&block1, encryptedhalf1);
+    ctx.decrypt(&block2, encryptedhalf2);
+
+    var strblock1: [32]u8 = undefined;
+    var strblock2: [32]u8 = undefined;
+    var strderivedhalf1: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&strblock1, "{x}", .{std.fmt.fmtSliceHexLower(&block1)});
+    _ = try std.fmt.bufPrint(&strblock2, "{x}", .{std.fmt.fmtSliceHexLower(&block2)});
+    _ = try std.fmt.bufPrint(&strderivedhalf1, "{x}", .{std.fmt.fmtSliceHexLower(derivedhalf1)});
+
+    std.debug.print("Block 1 {s}\n", .{strblock1});
+    std.debug.print("Block 2 {s}\n", .{strblock2});
+    std.debug.print("Derived half 1 {s}\n", .{strderivedhalf1});
+    const ub1: u128 = try std.fmt.parseInt(u128, &strblock1, 16);
+    const ub2: u128 = try std.fmt.parseInt(u128, &strblock2, 16);
+    const udh1: u256 = try std.fmt.parseInt(u256, &strderivedhalf1, 16);
+    const upk = (ub1 + ub2) ^ udh1;
+    var pkstr: [64]u8 = undefined;
+    try utils.intToHexStr(u256, upk, &pkstr);
+    std.debug.print("Private key {s}", .{pkstr});
+    var pk: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&pk, &pkstr);
+    const publickey = bip32.generatePublicKey(pk);
+    const address = try bip32.deriveAddress(publickey);
+    var checkaddresshash: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(&address, &checkaddresshash, .{});
+    std.crypto.hash.sha2.Sha256.hash(&checkaddresshash, &checkaddresshash, .{});
+    if (std.mem.eql(u8, addresshash, checkaddresshash[0..4]) == false) {
+        return error.InvalidPassphraseError;
+    }
 }
 
 test "base58_encrypt" {

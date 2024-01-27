@@ -251,10 +251,8 @@ pub fn toWif(wpk: WifPrivateKey) ![52]u8 {
 }
 
 pub fn fromWif(wif: [52]u8) !WifPrivateKey {
-    var tmp: [52]u8 = undefined;
-    std.mem.copy(u8, &tmp, &wif);
     var decoded: [38]u8 = undefined;
-    try utils.fromBase58(tmp[0..], &decoded);
+    try utils.fromBase58(&wif, &decoded);
 
     const net: [1]u8 = [1]u8{decoded[0]};
     const key: [32]u8 = decoded[1..33].*;
