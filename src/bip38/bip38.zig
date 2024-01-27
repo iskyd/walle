@@ -21,7 +21,6 @@ pub fn encrypt(allocator: std.mem.Allocator, wpk: bip32.WifPrivateKey, passphras
     try scrypt.kdf(allocator, &derived, passphrase, salt, params);
     const derivedhalf1 = derived[0..32];
     const derivedhalf2 = derived[32..64];
-    std.debug.print("ADDRESS HASHED\n", .{});
 
     var hexstrkey1: [32]u8 = undefined;
     var hexstrkey2: [32]u8 = undefined;
@@ -32,20 +31,10 @@ pub fn encrypt(allocator: std.mem.Allocator, wpk: bip32.WifPrivateKey, passphras
     _ = try std.fmt.bufPrint(&hexdh1, "{x}", .{std.fmt.fmtSliceHexLower(derivedhalf1[0..16])});
     _ = try std.fmt.bufPrint(&hexdh2, "{x}", .{std.fmt.fmtSliceHexLower(derivedhalf1[16..32])});
 
-    std.debug.print("Wpk key : {s}\n", .{hexstrkey1});
-    std.debug.print("Wpk key : {s}\n", .{hexstrkey2});
-    std.debug.print("Derived half 1 : {s}\n", .{hexdh1});
-    std.debug.print("Derived half 2 : {s}\n", .{hexdh2});
-
     const ukey1: u128 = try std.fmt.parseInt(u128, &hexstrkey1, 16);
     const ukey2: u128 = try std.fmt.parseInt(u128, &hexstrkey2, 16);
     const udh1: u128 = try std.fmt.parseInt(u128, &hexdh1, 16);
     const udh2: u128 = try std.fmt.parseInt(u128, &hexdh2, 16);
-
-    std.debug.print("Key int {d}\n", .{ukey1});
-    std.debug.print("Key2 int {d}\n", .{ukey2});
-    std.debug.print("Udh1 int {d}\n", .{udh1});
-    std.debug.print("Udh2 int {d}\n", .{udh2});
 
     var ctx = aes.Aes256.initEnc(derivedhalf2.*);
 
@@ -56,9 +45,6 @@ pub fn encrypt(allocator: std.mem.Allocator, wpk: bip32.WifPrivateKey, passphras
     var strblock2: [32]u8 = undefined;
     try utils.intToHexStr(u128, ub1, &strblock1);
     try utils.intToHexStr(u128, ub2, &strblock2);
-
-    std.debug.print("Block 1 {s}\n", .{strblock1});
-    std.debug.print("Block 2 {s}\n", .{strblock2});
 
     var block1: [16]u8 = undefined;
     var block2: [16]u8 = undefined;
@@ -83,7 +69,6 @@ pub fn encrypt(allocator: std.mem.Allocator, wpk: bip32.WifPrivateKey, passphras
     var encoded: [58]u8 = undefined;
     _ = try utils.toBase58(&encoded, &encryptedpk);
 
-    std.debug.print("Base58 res {s}\n", .{encoded});
     return encoded;
 }
 
