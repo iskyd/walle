@@ -98,6 +98,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = .{ .path = test_file },
             .target = target,
             .optimize = optimize,
+            .main_mod_path = .{ .path = "." },
         });
         unit_tests.addModule("base58", base58);
         const run_unit_tests = b.addRunArtifact(unit_tests);
