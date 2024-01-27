@@ -61,20 +61,22 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    // Creates a step for unit testing. This only builds the test executable
-    // but does not run it.
-    const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "unit_test.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
-    unit_tests.addModule("base58", base58);
-
-    const run_unit_tests = b.addRunArtifact(unit_tests);
-
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_unit_tests.step);
+
+    const tests: []const []const u8 = if (b.args) |args| args else &.{"unit_test.zig"};
+    // Creates a step for unit testing. This only builds the test executable
+    // but does not run it.
+    for (tests) |test_file| {
+        const unit_tests = b.addTest(.{
+            .root_source_file = .{ .path = test_file },
+            .target = target,
+            .optimize = optimize,
+        });
+        unit_tests.addModule("base58", base58);
+        const run_unit_tests = b.addRunArtifact(unit_tests);
+        test_step.dependOn(&run_unit_tests.step);
+    }
 }

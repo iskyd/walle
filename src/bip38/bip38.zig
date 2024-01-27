@@ -85,3 +85,7 @@ pub fn encrypt(allocator: std.mem.Allocator, wpk: bip32.WifPrivateKey, passphras
     std.debug.print("Base58 res {s}\n", .{encoded});
     return encoded;
 }
+
+test "base58" {
+    try std.testing.expectEqual(3, 3);
+}
