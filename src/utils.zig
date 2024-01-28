@@ -38,7 +38,7 @@ pub fn verifyChecksum(bytes: []const u8, checksum: [4]u8) !bool {
     return std.mem.eql(u8, buffer[0..4], checksum[0..4]);
 }
 
-pub fn printBytes(comptime len: u32, bytes: []const u8) void {
+pub fn debugPrintBytes(comptime len: u32, bytes: []const u8) void {
     var buf: [len]u8 = undefined;
     _ = std.fmt.bufPrint(&buf, "{x}", .{std.fmt.fmtSliceHexLower(bytes)}) catch unreachable;
     std.debug.print("DEBUG PRINT BYTES: {s}\n", .{buf});
