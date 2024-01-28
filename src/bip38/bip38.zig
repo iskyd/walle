@@ -1,6 +1,6 @@
-// There is something terrible wrong in encrypt test since the result change every new compilation
-// This doesn't happen when bip38 encrypt is called from p.zig
-// Also the result differs from others bip38 implementation (seems scrypt return a different result)
+// The result differs from others bip38 implementation (seems scrypt return a different result)
+// The main problem is that passphrase is not passed as bytes (is this the only problem?)
+// std.mem.asBytes doesn't seem to work as I expect, WIP
 
 const std = @import("std");
 const bip32 = @import("../bip32/bip32.zig");
@@ -28,8 +28,8 @@ pub fn encrypt(allocator: std.mem.Allocator, privatekey: [32]u8, passphrase: []c
     // ln is log2(N) where N=16384 as specified here https://en.bitcoin.it/wiki/BIP_0038
     const params = scrypt.Params{ .ln = 14, .r = 8, .p = 8 };
 
-    const passbytes = std.mem.asBytes(&passphrase);
-    try scrypt.kdf(allocator, &derived, passbytes, salt, params);
+    // const passbytes = std.mem.asBytes(&passphrase);
+    try scrypt.kdf(allocator, &derived, passphrase, salt, params);
 
     const derivedhalf1 = derived[0..32];
     const derivedhalf2 = derived[32..64];
@@ -100,11 +100,10 @@ pub fn decrypt(allocator: std.mem.Allocator, encoded: [58]u8, passphrase: []cons
     const addresshash = encrypted[3..7];
 
     var derived: [64]u8 = undefined;
-    const passbytes = std.mem.asBytes(&passphrase);
+    // const passbytes = std.mem.asBytes(&passphrase);
     // ln is log2(N) where N=16384 as specified here https://en.bitcoin.it/wiki/BIP_0038
     const params = scrypt.Params{ .ln = 14, .r = 8, .p = 8 };
-    _ = try scrypt.kdf(allocator, &derived, passbytes, addresshash, params);
-
+    _ = try scrypt.kdf(allocator, &derived, passphrase, addresshash, params);
     const derivedhalf1 = derived[0..32];
     const derivedhalf2 = derived[32..64];
     const encryptedhalf1 = encrypted[7..23];
@@ -161,13 +160,17 @@ test "base58_encrypt" {
     try std.testing.expectEqualStrings(&hexpk, "b21fcb414b4414e9bcf7ae647a79a4d29280f6b71cba204cb4dd3d6c6568d0fc");
 
     const encrypted = try encrypt(allocator, epk.privatekey, "password");
-    _ = encrypted;
-    // try std.testing.expectEqualStrings(&encrypted, "6PRPV4a5qUyMgxg82FMPtxdq3m2jba2nuavAacUz6P1jrJt55bXHxpym46");
+    try std.testing.expectEqualStrings(&encrypted, "6PRPV4a5qWAiCxmxFDZQ1bmMwMzUrT7tfkNm9eZsszoj7VWkHu5aQE3jgA");
 }
 
 test "decrypt" {
     const allocator = std.testing.allocator;
-    _ = allocator;
+    const encrypted = "6PRPV4a5qWAiCxmxFDZQ1bmMwMzUrT7tfkNm9eZsszoj7VWkHu5aQE3jgA".*;
+    const decryptedpk = try decrypt(allocator, encrypted, "password");
+    var decryptedhexpk: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&decryptedhexpk, "{x}", .{std.fmt.fmtSliceHexLower(&decryptedpk)});
+
+    try std.testing.expectEqualStrings("b21fcb414b4414e9bcf7ae647a79a4d29280f6b71cba204cb4dd3d6c6568d0fc", &decryptedhexpk);
 }
 
 test "encrypt_decrypt" {
