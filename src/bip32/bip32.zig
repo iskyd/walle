@@ -119,9 +119,7 @@ pub fn deriveAddress(public: secp256k1.Point) ![25]u8 {
     var bytes_hashed: [21]u8 = undefined;
     _ = try std.fmt.hexToBytes(&bytes_hashed, &rstr);
 
-    var checksum: [32]u8 = undefined;
-    std.crypto.hash.sha2.Sha256.hash(&bytes_hashed, &checksum, .{});
-    std.crypto.hash.sha2.Sha256.hash(&checksum, &checksum, .{});
+    var checksum: [32]u8 = utils.doubleSha256(&bytes_hashed);
 
     var address: [25]u8 = undefined;
     std.mem.copy(u8, address[0..21], bytes_hashed[0..21]);
@@ -236,9 +234,7 @@ pub fn toWif(wpk: WifPrivateKey) ![52]u8 {
     var bytes: [34]u8 = undefined;
     _ = try std.fmt.hexToBytes(&bytes, &str);
 
-    var checksum: [32]u8 = undefined;
-    std.crypto.hash.sha2.Sha256.hash(&bytes, &checksum, .{});
-    std.crypto.hash.sha2.Sha256.hash(&checksum, &checksum, .{});
+    var checksum: [32]u8 = utils.doubleSha256(&bytes);
 
     var wif: [38]u8 = undefined;
     std.mem.copy(u8, wif[0..34], bytes[0..]);
@@ -265,10 +261,7 @@ pub fn fromWif(wif: [52]u8) !WifPrivateKey {
     var bytes: [34]u8 = undefined;
     _ = try std.fmt.hexToBytes(&bytes, &str);
 
-    const ok = utils.verifyChecksum(&bytes, checksum) catch |err| {
-        std.debug.print("Error: {}\n", .{err});
-        return error.InvalidChecksum;
-    };
+    const ok = utils.verifyChecksum(&bytes, checksum);
     if (ok == false) {
         std.debug.print("Error: Invalid checksum\n", .{});
         return error.InvalidChecksum;

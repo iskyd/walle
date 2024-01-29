@@ -20,9 +20,7 @@ pub const DecryptError = error{
 pub fn encrypt(allocator: std.mem.Allocator, privatekey: [32]u8, passphrase: []const u8) ![58]u8 {
     const publickey = bip32.generatePublicKey(privatekey);
     const address = try bip32.deriveAddress(publickey);
-    var addresshash: [32]u8 = undefined;
-    std.crypto.hash.sha2.Sha256.hash(&address, &addresshash, .{});
-    std.crypto.hash.sha2.Sha256.hash(&addresshash, &addresshash, .{});
+    var addresshash: [32]u8 = utils.doubleSha256(&address);
     const salt = addresshash[0..4];
     var derived: [64]u8 = undefined;
     // ln is log2(N) where N=16384 as specified here https://en.bitcoin.it/wiki/BIP_0038
@@ -88,7 +86,7 @@ pub fn decrypt(allocator: std.mem.Allocator, encoded: [58]u8, passphrase: []cons
     var encrypted: [43]u8 = undefined;
     try utils.fromBase58(&encoded, &encrypted);
     const checksum = encrypted[39..43];
-    const isvalid = try utils.verifyChecksum(encrypted[0..39], checksum[0..4].*);
+    const isvalid = utils.verifyChecksum(encrypted[0..39], checksum[0..4].*);
     if (isvalid == false) {
         return DecryptError.InvalidChecksumError;
     }
@@ -141,9 +139,7 @@ pub fn decrypt(allocator: std.mem.Allocator, encoded: [58]u8, passphrase: []cons
     _ = try std.fmt.hexToBytes(&pk, &pkstr);
     const publickey = bip32.generatePublicKey(pk);
     const address = try bip32.deriveAddress(publickey);
-    var checkaddresshash: [32]u8 = undefined;
-    std.crypto.hash.sha2.Sha256.hash(&address, &checkaddresshash, .{});
-    std.crypto.hash.sha2.Sha256.hash(&checkaddresshash, &checkaddresshash, .{});
+    var checkaddresshash: [32]u8 = utils.doubleSha256(&address);
     if (std.mem.eql(u8, addresshash, checkaddresshash[0..4]) == false) {
         return error.InvalidPassphraseError;
     }

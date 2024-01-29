@@ -30,7 +30,7 @@ pub fn calculateChecksum(bytes: []u8) [4]u8 {
     return buffer[0..4].*;
 }
 
-pub fn verifyChecksum(bytes: []const u8, checksum: [4]u8) !bool {
+pub fn verifyChecksum(bytes: []const u8, checksum: [4]u8) bool {
     var buffer: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(bytes, &buffer, .{});
     std.crypto.hash.sha2.Sha256.hash(&buffer, &buffer, .{});
@@ -42,6 +42,13 @@ pub fn debugPrintBytes(comptime len: u32, bytes: []const u8) void {
     var buf: [len]u8 = undefined;
     _ = std.fmt.bufPrint(&buf, "{x}", .{std.fmt.fmtSliceHexLower(bytes)}) catch unreachable;
     std.debug.print("DEBUG PRINT BYTES: {s}\n", .{buf});
+}
+
+pub fn doubleSha256(bytes: []const u8) [32]u8 {
+    var buffer: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(bytes, &buffer, .{});
+    std.crypto.hash.sha2.Sha256.hash(&buffer, &buffer, .{});
+    return buffer;
 }
 
 test "intToHexStr" {
