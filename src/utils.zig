@@ -1,6 +1,7 @@
 const std = @import("std");
 const math = std.math;
 const base58 = @import("base58");
+const unicode = std.unicode;
 
 pub fn intToHexStr(comptime T: type, data: T, buffer: []u8) !void {
     // Number of characters to represent data in hex
@@ -49,6 +50,19 @@ pub fn doubleSha256(bytes: []const u8) [32]u8 {
     std.crypto.hash.sha2.Sha256.hash(bytes, &buffer, .{});
     std.crypto.hash.sha2.Sha256.hash(&buffer, &buffer, .{});
     return buffer;
+}
+
+pub fn encodeutf8(in: []const u8, buffer: []u8) !u16 {
+    const v = try unicode.Utf8View.init(in);
+    var it = v.iterator();
+    var cur: u16 = 0;
+    while (it.nextCodepoint()) |codepoint| {
+        var b: [4]u8 = undefined;
+        const len: u16 = @as(u16, try unicode.utf8Encode(codepoint, &b));
+        std.mem.copy(u8, buffer[cur .. cur + len], b[0..len]);
+        cur += len;
+    }
+    return cur;
 }
 
 test "intToHexStr" {

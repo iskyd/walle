@@ -1,6 +1,4 @@
 // The result differs from others bip38 implementation (seems scrypt return a different result)
-// The main problem is that passphrase is not passed as bytes (is this the only problem?)
-// std.mem.asBytes doesn't seem to work as I expect, WIP
 
 const std = @import("std");
 const bip32 = @import("../bip32/bip32.zig");
@@ -25,9 +23,9 @@ pub fn encrypt(allocator: std.mem.Allocator, privatekey: [32]u8, passphrase: []c
     var derived: [64]u8 = undefined;
     // ln is log2(N) where N=16384 as specified here https://en.bitcoin.it/wiki/BIP_0038
     const params = scrypt.Params{ .ln = 14, .r = 8, .p = 8 };
-
-    // const passbytes = std.mem.asBytes(&passphrase);
-    try scrypt.kdf(allocator, &derived, passphrase, salt, params);
+    var passbytes: [128]u8 = undefined;
+    const pbl = try utils.encodeutf8(passphrase, &passbytes);
+    try scrypt.kdf(allocator, &derived, passbytes[0..pbl], salt, params);
 
     const derivedhalf1 = derived[0..32];
     const derivedhalf2 = derived[32..64];
@@ -101,7 +99,9 @@ pub fn decrypt(allocator: std.mem.Allocator, encoded: [58]u8, passphrase: []cons
     // const passbytes = std.mem.asBytes(&passphrase);
     // ln is log2(N) where N=16384 as specified here https://en.bitcoin.it/wiki/BIP_0038
     const params = scrypt.Params{ .ln = 14, .r = 8, .p = 8 };
-    _ = try scrypt.kdf(allocator, &derived, passphrase, addresshash, params);
+    var passbytes: [128]u8 = undefined;
+    const pbl = try utils.encodeutf8(passphrase, &passbytes);
+    _ = try scrypt.kdf(allocator, &derived, passbytes[0..pbl], addresshash, params);
     const derivedhalf1 = derived[0..32];
     const derivedhalf2 = derived[32..64];
     const encryptedhalf1 = encrypted[7..23];
