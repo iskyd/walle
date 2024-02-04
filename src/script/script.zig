@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub const opcode = enum(u8) {
     // constants
     OP_FALSE = 0x00,
@@ -98,3 +100,26 @@ pub const opcode = enum(u8) {
     OP_RESERVED1 = 0x89,
     OP_RESERVED2 = 0x8a,
 };
+
+const StackType = union { op: opcode, v: []u8 };
+
+const Script = struct {
+    stack: std.ArrayList(StackType),
+
+    pub fn init(self: *Script, allocator: std.mem.Allocator) void {
+        self.stack = std.ArrayList(StackType).init(allocator);
+    }
+};
+
+pub fn p2pk(pubkey: [33]u8) void {
+    _ = pubkey;
+}
+
+pub fn p2ms(m: u8, n: u8, pubkeys: [][33]u8) void {
+    _ = pubkeys;
+    _ = n;
+    _ = m;
+}
+
+// to implement p2pkh, p2sh
+test "test" {}
