@@ -101,18 +101,30 @@ pub const opcode = enum(u8) {
     OP_RESERVED2 = 0x8a,
 };
 
-const StackType = union { op: opcode, v: []u8 };
+const ScriptOp = union { op: opcode, v: []const u8 };
 
 const Script = struct {
-    stack: std.ArrayList(StackType),
+    allocator: std.mem.Allocator,
+    stack: std.ArrayList(ScriptOp),
 
-    pub fn init(self: *Script, allocator: std.mem.Allocator) void {
-        self.stack = std.ArrayList(StackType).init(allocator);
+    pub fn init(allocator: std.mem.Allocator) Script {
+        return .{ .allocator = allocator, .stack = std.ArrayList(ScriptOp).init(allocator) };
+    }
+
+    pub fn deinit(self: Script) void {
+        self.stack.deinit();
+    }
+
+    pub fn push(self: *Script, op: ScriptOp) !void {
+        try self.stack.append(op);
     }
 };
 
-pub fn p2pk(pubkey: [33]u8) void {
-    _ = pubkey;
+pub fn p2pk(allocator: std.mem.Allocator, pubkey: [33]u8) !Script {
+    var script = Script.init(allocator);
+    try script.push(ScriptOp{ .op = opcode.OP_CHECKSIG });
+    try script.push(ScriptOp{ .v = &pubkey });
+    return script;
 }
 
 pub fn p2ms(m: u8, n: u8, pubkeys: [][33]u8) void {
@@ -122,4 +134,14 @@ pub fn p2ms(m: u8, n: u8, pubkeys: [][33]u8) void {
 }
 
 // to implement p2pkh, p2sh
-test "test" {}
+test "test p2pk" {
+    var pubkey: [33]u8 = undefined;
+    const strpubkey: [66]u8 = "03525cbe17e87969013e6457c765594580dc803a8497052d7c1efb0ef401f68bd5".*;
+    _ = try std.fmt.hexToBytes(&pubkey, &strpubkey);
+    const allocator = std.testing.allocator;
+    const script = try p2pk(allocator, pubkey);
+    defer script.deinit();
+
+    try std.testing.expectEqual(opcode.OP_CHECKSIG, script.stack.items[0].op);
+    try std.testing.expectEqualSlices(u8, &pubkey, script.stack.items[1].v);
+}
