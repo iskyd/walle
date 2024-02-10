@@ -101,7 +101,7 @@ pub const opcode = enum(u8) {
     OP_RESERVED2 = 0x8a,
 };
 
-const ScriptOp = union { op: opcode, v: []const u8 };
+const ScriptOp = union(enum) { op: opcode, v: []const u8, pushbytes: u16 };
 
 const Script = struct {
     allocator: std.mem.Allocator,
@@ -118,12 +118,39 @@ const Script = struct {
     pub fn push(self: *Script, op: ScriptOp) !void {
         try self.stack.append(op);
     }
+
+    pub fn toHex(self: Script, buffer: []u8) !void {
+        var cur: usize = 0;
+        for (0..self.stack.items.len) |i| {
+            const scriptop = self.stack.items[self.stack.items.len - i - 1];
+            switch (scriptop) {
+                ScriptOp.op => |op| {
+                    const opv = @intFromEnum(op);
+                    var opbuf: [2]u8 = undefined;
+                    _ = try std.fmt.bufPrint(&opbuf, "{x}", .{opv});
+                    std.mem.copy(u8, buffer[cur .. cur + 2], opbuf[0..2]);
+                    cur += 2;
+                },
+                ScriptOp.v => |v| {
+                    std.mem.copy(u8, buffer[cur .. cur + v.len], self.stack.items[1].v);
+                    cur += v.len;
+                },
+                ScriptOp.pushbytes => |pb| {
+                    var pbbuf: [2]u8 = undefined;
+                    _ = try std.fmt.bufPrint(&pbbuf, "{x}", .{pb});
+                    std.mem.copy(u8, buffer[cur .. cur + 2], pbbuf[0..2]);
+                    cur += 2;
+                },
+            }
+        }
+    }
 };
 
-pub fn p2pk(allocator: std.mem.Allocator, pubkey: [33]u8) !Script {
+pub fn p2pk(allocator: std.mem.Allocator, pubkey: []const u8) !Script {
     var script = Script.init(allocator);
     try script.push(ScriptOp{ .op = opcode.OP_CHECKSIG });
-    try script.push(ScriptOp{ .v = &pubkey });
+    try script.push(ScriptOp{ .v = pubkey });
+    try script.push(ScriptOp{ .pushbytes = 65 });
     return script;
 }
 
@@ -135,13 +162,26 @@ pub fn p2ms(m: u8, n: u8, pubkeys: [][33]u8) void {
 
 // to implement p2pkh, p2sh
 test "test p2pk" {
-    var pubkey: [33]u8 = undefined;
-    const strpubkey: [66]u8 = "03525cbe17e87969013e6457c765594580dc803a8497052d7c1efb0ef401f68bd5".*;
-    _ = try std.fmt.hexToBytes(&pubkey, &strpubkey);
+    const uncompressedpubkey: [130]u8 = "04ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84c".*;
     const allocator = std.testing.allocator;
-    const script = try p2pk(allocator, pubkey);
+    const script = try p2pk(allocator, &uncompressedpubkey);
     defer script.deinit();
 
     try std.testing.expectEqual(opcode.OP_CHECKSIG, script.stack.items[0].op);
-    try std.testing.expectEqualSlices(u8, &pubkey, script.stack.items[1].v);
+    try std.testing.expectEqualSlices(u8, &uncompressedpubkey, script.stack.items[1].v);
+
+    var hexbuf: [134]u8 = undefined;
+    try script.toHex(&hexbuf);
+}
+
+test "toHex" {
+    const uncompressedpubkey: [130]u8 = "04ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84c".*;
+    const expectedhex: [134]u8 = "4104ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84cac".*;
+    const allocator = std.testing.allocator;
+    const script = try p2pk(allocator, &uncompressedpubkey);
+    defer script.deinit();
+
+    var hexbuf: [134]u8 = undefined;
+    try script.toHex(&hexbuf);
+    try std.testing.expectEqualSlices(u8, &expectedhex, &hexbuf);
 }

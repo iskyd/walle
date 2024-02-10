@@ -1,4 +1,5 @@
 const std = @import("std");
+const script = @import("../script/script.zig");
 
 // Output represented by transaction hash and index n to its vout
 const Output = struct {
@@ -15,7 +16,7 @@ const TxInput = struct {
 // Output of a transaction
 const TxOutput = struct {
     amount: u32,
-    pubkey_script: []u8,
+    pubkey_script: script.Script,
 };
 
 // Transaction
