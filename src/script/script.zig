@@ -101,7 +101,7 @@ pub const opcode = enum(u8) {
     OP_RESERVED2 = 0x8a,
 };
 
-const ScriptOp = union(enum) { op: opcode, v: []const u8, pushbytes: u16 };
+const ScriptOp = union(enum) { op: opcode, v: []const u8, pushbytes: usize };
 
 const Script = struct {
     allocator: std.mem.Allocator,
@@ -150,7 +150,7 @@ pub fn p2pk(allocator: std.mem.Allocator, pubkey: []const u8) !Script {
     var script = Script.init(allocator);
     try script.push(ScriptOp{ .op = opcode.OP_CHECKSIG });
     try script.push(ScriptOp{ .v = pubkey });
-    try script.push(ScriptOp{ .pushbytes = 65 });
+    try script.push(ScriptOp{ .pushbytes = pubkey.len / 2 });
     return script;
 }
 
@@ -169,14 +169,13 @@ test "test p2pk" {
 
     try std.testing.expectEqual(opcode.OP_CHECKSIG, script.stack.items[0].op);
     try std.testing.expectEqualSlices(u8, &uncompressedpubkey, script.stack.items[1].v);
-
-    var hexbuf: [134]u8 = undefined;
-    try script.toHex(&hexbuf);
 }
 
 test "toHex" {
     const uncompressedpubkey: [130]u8 = "04ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84c".*;
+    const compressedpubkey: [66]u8 = "03525cbe17e87969013e6457c765594580dc803a8497052d7c1efb0ef401f68bd5".*;
     const expectedhex: [134]u8 = "4104ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84cac".*;
+    const expectedhex2: [70]u8 = "2103525cbe17e87969013e6457c765594580dc803a8497052d7c1efb0ef401f68bd5ac".*;
     const allocator = std.testing.allocator;
     const script = try p2pk(allocator, &uncompressedpubkey);
     defer script.deinit();
@@ -184,4 +183,11 @@ test "toHex" {
     var hexbuf: [134]u8 = undefined;
     try script.toHex(&hexbuf);
     try std.testing.expectEqualSlices(u8, &expectedhex, &hexbuf);
+
+    const script2 = try p2pk(allocator, &compressedpubkey);
+    defer script2.deinit();
+
+    var hexbuf2: [70]u8 = undefined;
+    try script2.toHex(&hexbuf2);
+    try std.testing.expectEqualSlices(u8, &expectedhex2, &hexbuf2);
 }
