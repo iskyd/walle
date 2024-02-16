@@ -1,4 +1,5 @@
 const std = @import("std");
+const assert = std.debug.assert;
 
 pub const opcode = enum(u8) {
     // constants
@@ -7,7 +8,22 @@ pub const opcode = enum(u8) {
     OP_PUSHDATA2 = 0x4d,
     OP_PUSHDATA4 = 0x4e,
     OP_1NEGATE = 0x4f,
-    OP_TRUE = 0x51,
+    OP_TRUE = 0x51, // OP_TRUE == OP_1
+    OP_2 = 0x52,
+    OP_3 = 0x53,
+    OP_4 = 0x54,
+    OP_5 = 0x55,
+    OP_6 = 0x56,
+    OP_7 = 0x57,
+    OP_8 = 0x58,
+    OP_9 = 0x59,
+    OP_10 = 0x5a,
+    OP_11 = 0x5b,
+    OP_12 = 0x5c,
+    OP_13 = 0x5d,
+    OP_14 = 0x5e,
+    OP_15 = 0x5f,
+    OP_16 = 0x60,
 
     // Flow control
     OP_NOP = 0x61,
@@ -99,6 +115,30 @@ pub const opcode = enum(u8) {
     OP_VERNOTIF = 0x66,
     OP_RESERVED1 = 0x89,
     OP_RESERVED2 = 0x8a,
+
+    // n <= 16
+    pub fn fromNum(n: u8) opcode {
+        return switch (n) {
+            0 => opcode.OP_FALSE,
+            1 => opcode.OP_TRUE,
+            2 => opcode.OP_2,
+            3 => opcode.OP_3,
+            4 => opcode.OP_4,
+            5 => opcode.OP_5,
+            6 => opcode.OP_6,
+            7 => opcode.OP_7,
+            8 => opcode.OP_8,
+            9 => opcode.OP_9,
+            10 => opcode.OP_10,
+            11 => opcode.OP_11,
+            12 => opcode.OP_12,
+            13 => opcode.OP_13,
+            14 => opcode.OP_14,
+            15 => opcode.OP_15,
+            16 => opcode.OP_16,
+            else => unreachable,
+        };
+    }
 };
 
 const ScriptOp = union(enum) { op: opcode, v: []const u8, pushbytes: usize };
@@ -146,6 +186,7 @@ const Script = struct {
     }
 };
 
+// pubkey as str
 pub fn p2pk(allocator: std.mem.Allocator, pubkey: []const u8) !Script {
     var script = Script.init(allocator);
     try script.push(ScriptOp{ .op = opcode.OP_CHECKSIG });
@@ -154,10 +195,21 @@ pub fn p2pk(allocator: std.mem.Allocator, pubkey: []const u8) !Script {
     return script;
 }
 
-pub fn p2ms(m: u8, n: u8, pubkeys: [][33]u8) void {
-    _ = pubkeys;
-    _ = n;
-    _ = m;
+// pubkeys as str
+pub fn p2ms(allocator: std.mem.Allocator, pubkeys: [][]const u8, m: u8, n: u8) !Script {
+    assert(m <= n);
+    assert(m != 0);
+    assert(n <= 16);
+
+    var script = Script.init(allocator);
+    try script.push(ScriptOp{ .op = opcode.OP_CHECKMULTISIG });
+    try script.push(ScriptOp{ .op = opcode.fromNum(n) });
+    for (pubkeys) |pubkey| {
+        try script.push(ScriptOp{ .v = pubkey });
+        try script.push(ScriptOp{ .pushbytes = pubkey.len / 2 });
+    }
+    try script.push(ScriptOp{ .op = opcode.fromNum(m) });
+    return script;
 }
 
 // to implement p2pkh, p2sh
@@ -169,6 +221,25 @@ test "test p2pk" {
 
     try std.testing.expectEqual(opcode.OP_CHECKSIG, script.stack.items[0].op);
     try std.testing.expectEqualSlices(u8, &uncompressedpubkey, script.stack.items[1].v);
+    try std.testing.expectEqual(script.stack.items[2].pushbytes, 65);
+}
+
+test "test p2ms" {
+    var p1: [130]u8 = "04cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4".*;
+    var p2: [130]u8 = "0461cbdcc5409fb4b4d42b51d33381354d80e550078cb532a34bfa2fcfdeb7d76519aecc62770f5b0e4ef8551946d8a540911abe3e7854a26f39f58b25c15342af".*;
+
+    var pubkeys: [2][]u8 = [2][]u8{ &p1, &p2 };
+    const allocator = std.testing.allocator;
+    const script = try p2ms(allocator, &pubkeys, 1, 2);
+    defer script.deinit();
+
+    try std.testing.expectEqual(opcode.OP_CHECKMULTISIG, script.stack.items[0].op);
+    try std.testing.expectEqual(opcode.OP_2, script.stack.items[1].op);
+    try std.testing.expectEqualSlices(u8, &p1, script.stack.items[2].v);
+    try std.testing.expectEqual(script.stack.items[3].pushbytes, 65);
+    try std.testing.expectEqualSlices(u8, &p2, script.stack.items[4].v);
+    try std.testing.expectEqual(script.stack.items[5].pushbytes, 65);
+    try std.testing.expectEqual(opcode.OP_TRUE, script.stack.items[6].op);
 }
 
 test "toHex" {
@@ -190,4 +261,17 @@ test "toHex" {
     var hexbuf2: [70]u8 = undefined;
     try script2.toHex(&hexbuf2);
     try std.testing.expectEqualSlices(u8, &expectedhex2, &hexbuf2);
+
+    // p2ms
+    var p1: [130]u8 = "04cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4".*;
+    var p2: [130]u8 = "0461cbdcc5409fb4b4d42b51d33381354d80e550078cb532a34bfa2fcfdeb7d76519aecc62770f5b0e4ef8551946d8a540911abe3e7854a26f39f58b25c15342af".*;
+
+    var pubkeys: [2][]u8 = [2][]u8{ &p1, &p2 };
+    const script3 = try p2ms(allocator, &pubkeys, 1, 2);
+    defer script3.deinit();
+
+    var hexbuf3: [270]u8 = undefined;
+    try script3.toHex(&hexbuf3);
+    const expectedhex3: [270]u8 = "514104cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4410461cbdcc5409fb4b4d42b51d33381354d80e550078cb532a34bfa2fcfdeb7d76519aecc62770f5b0e4ef8551946d8a540911abe3e7854a26f39f58b25c15342af52ae".*;
+    try std.testing.expectEqualSlices(u8, &expectedhex3, &hexbuf3);
 }
