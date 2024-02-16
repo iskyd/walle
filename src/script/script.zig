@@ -172,7 +172,7 @@ const Script = struct {
                     cur += 2;
                 },
                 ScriptOp.v => |v| {
-                    std.mem.copy(u8, buffer[cur .. cur + v.len], self.stack.items[1].v);
+                    std.mem.copy(u8, buffer[cur .. cur + v.len], v);
                     cur += v.len;
                 },
                 ScriptOp.pushbytes => |pb| {
@@ -183,6 +183,25 @@ const Script = struct {
                 },
             }
         }
+    }
+
+    pub fn hexCap(self: Script) usize {
+        var cap: usize = 0;
+        for (0..self.stack.items.len) |i| {
+            const scriptop = self.stack.items[self.stack.items.len - i - 1];
+            switch (scriptop) {
+                ScriptOp.op => |_| {
+                    cap += 2;
+                },
+                ScriptOp.v => |v| {
+                    cap += v.len;
+                },
+                ScriptOp.pushbytes => |_| {
+                    cap += 2;
+                },
+            }
+        }
+        return cap;
     }
 };
 
@@ -242,6 +261,18 @@ test "test p2ms" {
     try std.testing.expectEqual(opcode.OP_TRUE, script.stack.items[6].op);
 }
 
+test "test hexCap" {
+    var p1: [130]u8 = "04cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4".*;
+    var p2: [130]u8 = "0461cbdcc5409fb4b4d42b51d33381354d80e550078cb532a34bfa2fcfdeb7d76519aecc62770f5b0e4ef8551946d8a540911abe3e7854a26f39f58b25c15342af".*;
+
+    var pubkeys: [2][]u8 = [2][]u8{ &p1, &p2 };
+    const allocator = std.testing.allocator;
+    const script = try p2ms(allocator, &pubkeys, 1, 2);
+    defer script.deinit();
+
+    try std.testing.expectEqual(script.hexCap(), 270);
+}
+
 test "toHex" {
     const uncompressedpubkey: [130]u8 = "04ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84c".*;
     const compressedpubkey: [66]u8 = "03525cbe17e87969013e6457c765594580dc803a8497052d7c1efb0ef401f68bd5".*;
@@ -266,7 +297,7 @@ test "toHex" {
     var p1: [130]u8 = "04cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4".*;
     var p2: [130]u8 = "0461cbdcc5409fb4b4d42b51d33381354d80e550078cb532a34bfa2fcfdeb7d76519aecc62770f5b0e4ef8551946d8a540911abe3e7854a26f39f58b25c15342af".*;
 
-    var pubkeys: [2][]u8 = [2][]u8{ &p1, &p2 };
+    var pubkeys: [2][]u8 = [2][]u8{ &p2, &p1 };
     const script3 = try p2ms(allocator, &pubkeys, 1, 2);
     defer script3.deinit();
 
