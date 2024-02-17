@@ -5,6 +5,7 @@ const math = std.math;
 const ripemd = @import("../ripemd160/ripemd160.zig");
 const assert = std.debug.assert;
 const Network = @import("../const.zig").Network;
+const script = @import("../script/script.zig");
 
 pub const ExtendedPrivateKey = struct {
     privatekey: [32]u8, // Private Key
@@ -126,6 +127,34 @@ pub fn deriveAddress(public: secp256k1.Point) ![25]u8 {
     std.mem.copy(u8, address[21..], checksum[0..4]);
 
     return address;
+}
+
+// m required keys of n keys
+pub fn deriveMultiSigAddress(allocator: std.mem.Allocator, pubkeys: []secp256k1.Point, m: u8, n: u8) !void {
+    var pubkeysstr: [][]u8 = try allocator.alloc([]u8, pubkeys.len);
+    defer allocator.free(pubkeysstr);
+    for (pubkeys, 0..) |pubkey, i| {
+        var strcompressed = try pubkey.toStrCompressed();
+        pubkeysstr[i] = &strcompressed;
+    }
+    const s = try script.p2ms(allocator, pubkeysstr, m, n);
+    defer s.deinit();
+    const hexCap = s.hexCap();
+    var redeemscript = try allocator.alloc(u8, hexCap);
+    defer allocator.free(redeemscript);
+    try s.toHex(redeemscript);
+
+    var bytes = try allocator.alloc(u8, hexCap / 2);
+    defer allocator.free(bytes);
+    _ = try std.fmt.hexToBytes(bytes, redeemscript);
+
+    var hashed: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(bytes, &hashed, .{});
+
+    const r = ripemd.Ripemd160.hash(&hashed);
+    var rstr: [40]u8 = undefined;
+    _ = try std.fmt.bufPrint(&rstr, "{x}", .{std.fmt.fmtSliceHexLower(r.bytes[0..])});
+    std.debug.print("r {s}\n", .{rstr});
 }
 
 pub fn deriveChildFromExtendedPrivateKey(epk: ExtendedPrivateKey, index: u32) !ExtendedPrivateKey {
