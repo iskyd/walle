@@ -130,7 +130,7 @@ pub fn deriveAddress(public: secp256k1.Point) ![25]u8 {
 }
 
 // m required keys of n keys
-pub fn deriveMultiSigAddress(allocator: std.mem.Allocator, pubkeys: []secp256k1.Point, m: u8, n: u8) !void {
+pub fn deriveMultiSigAddress(allocator: std.mem.Allocator, pubkeys: []secp256k1.Point, m: u8, n: u8) ![34]u8 {
     var pubkeysstr: [][]u8 = try allocator.alloc([]u8, pubkeys.len);
     defer allocator.free(pubkeysstr);
     for (pubkeys, 0..) |pubkey, i| {
@@ -152,9 +152,20 @@ pub fn deriveMultiSigAddress(allocator: std.mem.Allocator, pubkeys: []secp256k1.
     std.crypto.hash.sha2.Sha256.hash(bytes, &hashed, .{});
 
     const r = ripemd.Ripemd160.hash(&hashed);
-    var rstr: [40]u8 = undefined;
-    _ = try std.fmt.bufPrint(&rstr, "{x}", .{std.fmt.fmtSliceHexLower(r.bytes[0..])});
-    std.debug.print("r {s}\n", .{rstr});
+    var rstr: [42]u8 = undefined;
+    // 0x05 is mainnet
+    _ = try std.fmt.bufPrint(&rstr, "05{x}", .{std.fmt.fmtSliceHexLower(r.bytes[0..])});
+    var bytes_hashed: [21]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytes_hashed, &rstr);
+    var checksum: [32]u8 = utils.doubleSha256(&bytes_hashed);
+    var address: [25]u8 = undefined;
+    std.mem.copy(u8, address[0..21], bytes_hashed[0..21]);
+    std.mem.copy(u8, address[21..], checksum[0..4]);
+
+    var address_base58: [34]u8 = undefined;
+    try utils.toBase58(&address_base58, &address);
+
+    return address_base58;
 }
 
 pub fn deriveChildFromExtendedPrivateKey(epk: ExtendedPrivateKey, index: u32) !ExtendedPrivateKey {
@@ -392,4 +403,13 @@ test "fromWif" {
     var keystr: [64]u8 = undefined;
     _ = try std.fmt.bufPrint(&keystr, "{x}", .{std.fmt.fmtSliceHexLower(&wif.key)});
     try std.testing.expectEqualSlices(u8, "b21fcb414b4414e9bcf7ae647a79a4d29280f6b71cba204cb4dd3d6c6568d0fc", &keystr);
+}
+
+test "deriveMultisigAddress" {
+    const allocator = std.testing.allocator;
+    const public1 = secp256k1.Point{ .x = 37253515490154515672784401628327921438582067191679050515845431690448956984277, .y = 76208137199335099197411179139200193700449258875686614565584339213655359189545 };
+    const public2 = secp256k1.Point{ .x = 79027560793086286861659885563794118884743103107570705965389288630856279203871, .y = 70098904748994065624629803197701842741428754294763691930704573059552158053128 };
+    var pubkeys: [2]secp256k1.Point = [2]secp256k1.Point{ public2, public1 };
+    const multisigaddr = try deriveMultiSigAddress(allocator, &pubkeys, 1, 2);
+    try std.testing.expectEqualStrings("3LMCw79c9B72iMWoDVjiFhWmnpibvXXStp", &multisigaddr);
 }
