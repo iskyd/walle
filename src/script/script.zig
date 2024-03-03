@@ -143,7 +143,7 @@ pub const opcode = enum(u8) {
 
 const ScriptOp = union(enum) { op: opcode, v: []const u8, pushbytes: usize };
 
-const Script = struct {
+pub const Script = struct {
     allocator: std.mem.Allocator,
     stack: std.ArrayList(ScriptOp),
 
