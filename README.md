@@ -26,3 +26,7 @@ zig build test
 ### Lib
 External libraries such as base58 and clap are installed as git submodule and added to build.zig
 
+### Nix development
+```
+nix-shell -p zig zls emacs29
+```
