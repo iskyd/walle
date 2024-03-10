@@ -19,7 +19,7 @@ pub fn build(b: *std.Build) void {
         .name = "walle",
         // In this case the main source file is merely a path, however, in more
         // complicated build scripts, this could be a generated file.
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = .{ .path = "src/p.zig" },
         .target = target,
         .optimize = optimize,
     });
@@ -98,7 +98,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = .{ .path = test_file },
             .target = target,
             .optimize = optimize,
-            .main_mod_path = .{ .path = "." },
+            .main_pkg_path = .{ .path = "." }, // .main_mod_path in zig 0.12.0
         });
         unit_tests.addModule("base58", base58);
         const run_unit_tests = b.addRunArtifact(unit_tests);
