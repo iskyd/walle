@@ -7,6 +7,7 @@ pub const secp256k1 = @import("src/secp256k1/secp256k1.zig");
 pub const utils = @import("src/utils.zig");
 pub const script = @import("src/script/script.zig");
 pub const tx = @import("src/tx/tx.zig");
+pub const address = @import("src/address/address.zig");
 
 test {
     std.testing.refAllDecls(@This());

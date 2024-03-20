@@ -231,6 +231,17 @@ pub fn p2ms(allocator: std.mem.Allocator, pubkeys: [][]const u8, m: u8, n: u8) !
     return script;
 }
 
+pub fn p2pkh(allocator: std.mem.Allocator, pkeyhash: []const u8) !Script {
+    var script = Script.init(allocator);
+    try script.push(ScriptOp{ .op = opcode.OP_CHECKSIG });
+    try script.push(ScriptOp{ .op = opcode.OP_EQUALVERIFY });
+    try script.push(ScriptOp{ .v = pkeyhash });
+    try script.push(ScriptOp{ .pushbytes = 20 });
+    try script.push(ScriptOp{ .op = opcode.OP_HASH160 });
+    try script.push(ScriptOp{ .op = opcode.OP_DUP });
+    return script;
+}
+
 // to implement p2pkh, p2sh
 test "test p2pk" {
     const uncompressedpubkey: [130]u8 = "04ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84c".*;
