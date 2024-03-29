@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetpack-io/devbox/0.10.2/.schema/devbox.schema.json",
+  "packages": [
+    "zig@latest",
+    "zls@latest"
+  ],
+  "shell": {
+    "init_hook": [
+      "echo 'Welcome to walle!'"
+    ],
+    "scripts": {
+      "test": [
+        "echo \"Error: no test specified\" && exit 1"
+      ]
+    }
+  }
+}
