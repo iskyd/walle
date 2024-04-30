@@ -458,5 +458,6 @@ test "toHash" {
     const addr = try pk1.toHash();
     var s: [50]u8 = undefined;
     _ = try std.fmt.bufPrint(&s, "{x}", .{std.fmt.fmtSliceHexLower(&addr)});
+    // 2..42 -> remove 1 byte prefix and remove 4 bytes checksum
     try std.testing.expectEqualSlices(u8, "1e51fcdc14be9a148bb0aaec9197eb47c83776fb", s[2..42]);
 }
