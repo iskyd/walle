@@ -88,7 +88,7 @@ pub const PublicKey = struct {
         _ = actual_fmt;
         _ = options;
 
-        const public_uncompressed = try self.toStrUncompressedPublic();
+        const public_uncompressed = try self.toStrUncompressed();
         try writer.print("Public uncompressed key: {s}\n\n", .{public_uncompressed});
     }
 };
@@ -422,15 +422,6 @@ test "pubKeyCompress" {
     _ = try std.fmt.bufPrint(&compress_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&compressed)});
     try std.testing.expectEqualSlices(u8, &compress_hex_str, "02aeb803a9ace6dcc5f11d06e8f30e24186c904f463be84f303d15bb7d48d1201f");
 }
-
-//test "uncompress" {
-//    var buffer = "02aeb803a9ace6dcc5f11d06e8f30e24186c904f463be84f303d15bb7d48d1201f";
-//    const v = try std.fmt.parseInt(u264, buffer, 16);
-//    var compressed: [33]u8 = @bitCast(@byteSwap(v));
-//    const p = try uncompress(compressed);
-//    try std.testing.expectEqual(p.x, 79027560793086286861659885563794118884743103107570705965389288630856279203871);
-//    try std.testing.expectEqual(p.y, 70098904748994065624629803197701842741428754294763691930704573059552158053128);
-//}
 
 test "toStrCompressed" {
     const x = 79027560793086286861659885563794118884743103107570705965389288630856279203871;
