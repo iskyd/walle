@@ -17,7 +17,7 @@ pub const DecryptError = error{
 
 pub fn encrypt(allocator: std.mem.Allocator, privatekey: [32]u8, passphrase: []const u8) ![58]u8 {
     const publickey = bip32.generatePublicKey(privatekey);
-    const address = try bip32.deriveAddress(publickey);
+    const address = try publickey.toHash();
     var addresshash: [32]u8 = utils.doubleSha256(&address);
     const salt = addresshash[0..4];
     var derived: [64]u8 = undefined;
@@ -138,7 +138,7 @@ pub fn decrypt(allocator: std.mem.Allocator, encoded: [58]u8, passphrase: []cons
     var pk: [32]u8 = undefined;
     _ = try std.fmt.hexToBytes(&pk, &pkstr);
     const publickey = bip32.generatePublicKey(pk);
-    const address = try bip32.deriveAddress(publickey);
+    const address = try publickey.toHash();
     var checkaddresshash: [32]u8 = utils.doubleSha256(&address);
     if (std.mem.eql(u8, addresshash, checkaddresshash[0..4]) == false) {
         return error.InvalidPassphraseError;

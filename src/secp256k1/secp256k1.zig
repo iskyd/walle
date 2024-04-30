@@ -107,39 +107,6 @@ pub const Point = struct {
         self.x = current.x;
         self.y = current.y;
     }
-
-    pub fn compress(self: Point) ![33]u8 {
-        var buffer: [66]u8 = undefined;
-        if (@mod(self.y, 2) == 0) {
-            _ = try std.fmt.bufPrint(&buffer, "02{x}", .{self.x});
-        } else {
-            _ = try std.fmt.bufPrint(&buffer, "03{x}", .{self.x});
-        }
-        const v: u264 = try std.fmt.parseInt(u264, &buffer, 16);
-        const compressed: [33]u8 = @bitCast(@byteSwap(v));
-        return compressed;
-    }
-
-    pub fn toStrCompressed(self: Point) ![66]u8 {
-        const compressed: [33]u8 = try self.compress();
-        var str: [66]u8 = undefined;
-        _ = try std.fmt.bufPrint(&str, "{x}", .{std.fmt.fmtSliceHexLower(&compressed)});
-        return str;
-    }
-
-    pub fn toStrUncompressed(self: Point) ![130]u8 {
-        var str: [130]u8 = undefined;
-        _ = try std.fmt.bufPrint(&str, "04{x}{x}", .{ self.x, self.y });
-        return str;
-    }
-
-    pub fn format(self: Point, actual_fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        _ = actual_fmt;
-        _ = options;
-
-        const uncompressed = try self.toStrUncompressed();
-        try writer.print("Uncompressed: {s}\n", .{uncompressed});
-    }
 };
 
 test "modinv" {
@@ -185,39 +152,4 @@ test "powmod" {
     try std.testing.expectEqual(powmod(2, 3, 5), 3);
     try std.testing.expectEqual(powmod(2, 3, 15), 8);
     try std.testing.expectEqual(powmod(49001864144210927699347487322952736965656659160088668794646536877889645920220, 28948022309329048855892746252171976963317496166410141009864396001977208667916, 115792089237316195423570985008687907853269984665640564039457584007908834671663), 45693184488322129798941181810986065111841230370876872108753010948356676618535);
-}
-
-test "compress" {
-    const x = 79027560793086286861659885563794118884743103107570705965389288630856279203871;
-    const y = 70098904748994065624629803197701842741428754294763691930704573059552158053128;
-    var p: Point = Point{ .x = x, .y = y };
-    const compressed = try p.compress();
-    var compress_hex_str: [66]u8 = undefined;
-    _ = try std.fmt.bufPrint(&compress_hex_str, "{x}", .{std.fmt.fmtSliceHexLower(&compressed)});
-    try std.testing.expectEqualSlices(u8, &compress_hex_str, "02aeb803a9ace6dcc5f11d06e8f30e24186c904f463be84f303d15bb7d48d1201f");
-}
-
-test "uncompress" {
-    var buffer = "02aeb803a9ace6dcc5f11d06e8f30e24186c904f463be84f303d15bb7d48d1201f";
-    const v = try std.fmt.parseInt(u264, buffer, 16);
-    var compressed: [33]u8 = @bitCast(@byteSwap(v));
-    const p = try uncompress(compressed);
-    try std.testing.expectEqual(p.x, 79027560793086286861659885563794118884743103107570705965389288630856279203871);
-    try std.testing.expectEqual(p.y, 70098904748994065624629803197701842741428754294763691930704573059552158053128);
-}
-
-test "toStrCompressed" {
-    const x = 79027560793086286861659885563794118884743103107570705965389288630856279203871;
-    const y = 70098904748994065624629803197701842741428754294763691930704573059552158053128;
-    var p: Point = Point{ .x = x, .y = y };
-    const str = try p.toStrCompressed();
-    try std.testing.expectEqualSlices(u8, &str, "02aeb803a9ace6dcc5f11d06e8f30e24186c904f463be84f303d15bb7d48d1201f");
-}
-
-test "toStrUncompressed" {
-    const x = 79027560793086286861659885563794118884743103107570705965389288630856279203871;
-    const y = 70098904748994065624629803197701842741428754294763691930704573059552158053128;
-    var p: Point = Point{ .x = x, .y = y };
-    const str = try p.toStrUncompressed();
-    try std.testing.expectEqualSlices(u8, &str, "04aeb803a9ace6dcc5f11d06e8f30e24186c904f463be84f303d15bb7d48d1201f9afa92f683a2ed207bcba8f4c3354190cb5eb416802016c5c432b22a00c67308");
 }
