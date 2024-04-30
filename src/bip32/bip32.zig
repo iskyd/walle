@@ -449,4 +449,14 @@ test "toHash" {
     var str: [50]u8 = undefined;
     _ = try std.fmt.bufPrint(&str, "{x}", .{std.fmt.fmtSliceHexLower(&address)});
     try std.testing.expectEqualSlices(u8, "00f57f296d748bb310dc0512b28231e8ebd62454557d5edaef", &str);
+
+    const pubkeystr = "02e3af28965693b9ce1228f9d468149b831d6a0540b25e8a9900f71372c11fb277".*;
+    const v = try std.fmt.parseInt(u264, &pubkeystr, 16);
+    var c: [33]u8 = @bitCast(@byteSwap(v));
+    const p = try secp256k1.uncompress(c);
+    const pk1 = PublicKey{ .point = p };
+    const addr = try pk1.toHash();
+    var s: [50]u8 = undefined;
+    _ = try std.fmt.bufPrint(&s, "{x}", .{std.fmt.fmtSliceHexLower(&addr)});
+    try std.testing.expectEqualSlices(u8, "1e51fcdc14be9a148bb0aaec9197eb47c83776fb", s[2..42]);
 }
