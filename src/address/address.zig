@@ -3,6 +3,9 @@ const utils = @import("../utils.zig");
 const Network = @import("../const.zig").Network;
 const script = @import("../script/script.zig");
 const PublicKey = @import("../bip32/bip32.zig").PublicKey;
+const ripemd = @import("../ripemd160/ripemd160.zig");
+
+// P2PK and P2MS do not have an address
 
 pub fn deriveP2PKHAddress(pk: PublicKey, n: Network) ![34]u8 {
     const pkh = try pk.toHash();
@@ -24,37 +27,36 @@ pub fn deriveP2PKHAddress(pk: PublicKey, n: Network) ![34]u8 {
     return base58addr;
 }
 
-//pub fn deriveP2PKHAddress(pubkey: secp256k1.Point, network: Network, buffer: []u8) !void {
-//    const pkc = try pubkey.toStrCompressed();
-//    var bytes: [33]u8 = undefined;
-//    _ = try std.fmt.hexToBytes(&bytes, &pkc);
-//    var pubkeyhash = utils.hash160(&bytes);
-//    var ppk: [42]u8 = undefined; // Public key hash with prefix
-//    // 0x00 is mainnet
-//    // 0x?? is testnet
-//    _ = switch (network) {
-//        Network.MAINNET => try std.fmt.bufPrint(&ppk, "00{x}", .{std.fmt.fmtSliceHexLower(&pubkeyhash)}),
-//        else => _ = try std.fmt.bufPrint(&ppk, "00{x}", .{std.fmt.fmtSliceHexLower(&pubkeyhash)}),
-//    };
-//
-//    var ppkbytes: [21]u8 = undefined;
-//    _ = try std.fmt.hexToBytes(&ppkbytes, &ppk);
-//    const checkpubkey = utils.calculateChecksum(&ppkbytes);
-//    var addr: [50]u8 = undefined;
-//    _ = try std.fmt.bufPrint(&addr, "{s}{x}", .{ ppk, std.fmt.fmtSliceHexLower(&checkpubkey) });
-//    var addrbytes: [25]u8 = undefined;
-//    _ = try std.fmt.hexToBytes(&addrbytes, &addr);
-//    try utils.toBase58(buffer, &addrbytes);
-//}
-//
-//// Required m keys of n
-//pub fn deriveP2MSAddress(pubkeys: []secp256k1.Point, network: Network, m: u8, n: u8, buffer: []u8) !void {
-//    _ = buffer;
-//    _ = n;
-//    _ = m;
-//    _ = network;
-//    _ = pubkeys;
-//}
+pub fn deriveP2SHAddress(allocator: std.mem.Allocator, s: script.Script, n: Network) ![34]u8 {
+    const hexCap = s.hexCap();
+    var redeemscript = try allocator.alloc(u8, hexCap);
+    defer allocator.free(redeemscript);
+    try s.toHex(redeemscript);
+    var bytes = try allocator.alloc(u8, hexCap / 2);
+    defer allocator.free(bytes);
+    _ = try std.fmt.hexToBytes(bytes, redeemscript);
+
+    var hashed: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(bytes, &hashed, .{});
+
+    const r = ripemd.Ripemd160.hash(&hashed);
+    var rstr: [42]u8 = undefined;
+    _ = switch (n) {
+        Network.MAINNET => try std.fmt.bufPrint(&rstr, "05{x}", .{std.fmt.fmtSliceHexLower(r.bytes[0..])}),
+        else => _ = try std.fmt.bufPrint(&rstr, "c4{x}", .{std.fmt.fmtSliceHexLower(r.bytes[0..])}),
+    };
+    var bytes_hashed: [21]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytes_hashed, &rstr);
+    var checksum: [32]u8 = utils.doubleSha256(&bytes_hashed);
+    var addr: [25]u8 = undefined;
+    std.mem.copy(u8, addr[0..21], bytes_hashed[0..21]);
+    std.mem.copy(u8, addr[21..], checksum[0..4]);
+
+    var base58addr: [34]u8 = undefined;
+    try utils.toBase58(&base58addr, &addr);
+
+    return base58addr;
+}
 
 test "deriveP2PKHAddress" {
     const secp256k1 = @import("../secp256k1/secp256k1.zig");
@@ -68,4 +70,18 @@ test "deriveP2PKHAddress" {
 
     const addr2 = try deriveP2PKHAddress(pk, Network.TESTNET);
     try std.testing.expectEqualSlices(u8, "miHGnR7NJHyt9Suwyhd4KTA7FFT9S9Tc9H", &addr2);
+}
+
+test "deriveP2SHAddress" {
+    const allocator = std.testing.allocator;
+    var p1: [130]u8 = "04cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4".*;
+    var p2: [130]u8 = "0461cbdcc5409fb4b4d42b51d33381354d80e550078cb532a34bfa2fcfdeb7d76519aecc62770f5b0e4ef8551946d8a540911abe3e7854a26f39f58b25c15342af".*;
+
+    var pubkeys: [2][]u8 = [2][]u8{ &p1, &p2 };
+    const s = try script.p2ms(allocator, &pubkeys, 1, 2);
+    defer s.deinit();
+
+    // bx script-to-address "1 [0461cbdcc5409fb4b4d42b51d33381354d80e550078cb532a34bfa2fcfdeb7d76519aecc62770f5b0e4ef8551946d8a540911abe3e7854a26f39f58b25c15342af] [04cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4] 2 checkmultisig" -> 3AkkzXdYcewc2ipTU4uUJxgmbGDmPQT6AU
+    const addr = try deriveP2SHAddress(allocator, s, Network.MAINNET);
+    try std.testing.expectEqualSlices(u8, "3AkkzXdYcewc2ipTU4uUJxgmbGDmPQT6AU", &addr);
 }

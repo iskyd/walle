@@ -63,6 +63,7 @@ pub const PublicKey = struct {
 
     // return bytes
     pub fn toHash(self: PublicKey) ![20]u8 {
+        // We use the compressed public key because P2WPKH only works with compressed public keys
         const str: [66]u8 = try self.toStrCompressed();
         var bytes: [33]u8 = undefined;
         _ = try std.fmt.hexToBytes(&bytes, &str);
@@ -133,50 +134,6 @@ pub fn generatePublicKey(pk: [32]u8) PublicKey {
 
     return PublicKey{ .point = public };
 }
-
-//
-//// m required keys of n keys
-//// buffer should be [34]u8 if mainnet else [35]u8
-//pub fn deriveMultiSigAddress(allocator: std.mem.Allocator, pubkeys: []secp256k1.Point, m: u8, n: u8, network: Network, buffer: []u8) !void {
-//    var pubkeysstr: [][]u8 = try allocator.alloc([]u8, pubkeys.len);
-//    defer allocator.free(pubkeysstr);
-//    for (pubkeys, 0..) |pubkey, i| {
-//        var strcompressed = try pubkey.toStrCompressed();
-//        pubkeysstr[i] = &strcompressed;
-//    }
-//    const s = try script.p2ms(allocator, pubkeysstr, m, n);
-//    defer s.deinit();
-//    const hexCap = s.hexCap();
-//    var redeemscript = try allocator.alloc(u8, hexCap);
-//    defer allocator.free(redeemscript);
-//    try s.toHex(redeemscript);
-//
-//    var bytes = try allocator.alloc(u8, hexCap / 2);
-//    defer allocator.free(bytes);
-//    _ = try std.fmt.hexToBytes(bytes, redeemscript);
-//
-//    var hashed: [32]u8 = undefined;
-//    std.crypto.hash.sha2.Sha256.hash(bytes, &hashed, .{});
-//
-//    const r = ripemd.Ripemd160.hash(&hashed);
-//    var rstr: [42]u8 = undefined;
-//
-//    // 0x05 is mainnet
-//    // 0xc4 is testnet/regtest
-//    _ = switch (network) {
-//        Network.MAINNET => _ = try std.fmt.bufPrint(&rstr, "05{x}", .{std.fmt.fmtSliceHexLower(r.bytes[0..])}),
-//        else => _ = try std.fmt.bufPrint(&rstr, "c4{x}", .{std.fmt.fmtSliceHexLower(r.bytes[0..])}),
-//    };
-//
-//    var bytes_hashed: [21]u8 = undefined;
-//    _ = try std.fmt.hexToBytes(&bytes_hashed, &rstr);
-//    var checksum: [32]u8 = utils.doubleSha256(&bytes_hashed);
-//    var address: [25]u8 = undefined;
-//    std.mem.copy(u8, address[0..21], bytes_hashed[0..21]);
-//    std.mem.copy(u8, address[21..], checksum[0..4]);
-//
-//    try utils.toBase58(buffer, &address);
-//}
 
 pub fn deriveChildFromExtendedPrivateKey(epk: ExtendedPrivateKey, index: u32) !ExtendedPrivateKey {
     assert(index >= 0);
@@ -394,21 +351,6 @@ test "fromWif" {
     _ = try std.fmt.bufPrint(&keystr, "{x}", .{std.fmt.fmtSliceHexLower(&wif.key)});
     try std.testing.expectEqualSlices(u8, "b21fcb414b4414e9bcf7ae647a79a4d29280f6b71cba204cb4dd3d6c6568d0fc", &keystr);
 }
-
-//test "deriveMultisigAddress" {
-//    const allocator = std.testing.allocator;
-//    const public1 = secp256k1.Point{ .x = 37253515490154515672784401628327921438582067191679050515845431690448956984277, .y = 76208137199335099197411179139200193700449258875686614565584339213655359189545 };
-//    const public2 = secp256k1.Point{ .x = 79027560793086286861659885563794118884743103107570705965389288630856279203871, .y = 70098904748994065624629803197701842741428754294763691930704573059552158053128 };
-//    var pubkeys: [2]secp256k1.Point = [2]secp256k1.Point{ public2, public1 };
-//    var multisigaddr1: [34]u8 = undefined;
-//    try
-//        deriveMultiSigAddress(allocator, &pubkeys, 1, 2, Network.MAINNET, &multisigaddr1);
-//    try std.testing.expectEqualStrings("3LMCw79c9B72iMWoDVjiFhWmnpibvXXStp", &multisigaddr1);
-//
-//    var multisigaddr2: [35]u8 = undefined;
-//    try deriveMultiSigAddress(allocator, &pubkeys, 1, 2, Network.TESTNET, &multisigaddr2);
-//    try std.testing.expectEqualStrings("2NBuQzr5dkdcNv99LtdMaseW31Avmjzr765", &multisigaddr2);
-//}
 
 test "pubKeyCompress" {
     const x = 79027560793086286861659885563794118884743103107570705965389288630856279203871;
