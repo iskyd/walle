@@ -61,7 +61,8 @@ pub const PublicKey = struct {
         return str;
     }
 
-    pub fn toHash(self: PublicKey) ![25]u8 {
+    // return bytes
+    pub fn toHash(self: PublicKey) ![20]u8 {
         const str: [66]u8 = try self.toStrCompressed();
         var bytes: [33]u8 = undefined;
         _ = try std.fmt.hexToBytes(&bytes, &str);
@@ -70,16 +71,13 @@ pub const PublicKey = struct {
         std.crypto.hash.sha2.Sha256.hash(&bytes, &hashed, .{});
 
         const r = ripemd.Ripemd160.hash(&hashed);
-        var rstr: [42]u8 = undefined;
-        _ = try std.fmt.bufPrint(&rstr, "00{x}", .{std.fmt.fmtSliceHexLower(r.bytes[0..])});
-        var bytes_hashed: [21]u8 = undefined;
+        var rstr: [40]u8 = undefined;
+        _ = try std.fmt.bufPrint(&rstr, "{x}", .{std.fmt.fmtSliceHexLower(r.bytes[0..])});
+        var bytes_hashed: [20]u8 = undefined;
         _ = try std.fmt.hexToBytes(&bytes_hashed, &rstr);
 
-        var checksum: [32]u8 = utils.doubleSha256(&bytes_hashed);
-
-        var address: [25]u8 = undefined;
-        std.mem.copy(u8, address[0..21], bytes_hashed[0..21]);
-        std.mem.copy(u8, address[21..], checksum[0..4]);
+        var address: [20]u8 = undefined;
+        std.mem.copy(u8, address[0..20], bytes_hashed[0..20]);
 
         return address;
     }
@@ -445,10 +443,10 @@ test "toHash" {
     const seed = [64]u8{ 0b10111000, 0b01110011, 0b00100001, 0b00101111, 0b10001000, 0b01011100, 0b11001111, 0b11111011, 0b11110100, 0b01101001, 0b00101010, 0b11111100, 0b10111000, 0b01001011, 0b11000010, 0b11100101, 0b01011000, 0b10000110, 0b11011110, 0b00101101, 0b11111010, 0b00000111, 0b11011001, 0b00001111, 0b01011100, 0b00111100, 0b00100011, 0b10011010, 0b10111100, 0b00110001, 0b11000000, 0b10100110, 0b11001110, 0b00000100, 0b01111110, 0b00110000, 0b11111101, 0b10001011, 0b11110110, 0b10100010, 0b10000001, 0b11100111, 0b00010011, 0b10001001, 0b10101010, 0b10000010, 0b11010111, 0b00111101, 0b11110111, 0b01001100, 0b01111011, 0b10111111, 0b10110011, 0b10110000, 0b01101011, 0b01000110, 0b00111001, 0b10100101, 0b11001110, 0b11100111, 0b01110101, 0b11001100, 0b11001101, 0b00111100 };
     const epk: ExtendedPrivateKey = generateExtendedMasterPrivateKey(seed);
     const pk = generatePublicKey(epk.privatekey);
-    const address: [25]u8 = try pk.toHash();
-    var str: [50]u8 = undefined;
+    const address: [20]u8 = try pk.toHash();
+    var str: [40]u8 = undefined;
     _ = try std.fmt.bufPrint(&str, "{x}", .{std.fmt.fmtSliceHexLower(&address)});
-    try std.testing.expectEqualSlices(u8, "00f57f296d748bb310dc0512b28231e8ebd62454557d5edaef", &str);
+    try std.testing.expectEqualSlices(u8, "f57f296d748bb310dc0512b28231e8ebd6245455", &str);
 
     const pubkeystr = "02e3af28965693b9ce1228f9d468149b831d6a0540b25e8a9900f71372c11fb277".*;
     const v = try std.fmt.parseInt(u264, &pubkeystr, 16);
@@ -456,8 +454,17 @@ test "toHash" {
     const p = try secp256k1.uncompress(c);
     const pk1 = PublicKey{ .point = p };
     const addr = try pk1.toHash();
-    var s: [50]u8 = undefined;
+    var s: [40]u8 = undefined;
     _ = try std.fmt.bufPrint(&s, "{x}", .{std.fmt.fmtSliceHexLower(&addr)});
-    // 2..42 -> remove 1 byte prefix and remove 4 bytes checksum
-    try std.testing.expectEqualSlices(u8, "1e51fcdc14be9a148bb0aaec9197eb47c83776fb", s[2..42]);
+    try std.testing.expectEqualSlices(u8, "1e51fcdc14be9a148bb0aaec9197eb47c83776fb", s[0..]);
+
+    const pubkeystr2 = "03f0609c81a45f8cab67fc2d050c21b1acd3d37c7acfd54041be6601ab4cef4f31".*;
+    const v2 = try std.fmt.parseInt(u264, &pubkeystr2, 16);
+    var c2: [33]u8 = @bitCast(@byteSwap(v2));
+    const p2 = try secp256k1.uncompress(c2);
+    const pk2 = PublicKey{ .point = p2 };
+    const addr2 = try pk2.toHash();
+    var s2: [40]u8 = undefined;
+    _ = try std.fmt.bufPrint(&s2, "{x}", .{std.fmt.fmtSliceHexLower(&addr2)});
+    try std.testing.expectEqualSlices(u8, "55ae51684c43435da751ac8d2173b2652eb64105", s2[0..]);
 }
