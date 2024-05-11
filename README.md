@@ -5,28 +5,44 @@ Wall•E is a Bitcoin Wallet written in Zig.
 > **WARNING**: This is just an attempt to learn Bitcoin and Zig. Do not use this project with real BTC.
 
 #### Run
+Run src/main.zig
+``` bash
+zig build run
 ```
-zig build run-p
-zig run --mod base58::lib/base58/src/lib.zig src/p.zig --deps base58
-```
+Run src/p.zig (used for debugging)
 
+``` bash
+zig build run-p
+```
 
 #### Testing
-Single file (--main-pkg-path before zig 0.12.0)
-```
-zig build test --summary all -- src/bip39/bip39.zig src/bip38/bip38.zig
-zig test --mod base58::lib/base58/src/lib.zig --deps base58 src/utils.zig --main-mod-path .
-```
-
-Build test
-```
+``` bash
 zig build test
+zig build test --summary all -- src/bip39/bip39.zig src/bip38/bip38.zig
 ```
 
 ### Lib
 External libraries such as base58 and clap are installed as git submodule and added to build.zig
 
-### Nix development
+### Dev Environment
+See devbox.json
+``` bash
+devbox shell
 ```
-nix-shell -p zig zls emacs29
+
+### Bitcoin Node
+Use Dockerfile to run bitcoin node using bitcoin-core. node/bitcoin.conf can be used as bitcoin config to run regtest with rpcuser walle and pwd password.
+
+``` bash
+docker build -t btcnode .
+docker run btcnode
 ```
+
+The first time you run the node you need to create a new wallet (it is no longer created automatically) then you can getnewaddress.
+
+``` bash
+bitcoin-cli -rpcuser=walle -rpcpassword=password -rpcport=18443 createwallet walle
+bitcoin-cli -rpcuser=walle -rpcpassword=password -rpcport=18443 getnewaddress
+```
+
+
