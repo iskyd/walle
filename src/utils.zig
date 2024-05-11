@@ -56,7 +56,6 @@ pub fn doubleSha256(bytes: []const u8) [32]u8 {
 pub fn hash160(bytes: []const u8) [20]u8 {
     var hashed: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(bytes, &hashed, .{});
-
     const r = ripemd.Ripemd160.hash(&hashed);
     return r.bytes;
 }

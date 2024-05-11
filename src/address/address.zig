@@ -35,15 +35,11 @@ pub fn deriveP2SHAddress(allocator: std.mem.Allocator, s: script.Script, n: Netw
     var bytes = try allocator.alloc(u8, hexCap / 2);
     defer allocator.free(bytes);
     _ = try std.fmt.hexToBytes(bytes, redeemscript);
-
-    var hashed: [32]u8 = undefined;
-    std.crypto.hash.sha2.Sha256.hash(bytes, &hashed, .{});
-
-    const r = ripemd.Ripemd160.hash(&hashed);
+    const r = utils.hash160(bytes);
     var rstr: [42]u8 = undefined;
     _ = switch (n) {
-        Network.MAINNET => try std.fmt.bufPrint(&rstr, "05{x}", .{std.fmt.fmtSliceHexLower(r.bytes[0..])}),
-        else => _ = try std.fmt.bufPrint(&rstr, "c4{x}", .{std.fmt.fmtSliceHexLower(r.bytes[0..])}),
+        Network.MAINNET => try std.fmt.bufPrint(&rstr, "05{x}", .{std.fmt.fmtSliceHexLower(&r)}),
+        else => _ = try std.fmt.bufPrint(&rstr, "c4{x}", .{std.fmt.fmtSliceHexLower(&r)}),
     };
     var bytes_hashed: [21]u8 = undefined;
     _ = try std.fmt.hexToBytes(&bytes_hashed, &rstr);
