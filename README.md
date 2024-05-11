@@ -35,14 +35,16 @@ Use Dockerfile to run bitcoin node using bitcoin-core. node/bitcoin.conf can be 
 
 ``` bash
 docker build -t btcnode .
-docker run btcnode
+docker volume create btcnode
+docker run --rm --name btcnode -v btcnode:/bitcoin-25.0/data btcnode
 ```
 
-The first time you run the node you need to create a new wallet (it is no longer created automatically) then you can getnewaddress.
+The first time you run the node you need to create a new wallet (it is no longer created automatically, if the walle was already created use loadwallet) then you can getnewaddress.
 
 ``` bash
 bitcoin-cli -rpcuser=walle -rpcpassword=password -rpcport=18443 createwallet walle
 bitcoin-cli -rpcuser=walle -rpcpassword=password -rpcport=18443 getnewaddress
 ```
+
 
 
