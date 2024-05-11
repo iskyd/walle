@@ -28,13 +28,11 @@ pub fn deriveP2PKHAddress(pk: PublicKey, n: Network) ![34]u8 {
 }
 
 pub fn deriveP2SHAddress(allocator: std.mem.Allocator, s: script.Script, n: Network) ![34]u8 {
-    const hexCap = s.hexCap();
-    var redeemscript = try allocator.alloc(u8, hexCap);
-    defer allocator.free(redeemscript);
-    try s.toHex(redeemscript);
-    var bytes = try allocator.alloc(u8, hexCap / 2);
+    const cap = s.hexCapBytes();
+    var bytes = try allocator.alloc(u8, cap);
+    try s.toBytes(allocator, bytes);
     defer allocator.free(bytes);
-    _ = try std.fmt.hexToBytes(bytes, redeemscript);
+
     const r = utils.hash160(bytes);
     var rstr: [42]u8 = undefined;
     _ = switch (n) {

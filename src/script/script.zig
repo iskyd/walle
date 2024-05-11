@@ -203,6 +203,18 @@ pub const Script = struct {
         }
         return cap;
     }
+
+    pub fn hexCapBytes(self: Script) usize {
+        return self.hexCap() / 2;
+    }
+
+    pub fn toBytes(self: Script, allocator: std.mem.Allocator, buffer: []u8) !void {
+        const c = self.hexCap();
+        var redeemscript = try allocator.alloc(u8, c);
+        defer allocator.free(redeemscript);
+        try self.toHex(redeemscript);
+        _ = try std.fmt.hexToBytes(buffer, redeemscript);
+    }
 };
 
 // pubkey as str
