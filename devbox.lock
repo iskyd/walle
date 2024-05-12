@@ -1,6 +1,54 @@
 {
   "lockfile_version": "1",
   "packages": {
+    "libbitcoin-explorer@latest": {
+      "last_modified": "2024-04-19T21:36:04Z",
+      "resolved": "github:NixOS/nixpkgs/92d295f588631b0db2da509f381b4fb1e74173c5#libbitcoin-explorer",
+      "source": "devbox-search",
+      "version": "3.8.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/hvgx97wa41grhyi7rsw03nmpbzdr5jab-libbitcoin-explorer-3.8.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/hvgx97wa41grhyi7rsw03nmpbzdr5jab-libbitcoin-explorer-3.8.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/z57nlh45ikf55k1wj4dcl8fa12dh5c86-libbitcoin-explorer-3.8.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/z57nlh45ikf55k1wj4dcl8fa12dh5c86-libbitcoin-explorer-3.8.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/gy18jsbpzjk83r8vx1dj4awbdsb5rncd-libbitcoin-explorer-3.8.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/gy18jsbpzjk83r8vx1dj4awbdsb5rncd-libbitcoin-explorer-3.8.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/3yfqc07jma4hn941ipxa43y2rz81l110-libbitcoin-explorer-3.8.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/3yfqc07jma4hn941ipxa43y2rz81l110-libbitcoin-explorer-3.8.0"
+        }
+      }
+    },
     "zig@latest": {
       "last_modified": "2024-03-22T11:26:23Z",
       "resolved": "github:NixOS/nixpkgs/a3ed7406349a9335cb4c2a71369b697cecd9d351#zig",

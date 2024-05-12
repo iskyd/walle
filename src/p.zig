@@ -6,9 +6,21 @@ const bip38 = @import("bip38/bip38.zig");
 const secp256k1 = @import("secp256k1/secp256k1.zig");
 const utils = @import("utils.zig");
 const Network = @import("const.zig").Network;
+const script = @import("script/script.zig");
+const address = @import("address/address.zig");
+
+const opcode = enum(u8) {
+    OP_FALSE = 0x66,
+    OP_NONE = 0x60,
+};
+
+fn f(x: opcode) void {
+    std.debug.print("{d}\n", .{@intFromEnum(x)});
+}
 
 pub fn main() !void {
     std.debug.print("WALL-E. Bitcoin Wallet written in Zig\n", .{});
+    f(opcode.OP_FALSE);
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -53,8 +65,8 @@ pub fn main() !void {
     const wpk = bip32.WifPrivateKey.fromPrivateKey(private.privatekey, Network.MAINNET, true);
     const wif = try bip32.toWif(wpk);
     std.debug.print("WIF: {s}\n", .{wif});
-    //const bip38key = try bip38.encrypt(allocator, private.privatekey, "password");
-    //std.debug.print("BIP 38 KEY: {s}\n", .{bip38key});
+    const bip38key = try bip38.encrypt(allocator, private.privatekey, "password");
+    std.debug.print("BIP 38 KEY: {s}\n", .{bip38key});
 
     //try bip38.decrypt(allocator, bip38key, "password");
 
@@ -65,15 +77,64 @@ pub fn main() !void {
     _ = try std.fmt.bufPrint(&hexpk, "{x}", .{std.fmt.fmtSliceHexLower(&epk.privatekey)});
     // try std.testing.expectEqualStrings(&hexpk, "b21fcb414b4414e9bcf7ae647a79a4d29280f6b71cba204cb4dd3d6c6568d0fc");
 
-    const encrypted = try bip38.encrypt(allocator, epk.privatekey, "password");
-    std.debug.print("BIP38 key {s}\n", .{encrypted});
+    // const encrypted = try bip38.encrypt(allocator, epk.privatekey, "password");
+    //std.debug.print("BIP38 key {s}\n", .{encrypted});
 
+    var bp: [32]u8 = undefined;
+    var pw: [8]u8 = "password".*;
+    const len = try utils.encodeutf8(&pw, &bp);
+    std.debug.print("bp encoded len {d}: {s}\n", .{ len, bp[0..len] });
     // _ = try bip32.fromWif(wif);
 
-    // const public: secp256k1.Point = bip32.generatePublicKey(private.privatekey);
-    // std.debug.print("#### Public key ####\n{}", .{public});
-    // const compressed = try public.toStrCompressed();
-    // std.debug.print("Compressed {s}\n", .{compressed});
+    const public = bip32.generatePublicKey(private.privatekey);
+    std.debug.print("#### Public key ####\n{}", .{public});
+    const compressed = try public.toStrCompressed();
+    std.debug.print("Compressed {s}\n", .{compressed});
+    //const uncompressed = try public.toStrUncompressed();
+    //std.debug.print("Uncompressed {s}\n", .{uncompressed});
+    const addr1 = try public.toHash();
+    var str_addr: [50]u8 = undefined;
+    _ = try std.fmt.bufPrint(&str_addr, "{x}", .{std.fmt.fmtSliceHexLower(&addr1)});
+    std.debug.print("#### Single sig Address: #### \n{s}\n", .{str_addr});
+
+    const uncompressed: [130]u8 = "04ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84c".*;
+    const s = try script.p2pk(allocator, &uncompressed);
+    defer s.deinit();
+
+    var scripthexbuf: [134]u8 = undefined;
+    //std.mem.copy(u8, scripthexbuf[0..130], s.stack.items[1].v[0..130]);
+    std.debug.print("hex script: {s}\n", .{s.stack.items[1].v[0..130]});
+    //std.debug.print("hex script: {s}\n", .{scripthexbuf});
+    try s.toHex(&scripthexbuf);
+    std.debug.print("hex script: {s}\n", .{scripthexbuf});
+
+    // MULTISIG
+    const private1 = private;
+    const private2 = epk;
+    const public1 = bip32.generatePublicKey(private1.privatekey);
+    const public2 = bip32.generatePublicKey(private2.privatekey);
+
+    std.debug.print("Public key 1 {d}, {d}, Public key 2 {d}, {d}", .{ public1.point.x, public1.point.y, public2.point.x, public2.point.y });
+    // p2ms
+    var p1: [130]u8 = "04cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4".*;
+    var p2: [130]u8 = "0461cbdcc5409fb4b4d42b51d33381354d80e550078cb532a34bfa2fcfdeb7d76519aecc62770f5b0e4ef8551946d8a540911abe3e7854a26f39f58b25c15342af".*;
+
+    var pubkeys: [2]bip32.PublicKey = [2]bip32.PublicKey{ public2, public1 };
+    _ = pubkeys;
+    var pubkyesstr: [2][]u8 = [2][]u8{ &p2, &p1 };
+
+    const script3 = try script.p2ms(allocator, &pubkyesstr, 1, 2);
+    defer script3.deinit();
+    var hexbuf3: [270]u8 = undefined;
+    try script3.toHex(&hexbuf3);
+    std.debug.print("hexbuf3 {s}\n", .{hexbuf3});
+
+    //var multisigaddr: [35]u8 = undefined;
+    //try bip32.deriveMultiSigAddress(allocator, &pubkeys, 1, 2, Network.REGTEST, &multisigaddr);
+    //std.debug.print("Multisig addr {s}\n", .{multisigaddr});
+
+    //var bp2pkh: [34]u8 = undefined;
+    //try address.deriveP2PKHAddress(public1, Network.MAINNET, &bp2pkh);
 
     // const address: [25]u8 = try bip32.deriveAddress(public);
     // var str_addr: [50]u8 = undefined;
@@ -97,4 +158,14 @@ pub fn main() !void {
     // const compressed_child = try child_public.publickey.toStrCompressed();
     // std.debug.print("#### Child ####\n{s}", .{child_public});
     // std.debug.print("Compressed {s}\n", .{compressed_child});
+
+    const ccc = "02e3af28965693b9ce1228f9d468149b831d6a0540b25e8a9900f71372c11fb277".*;
+    const v = try std.fmt.parseInt(u264, &ccc, 16);
+    var c: [33]u8 = @bitCast(@byteSwap(v));
+    const p = try secp256k1.uncompress(c);
+    const pk1 = bip32.PublicKey{ .point = p };
+    const addr = try pk1.toHash();
+    var str1_addr: [50]u8 = undefined;
+    _ = try std.fmt.bufPrint(&str1_addr, "{x}", .{std.fmt.fmtSliceHexLower(&addr)});
+    std.debug.print("#### Single sig Address: #### \n{s}\n", .{str1_addr});
 }

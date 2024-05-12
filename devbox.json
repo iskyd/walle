@@ -2,7 +2,8 @@
   "$schema": "https://raw.githubusercontent.com/jetpack-io/devbox/0.10.2/.schema/devbox.schema.json",
   "packages": [
     "zig@latest",
-    "zls@latest"
+    "zls@latest",
+    "libbitcoin-explorer@latest"
   ],
   "shell": {
     "init_hook": [

@@ -83,6 +83,25 @@ pub const PublicKey = struct {
         return address;
     }
 
+    // return bytes.
+    // It also adds prefix and checksum
+    pub fn toCompleteHash(self: PublicKey, n: Network) ![25]u8 {
+        const pkh = try self.toHash();
+        var pkwithprefix: [42]u8 = undefined;
+        _ = switch (n) {
+            Network.MAINNET => try std.fmt.bufPrint(&pkwithprefix, "00{x}", .{std.fmt.fmtSliceHexLower(&pkh)}),
+            else => _ = try std.fmt.bufPrint(&pkwithprefix, "6f{x}", .{std.fmt.fmtSliceHexLower(&pkh)}),
+        };
+        var b: [21]u8 = undefined;
+        _ = try std.fmt.hexToBytes(&b, &pkwithprefix);
+
+        const checksum = utils.calculateChecksum(&b);
+        var addr: [25]u8 = undefined;
+        std.mem.copy(u8, addr[0..21], b[0..]);
+        std.mem.copy(u8, addr[21..25], checksum[0..4]);
+        return addr;
+    }
+
     pub fn format(self: PublicKey, actual_fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = actual_fmt;
         _ = options;
