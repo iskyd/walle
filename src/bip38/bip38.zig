@@ -6,7 +6,7 @@ const utils = @import("../utils.zig");
 const addrlib = @import("../address/address.zig");
 
 const Network = @import("../const.zig").Network;
-const EC_MULTIPLY_FLAG_NO_PREFIX = [2]u8{ 0b00000001, 0b01000010 };
+const EC_NO_MULTIPLY_FLAG = [2]u8{ 0b00000001, 0b01000010 };
 const FLAG_BYTE = [1]u8{0b11100000};
 
 pub const DecryptError = error{
@@ -63,7 +63,7 @@ pub fn encrypt(allocator: std.mem.Allocator, privatekey: [32]u8, passphrase: []c
     ctx.encrypt(&encryptedhalf2, &block2);
 
     var encryptedpk: [43]u8 = undefined;
-    std.mem.copy(u8, encryptedpk[0..2], EC_MULTIPLY_FLAG_NO_PREFIX[0..2]);
+    std.mem.copy(u8, encryptedpk[0..2], EC_NO_MULTIPLY_FLAG[0..2]);
     std.mem.copy(u8, encryptedpk[2..3], FLAG_BYTE[0..]);
     std.mem.copy(u8, encryptedpk[3..7], &salt);
     std.mem.copy(u8, encryptedpk[7..23], &encryptedhalf1);
