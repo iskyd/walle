@@ -47,4 +47,17 @@ bitcoin-cli -rpcuser=walle -rpcpassword=password -rpcport=18443 getnewaddress
 ```
 
 
-
+### TODO
+- [x] BIP39 (Mnemonic generation)
+- [x] BIP32 (HD Wallets)
+- [ ] BIP32 (Serialized Extendend Private/Public Key https://learnmeabitcoin.com/technical/keys/hd-wallets/extended-keys/)
+- [x] BIP38 (Encrypting Bitcoin Private Key)
+- [x] P2PK and P2SH Address Generation (need to fix network)
+- [ ] Wallet files
+- [ ] ECDSA Signagures
+- [ ] Segwit
+- [ ] BTC Node integration
+- [ ] Wallet Sync
+- [ ] Transactions
+- [ ] CLI
+- [ ] Taproot
