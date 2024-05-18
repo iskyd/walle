@@ -29,6 +29,10 @@ See devbox.json
 ``` bash
 devbox shell
 ```
+Ensure that you installed the submodule by:
+```bash
+git submodule update --init
+```
 
 ### Bitcoin Node
 Use Dockerfile to run bitcoin node using bitcoin-core. node/bitcoin.conf can be used as bitcoin config to run regtest with rpcuser walle and pwd password.
