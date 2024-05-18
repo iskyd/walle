@@ -8,6 +8,7 @@ const Network = @import("../const.zig").Network;
 const script = @import("../script/script.zig");
 
 const PRIVATE_KEY_ADDRESS_VERSION = [4]u8{ 0b00000100, 0b10001000, 0b10101101, 0b11100100 };
+const PUBLIC_KEY_ADDRESS_VERSION = [4]u8{ 0b00000100, 0b10001000, 0b10110010, 0b00011110 };
 
 pub const ExtendedPrivateKey = struct {
     privatekey: [32]u8, // Private Key
@@ -134,6 +135,34 @@ pub const PublicKey = struct {
 
         const public_uncompressed = try self.toStrUncompressed();
         try writer.print("Public uncompressed key: {s}\n\n", .{public_uncompressed});
+    }
+};
+
+pub const ExtendedPublicKey = struct {
+    key: PublicKey,
+    chaincode: [32]u8,
+
+    pub fn serialize(self: ExtendedPublicKey, depth: u8, fingerprint: [4]u8, index: u32) ![82]u8 {
+        var indexBytes: [4]u8 = @bitCast(@byteSwap(index));
+        var res: [82]u8 = undefined;
+        std.mem.copy(u8, res[0..4], &PUBLIC_KEY_ADDRESS_VERSION);
+        res[4] = depth;
+        std.mem.copy(u8, res[5..9], &fingerprint);
+        std.mem.copy(u8, res[9..13], &indexBytes);
+        std.mem.copy(u8, res[13..45], &self.chaincode);
+        const compressed = try self.key.compress();
+        std.mem.copy(u8, res[45..78], &compressed);
+        const checksum = utils.calculateChecksum(res[0..78]);
+        std.mem.copy(u8, res[78..82], &checksum);
+
+        return res;
+    }
+
+    pub fn address(self: ExtendedPublicKey, depth: u8, fingerprint: [4]u8, index: u32) ![111]u8 {
+        const serialized = try self.serialize(depth, fingerprint, index);
+        var buffer: [111]u8 = undefined;
+        try utils.toBase58(&buffer, &serialized);
+        return buffer;
     }
 };
 
@@ -491,5 +520,49 @@ test "privateKeyAddress" {
     const base58 = try epk.address(5, fingerprint, 14);
 
     var expected = "xprvA35vcVznDBo4f5dPwVtqdFoqxXrADVyad5xb6Hk37pcExHa8z8xK9761jiWDkyAudCPVCbdqko4k2EUjSVcVz1xxkggfkULjGzWdnzG7zKf".*;
+    try std.testing.expectEqualStrings(&expected, &base58);
+}
+
+test "serializePublicKey" {
+    var pubkeystr = "0262e67fa65a016bd71defb6a161b3a0068a1e4582948654b30a77e1624ced3302".*;
+    var ccstr = "d1ca94c25198ce7cd330f8b8c2c1cc2a56a042837711a4143bef371934aa3bdf".*;
+    var cc: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&cc, &ccstr);
+
+    const v = try std.fmt.parseInt(u264, &pubkeystr, 16);
+    var c: [33]u8 = @bitCast(@byteSwap(v));
+    const p = try secp256k1.uncompress(c);
+    const pk = PublicKey{ .point = p };
+
+    const epk = ExtendedPublicKey{ .key = pk, .chaincode = cc };
+    var fingerprintstr = "024bd5de".*;
+    var fingerprint: [4]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&fingerprint, &fingerprintstr);
+    const serialized = try epk.serialize(3, fingerprint, 18);
+    var str: [164]u8 = undefined;
+    _ = try std.fmt.bufPrint(&str, "{x}", .{std.fmt.fmtSliceHexLower(&serialized)});
+
+    var expected = "0488b21e03024bd5de00000012d1ca94c25198ce7cd330f8b8c2c1cc2a56a042837711a4143bef371934aa3bdf0262e67fa65a016bd71defb6a161b3a0068a1e4582948654b30a77e1624ced3302c431f6fc".*;
+    try std.testing.expectEqualStrings(&expected, &str);
+}
+
+test "extendedPublicKeyAddress" {
+    var pubkeystr = "0262e67fa65a016bd71defb6a161b3a0068a1e4582948654b30a77e1624ced3302".*;
+    var ccstr = "d1ca94c25198ce7cd330f8b8c2c1cc2a56a042837711a4143bef371934aa3bdf".*;
+    var cc: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&cc, &ccstr);
+
+    const v = try std.fmt.parseInt(u264, &pubkeystr, 16);
+    var c: [33]u8 = @bitCast(@byteSwap(v));
+    const p = try secp256k1.uncompress(c);
+    const pk = PublicKey{ .point = p };
+
+    const epk = ExtendedPublicKey{ .key = pk, .chaincode = cc };
+    var fingerprintstr = "024bd5de".*;
+    var fingerprint: [4]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&fingerprint, &fingerprintstr);
+    const base58 = try epk.address(3, fingerprint, 18);
+
+    var expected = "xpub6BfkKmAArYaLxNUQE8d87QuhPwipqTykFJLMND7NgihE9GSo317PjazsLo2Ex2JmDmwXGyiB5K5nyx6n3rpW5oJc8TXXvEex6ipo9rrCUWw".*;
     try std.testing.expectEqualStrings(&expected, &base58);
 }
