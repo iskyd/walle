@@ -2,6 +2,9 @@ const std = @import("std");
 const utils = @import("../utils.zig");
 const assert = std.debug.assert;
 
+const builtin = @import("builtin");
+const wordseparator = if (builtin.os.tag == .windows) "\r\n" else "\n";
+
 pub const WordList = struct {
     allocator: std.mem.Allocator,
     path: []const u8,
@@ -17,7 +20,7 @@ pub const WordList = struct {
     }
 
     pub fn getWords(self: WordList) [2048][]const u8 {
-        var lines = std.mem.split(u8, self.data, "\n");
+        var lines = std.mem.split(u8, self.data, wordseparator);
         var words: [2048][]const u8 = undefined;
         var index: u16 = 0;
 
