@@ -14,10 +14,11 @@ pub const DecryptError = error{
     InvalidPassphraseError,
 };
 
-pub fn encrypt(allocator: std.mem.Allocator, privatekey: [32]u8, passphrase: []const u8) ![58]u8 {
+pub fn encrypt(allocator: std.mem.Allocator, privatekey: [32]u8, passphrase: []const u8, network: Network) ![58]u8 {
     const publickey = bip32.generatePublicKey(privatekey);
-    const b58addr = try addrlib.deriveP2PKHAddress(publickey, Network.MAINNET);
-    const salt = utils.calculateChecksum(&b58addr);
+    const addr = try addrlib.deriveP2PKHAddress(allocator, publickey, network);
+    defer addr.deinit();
+    const salt = utils.calculateChecksum(addr.val);
     var derived: [64]u8 = undefined;
     // ln is log2(N) where N=16384 as specified here https://en.bitcoin.it/wiki/BIP_0038
     const params = scrypt.Params{ .ln = 14, .r = 8, .p = 8 };
@@ -78,7 +79,7 @@ pub fn encrypt(allocator: std.mem.Allocator, privatekey: [32]u8, passphrase: []c
     return encoded;
 }
 
-pub fn decrypt(allocator: std.mem.Allocator, encoded: [58]u8, passphrase: []const u8) ![32]u8 {
+pub fn decrypt(allocator: std.mem.Allocator, encoded: [58]u8, passphrase: []const u8, network: Network) ![32]u8 {
     var encrypted: [43]u8 = undefined;
     try utils.fromBase58(&encoded, &encrypted);
     const checksum = encrypted[39..43];
@@ -136,8 +137,9 @@ pub fn decrypt(allocator: std.mem.Allocator, encoded: [58]u8, passphrase: []cons
     var pk: [32]u8 = undefined;
     _ = try std.fmt.hexToBytes(&pk, &pkstr);
     const publickey = bip32.generatePublicKey(pk);
-    const b58addr = try addrlib.deriveP2PKHAddress(publickey, Network.MAINNET);
-    const salt = utils.calculateChecksum(&b58addr);
+    const addr = try addrlib.deriveP2PKHAddress(allocator, publickey, network);
+    defer addr.deinit();
+    const salt = utils.calculateChecksum(addr.val);
     if (std.mem.eql(u8, addresshash, &salt) == false) {
         return error.InvalidPassphraseError;
     }
@@ -153,14 +155,14 @@ test "base58_encrypt" {
     _ = try std.fmt.hexToBytes(&chaincode, &hexchaincode);
     const epk = bip32.ExtendedPrivateKey{ .privatekey = pvk, .chaincode = chaincode };
     const allocator = std.testing.allocator;
-    const encrypted = try encrypt(allocator, epk.privatekey, "password");
+    const encrypted = try encrypt(allocator, epk.privatekey, "password", Network.MAINNET);
     try std.testing.expectEqualStrings("6PYNENTKYFjz3QpEufgZjX9XozWPy5bqvvwpG9xdPUM8pr16ziKxyJktDD", &encrypted);
 }
 
 test "decrypt" {
     const allocator = std.testing.allocator;
     const encrypted = "6PYNENTKYFjz3QpEufgZjX9XozWPy5bqvvwpG9xdPUM8pr16ziKxyJktDD".*;
-    const decryptedpk = try decrypt(allocator, encrypted, "password");
+    const decryptedpk = try decrypt(allocator, encrypted, "password", Network.MAINNET);
     var decryptedhexpk: [64]u8 = undefined;
     _ = try std.fmt.bufPrint(&decryptedhexpk, "{x}", .{std.fmt.fmtSliceHexLower(&decryptedpk)});
 

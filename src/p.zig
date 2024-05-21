@@ -65,10 +65,13 @@ pub fn main() !void {
     const wpk = bip32.WifPrivateKey.fromPrivateKey(private.privatekey, Network.MAINNET, true);
     const wif = try bip32.toWif(wpk);
     std.debug.print("WIF: {s}\n", .{wif});
-    const bip38key = try bip38.encrypt(allocator, private.privatekey, "password");
+    const bip38key = try bip38.encrypt(allocator, private.privatekey, "password", Network.MAINNET);
     std.debug.print("BIP 38 KEY: {s}\n", .{bip38key});
 
-    //try bip38.decrypt(allocator, bip38key, "password");
+    const bip38decrypted = try bip38.decrypt(allocator, bip38key, "password", Network.MAINNET);
+    var bip38decryptedhexpk: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&bip38decryptedhexpk, "{x}", .{std.fmt.fmtSliceHexLower(&bip38decrypted)});
+    std.debug.print("BIP 38 decrypoted key: {s}\n", .{bip38decryptedhexpk});
 
     const seed2 = [64]u8{ 0b10111000, 0b01110011, 0b00100001, 0b00101111, 0b10001000, 0b01011100, 0b11001111, 0b11111011, 0b11110100, 0b01101001, 0b00101010, 0b11111100, 0b10111000, 0b01001011, 0b11000010, 0b11100101, 0b01011000, 0b10000110, 0b11011110, 0b00101101, 0b11111010, 0b00000111, 0b11011001, 0b00001111, 0b01011100, 0b00111100, 0b00100011, 0b10011010, 0b10111100, 0b00110001, 0b11000000, 0b10100110, 0b11001110, 0b00000100, 0b01111110, 0b00110000, 0b11111101, 0b10001011, 0b11110110, 0b10100010, 0b10000001, 0b11100111, 0b00010011, 0b10001001, 0b10101010, 0b10000010, 0b11010111, 0b00111101, 0b11110111, 0b01001100, 0b01111011, 0b10111111, 0b10110011, 0b10110000, 0b01101011, 0b01000110, 0b00111001, 0b10100101, 0b11001110, 0b11100111, 0b01110101, 0b11001100, 0b11001101, 0b00111100 };
 

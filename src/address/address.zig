@@ -5,9 +5,26 @@ const script = @import("../script/script.zig");
 const PublicKey = @import("../bip32/bip32.zig").PublicKey;
 const ripemd = @import("../ripemd160/ripemd160.zig");
 
+pub const Address = struct {
+    val: []u8,
+    n: usize,
+    allocator: std.mem.Allocator,
+
+    pub fn init(allocator: std.mem.Allocator, comptime n: usize, val: [n]u8) !Address {
+        var s = try allocator.alloc(u8, n);
+        errdefer comptime unreachable; // From now on, no more error
+        std.mem.copy(u8, s[0..], &val);
+        return Address{ .allocator = allocator, .val = s, .n = n };
+    }
+
+    pub fn deinit(self: Address) void {
+        self.allocator.free(self.val);
+    }
+};
+
 // P2PK and P2MS do not have an address
 
-pub fn deriveP2PKHAddress(pk: PublicKey, n: Network) ![34]u8 {
+pub fn deriveP2PKHAddress(allocator: std.mem.Allocator, pk: PublicKey, n: Network) !Address {
     const pkh = try pk.toHash();
     var pkwithprefix: [42]u8 = undefined;
     _ = switch (n) {
@@ -17,17 +34,17 @@ pub fn deriveP2PKHAddress(pk: PublicKey, n: Network) ![34]u8 {
     var b: [21]u8 = undefined;
     _ = try std.fmt.hexToBytes(&b, &pkwithprefix);
 
-    var checksum: [32]u8 = utils.doubleSha256(&b);
+    var checksum: [4]u8 = utils.calculateChecksum(&b);
     var addr: [25]u8 = undefined;
     std.mem.copy(u8, addr[0..21], b[0..]);
-    std.mem.copy(u8, addr[21..25], checksum[0..4]);
+    std.mem.copy(u8, addr[21..25], &checksum);
 
     var base58addr: [34]u8 = undefined;
     try utils.toBase58(&base58addr, &addr);
-    return base58addr;
+    return try Address.init(allocator, 34, base58addr);
 }
 
-pub fn deriveP2SHAddress(allocator: std.mem.Allocator, s: script.Script, n: Network) ![34]u8 {
+pub fn deriveP2SHAddress(allocator: std.mem.Allocator, s: script.Script, n: Network) !Address {
     const cap = s.hexCapBytes();
     var bytes = try allocator.alloc(u8, cap);
     try s.toBytes(allocator, bytes);
@@ -46,24 +63,37 @@ pub fn deriveP2SHAddress(allocator: std.mem.Allocator, s: script.Script, n: Netw
     std.mem.copy(u8, addr[0..21], bytes_hashed[0..21]);
     std.mem.copy(u8, addr[21..], checksum[0..4]);
 
-    var base58addr: [34]u8 = undefined;
-    try utils.toBase58(&base58addr, &addr);
-
-    return base58addr;
+    return switch (n) {
+        Network.MAINNET => {
+            var base58addr: [34]u8 = undefined;
+            try utils.toBase58(&base58addr, &addr);
+            return try Address.init(allocator, 34, base58addr);
+        },
+        else => {
+            var base58addr: [35]u8 = undefined;
+            try utils.toBase58(&base58addr, &addr);
+            return try Address.init(allocator, 35, base58addr);
+        },
+    };
 }
 
 test "deriveP2PKHAddress" {
+    const allocator = std.testing.allocator;
     const secp256k1 = @import("../secp256k1/secp256k1.zig");
     const pubkeystr = "02e3af28965693b9ce1228f9d468149b831d6a0540b25e8a9900f71372c11fb277".*;
     const v = try std.fmt.parseInt(u264, &pubkeystr, 16);
     var c: [33]u8 = @bitCast(@byteSwap(v));
     const p = try secp256k1.uncompress(c);
     const pk = PublicKey{ .point = p };
-    const addr = try deriveP2PKHAddress(pk, Network.MAINNET);
-    try std.testing.expectEqualSlices(u8, "13mKVN2PVGYdNLSLG8egVXwnPFrSUtWCTE", &addr);
+    const addr = try deriveP2PKHAddress(allocator, pk, Network.MAINNET);
+    defer addr.deinit();
+    try std.testing.expectEqualSlices(u8, "13mKVN2PVGYdNLSLG8egVXwnPFrSUtWCTE", addr.val);
+    try std.testing.expectEqual(addr.n, 34);
 
-    const addr2 = try deriveP2PKHAddress(pk, Network.TESTNET);
-    try std.testing.expectEqualSlices(u8, "miHGnR7NJHyt9Suwyhd4KTA7FFT9S9Tc9H", &addr2);
+    const addr2 = try deriveP2PKHAddress(allocator, pk, Network.TESTNET);
+    defer addr2.deinit();
+    try std.testing.expectEqualSlices(u8, "miHGnR7NJHyt9Suwyhd4KTA7FFT9S9Tc9H", addr2.val);
+    try std.testing.expectEqual(addr2.n, 34);
 }
 
 test "deriveP2SHAddress" {
@@ -77,5 +107,12 @@ test "deriveP2SHAddress" {
 
     // bx script-to-address "1 [0461cbdcc5409fb4b4d42b51d33381354d80e550078cb532a34bfa2fcfdeb7d76519aecc62770f5b0e4ef8551946d8a540911abe3e7854a26f39f58b25c15342af] [04cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4] 2 checkmultisig" -> 3AkkzXdYcewc2ipTU4uUJxgmbGDmPQT6AU
     const addr = try deriveP2SHAddress(allocator, s, Network.MAINNET);
-    try std.testing.expectEqualSlices(u8, "3AkkzXdYcewc2ipTU4uUJxgmbGDmPQT6AU", &addr);
+    defer addr.deinit();
+    try std.testing.expectEqualSlices(u8, "3AkkzXdYcewc2ipTU4uUJxgmbGDmPQT6AU", addr.val);
+    try std.testing.expectEqual(addr.n, 34);
+
+    const addr2 = try deriveP2SHAddress(allocator, s, Network.TESTNET);
+    defer addr2.deinit();
+    try std.testing.expectEqualSlices(u8, "2N2Jy4GZaE7SxEWT19CXLvug2ocRw6CAD8U", addr2.val);
+    try std.testing.expectEqual(addr2.n, 35);
 }
