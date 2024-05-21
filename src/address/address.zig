@@ -104,23 +104,31 @@ test "deriveP2PKHAddress" {
     }
 }
 
-test "deriveP2SHAddress" {
+test "deriveP2SHAddressMultisig12" {
     const allocator = std.testing.allocator;
-    var p1: [130]u8 = "04cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4".*;
-    var p2: [130]u8 = "0461cbdcc5409fb4b4d42b51d33381354d80e550078cb532a34bfa2fcfdeb7d76519aecc62770f5b0e4ef8551946d8a540911abe3e7854a26f39f58b25c15342af".*;
 
-    var pubkeys: [2][]u8 = [2][]u8{ &p1, &p2 };
-    const s = try script.p2ms(allocator, &pubkeys, 1, 2);
-    defer s.deinit();
-
+    const keys = [3][2][130]u8{ [2][130]u8{ "04cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4".*, "0461cbdcc5409fb4b4d42b51d33381354d80e550078cb532a34bfa2fcfdeb7d76519aecc62770f5b0e4ef8551946d8a540911abe3e7854a26f39f58b25c15342af".* }, [2][130]u8{ "04735da896071d8292a365d37b1e1c3596ad61eb052a0a92d7ebe285e4c5f9cbde20597a0f9de445ed1d6588c164fca490af606d0eb66108c85011055a56736cbf".*, "04c5ca44f2b4dd43c2051450d51d9afc731a73155d200fef9b8e30a329335d7f203f0b39f040dd7d54a364031bd9cb6783813c7b8f14cb0de265eb8353cf638eec".* }, [2][130]u8{ "04754ed7ca6fa161f44829bb6cf952ad9ae36588c03984ab769149149bf257473c18d1fea3699bb1de6284f67dd2a2a19e2065d4bb90dd41d01c2ecf58dd378d1d".*, "049cd358094873ba0af34b9bb7dcaab1aab3f2e3269e08da46b88e951d2e147805f00e61ca552b5ef7979db97f7b8af97fab30f6911c30b8b25788d69c842d4d7e".* } };
     // bx script-to-address "1 [0461cbdcc5409fb4b4d42b51d33381354d80e550078cb532a34bfa2fcfdeb7d76519aecc62770f5b0e4ef8551946d8a540911abe3e7854a26f39f58b25c15342af] [04cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4] 2 checkmultisig" -> 3AkkzXdYcewc2ipTU4uUJxgmbGDmPQT6AU
-    const addr = try deriveP2SHAddress(allocator, s, Network.MAINNET);
-    defer addr.deinit();
-    try std.testing.expectEqualSlices(u8, "3AkkzXdYcewc2ipTU4uUJxgmbGDmPQT6AU", addr.val);
-    try std.testing.expectEqual(addr.n, 34);
+    const expected = [6][]u8{ @constCast("3AkkzXdYcewc2ipTU4uUJxgmbGDmPQT6AU"), @constCast("2N2Jy4GZaE7SxEWT19CXLvug2ocRw6CAD8U"), @constCast("38ck8FBoEkM7agXp75dhqQ7XCBKYHa7eju"), @constCast("2MzAxBz7prCrTnUAMnDFaTM6nQXXi5FwDR9"), @constCast("3EXMRm1JJjeGLBu7NcJFYHUSiPkea5CrZs"), @constCast("2N65ZVVwKvC9cXyXf3jv8AEThvjxpTTFE93") };
 
-    const addr2 = try deriveP2SHAddress(allocator, s, Network.TESTNET);
-    defer addr2.deinit();
-    try std.testing.expectEqualSlices(u8, "2N2Jy4GZaE7SxEWT19CXLvug2ocRw6CAD8U", addr2.val);
-    try std.testing.expectEqual(addr2.n, 35);
+    var i: u8 = 0;
+    for (keys) |k| {
+        const p1 = k[0];
+        const p2 = k[1];
+
+        var pubkeys: [2][]u8 = [2][]u8{ @constCast(&p1), @constCast(&p2) };
+        const s = try script.p2ms(allocator, &pubkeys, 1, 2);
+        defer s.deinit();
+
+        const addr = try deriveP2SHAddress(allocator, s, Network.MAINNET);
+        defer addr.deinit();
+        try std.testing.expectEqualSlices(u8, expected[i], addr.val);
+        try std.testing.expectEqual(addr.n, 34);
+        i += 1;
+        const addr2 = try deriveP2SHAddress(allocator, s, Network.TESTNET);
+        defer addr2.deinit();
+        try std.testing.expectEqualSlices(u8, expected[i], addr2.val);
+        try std.testing.expectEqual(addr2.n, 35);
+        i += 1;
+    }
 }
