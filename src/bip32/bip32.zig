@@ -50,6 +50,18 @@ pub const ExtendedPrivateKey = struct {
         return buffer;
     }
 
+    pub fn fromAddress(addr: [111]u8) !ExtendedPrivateKey {
+        var bytes: [82]u8 = undefined;
+        try utils.fromBase58(&addr, &bytes);
+        const chaincode: [32]u8 = bytes[13..45].*;
+        const pk: [32]u8 = bytes[46..78].*;
+        const checksum = utils.calculateChecksum(bytes[0..78]);
+        if (std.mem.eql(u8, &checksum, bytes[78..]) != true) {
+            return error.InvalidChecksum;
+        }
+        return ExtendedPrivateKey{ .privatekey = pk, .chaincode = chaincode };
+    }
+
     pub fn format(self: ExtendedPrivateKey, actual_fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = actual_fmt;
         _ = options;
@@ -129,6 +141,13 @@ pub const PublicKey = struct {
         return addr;
     }
 
+    pub fn fromStrCompressed(compressed: [66]u8) !PublicKey {
+        const v = try std.fmt.parseInt(u264, &compressed, 16);
+        var c: [33]u8 = @bitCast(@byteSwap(v));
+        const p = try secp256k1.uncompress(c);
+        return PublicKey{ .point = p };
+    }
+
     pub fn format(self: PublicKey, actual_fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = actual_fmt;
         _ = options;
@@ -163,6 +182,21 @@ pub const ExtendedPublicKey = struct {
         var buffer: [111]u8 = undefined;
         try utils.toBase58(&buffer, &serialized);
         return buffer;
+    }
+
+    pub fn fromAddress(addr: [111]u8) !ExtendedPublicKey {
+        var bytes: [82]u8 = undefined;
+        try utils.fromBase58(&addr, &bytes);
+        const chaincode: [32]u8 = bytes[13..45].*;
+        const compressed: [33]u8 = bytes[45..78].*;
+        const checksum = utils.calculateChecksum(bytes[0..78]);
+        if (std.mem.eql(u8, &checksum, bytes[78..]) != true) {
+            return error.InvalidChecksum;
+        }
+        var strcompressed: [66]u8 = undefined;
+        _ = try std.fmt.bufPrint(&strcompressed, "{x}", .{std.fmt.fmtSliceHexLower(compressed[0..])});
+        const pk = try PublicKey.fromStrCompressed(strcompressed);
+        return ExtendedPublicKey{ .key = pk, .chaincode = chaincode };
     }
 };
 
@@ -241,17 +275,17 @@ pub fn deriveChildFromExtendedPrivateKey(epk: ExtendedPrivateKey, index: u32) !E
     };
 }
 
-pub fn deriveChildFromExtendedPublicKey(pk: PublicKey, chaincode: [32]u8, index: u32) !PublicKey {
+pub fn deriveChildFromExtendedPublicKey(pk: ExtendedPublicKey, index: u32) !ExtendedPublicKey {
     assert(index >= 0);
     assert(index <= 2147483647);
     const index_bytes: [4]u8 = @bitCast(index);
-    const compressed: [33]u8 = try pk.compress();
+    const compressed: [33]u8 = try pk.key.compress();
     const data: [37]u8 = compressed ++ index_bytes;
 
     var buffer: [74]u8 = undefined;
     _ = try std.fmt.bufPrint(&buffer, "{x}", .{std.fmt.fmtSliceHexLower(&data)});
     var buffer_chaincode: [64]u8 = undefined;
-    _ = try std.fmt.bufPrint(&buffer_chaincode, "{x}", .{std.fmt.fmtSliceHexLower(&chaincode)});
+    _ = try std.fmt.bufPrint(&buffer_chaincode, "{x}", .{std.fmt.fmtSliceHexLower(&pk.chaincode)});
 
     var bytes: [37]u8 = undefined;
     _ = try std.fmt.hexToBytes(&bytes, &buffer);
@@ -264,14 +298,14 @@ pub fn deriveChildFromExtendedPublicKey(pk: PublicKey, chaincode: [32]u8, index:
     const random: u256 = std.mem.readIntBig(u256, I[0..32]);
     var point_hmac: secp256k1.Point = secp256k1.Point{ .x = secp256k1.BASE_POINT.x, .y = secp256k1.BASE_POINT.y };
     point_hmac.multiply(random);
-    var public: secp256k1.Point = secp256k1.Point{ .x = pk.point.x, .y = pk.point.y };
+    var public: secp256k1.Point = secp256k1.Point{ .x = pk.key.point.x, .y = pk.key.point.y };
     public.add(point_hmac);
 
-    return PublicKey{ .point = public };
+    return ExtendedPublicKey{ .key = PublicKey{ .point = public }, .chaincode = I[32..].* };
 }
 
 pub fn deriveHardenedChild(epk: ExtendedPrivateKey, index: u32) !ExtendedPrivateKey {
-    assert(index >= 2147483647);
+    assert(index >= 2147483648);
     assert(index <= 4294967295);
     const prefix: [1]u8 = [1]u8{0b00000000};
     const index_bytes: [4]u8 = @bitCast(@byteSwap(index));
@@ -362,7 +396,7 @@ test "generateExtendedMasterPrivateKey" {
     try std.testing.expectEqualSlices(u8, "b21fcb414b4414e9bcf7ae647a79a4d29280f6b71cba204cb4dd3d6c6568d0fc", &str);
     try std.testing.expectEqualSlices(u8, "bbb5f26acee2e3713d43cf4e702f2b1ff8672afa9e0d5ac846196689e1d893d2", &str2);
 }
-
+//
 test "generatePublicKey" {
     const seed = [64]u8{ 0b10111000, 0b01110011, 0b00100001, 0b00101111, 0b10001000, 0b01011100, 0b11001111, 0b11111011, 0b11110100, 0b01101001, 0b00101010, 0b11111100, 0b10111000, 0b01001011, 0b11000010, 0b11100101, 0b01011000, 0b10000110, 0b11011110, 0b00101101, 0b11111010, 0b00000111, 0b11011001, 0b00001111, 0b01011100, 0b00111100, 0b00100011, 0b10011010, 0b10111100, 0b00110001, 0b11000000, 0b10100110, 0b11001110, 0b00000100, 0b01111110, 0b00110000, 0b11111101, 0b10001011, 0b11110110, 0b10100010, 0b10000001, 0b11100111, 0b00010011, 0b10001001, 0b10101010, 0b10000010, 0b11010111, 0b00111101, 0b11110111, 0b01001100, 0b01111011, 0b10111111, 0b10110011, 0b10110000, 0b01101011, 0b01000110, 0b00111001, 0b10100101, 0b11001110, 0b11100111, 0b01110101, 0b11001100, 0b11001101, 0b00111100 };
     const epk: ExtendedPrivateKey = generateExtendedMasterPrivateKey(seed);
@@ -373,37 +407,42 @@ test "generatePublicKey" {
 }
 
 test "deriveChildFromExtendedPrivateKey" {
-    const seed = [64]u8{ 0b10111000, 0b01110011, 0b00100001, 0b00101111, 0b10001000, 0b01011100, 0b11001111, 0b11111011, 0b11110100, 0b01101001, 0b00101010, 0b11111100, 0b10111000, 0b01001011, 0b11000010, 0b11100101, 0b01011000, 0b10000110, 0b11011110, 0b00101101, 0b11111010, 0b00000111, 0b11011001, 0b00001111, 0b01011100, 0b00111100, 0b00100011, 0b10011010, 0b10111100, 0b00110001, 0b11000000, 0b10100110, 0b11001110, 0b00000100, 0b01111110, 0b00110000, 0b11111101, 0b10001011, 0b11110110, 0b10100010, 0b10000001, 0b11100111, 0b00010011, 0b10001001, 0b10101010, 0b10000010, 0b11010111, 0b00111101, 0b11110111, 0b01001100, 0b01111011, 0b10111111, 0b10110011, 0b10110000, 0b01101011, 0b01000110, 0b00111001, 0b10100101, 0b11001110, 0b11100111, 0b01110101, 0b11001100, 0b11001101, 0b00111100 };
-    const epk: ExtendedPrivateKey = generateExtendedMasterPrivateKey(seed);
-
+    const seedhex = "fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542".*;
+    var seed: [64]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&seed, &seedhex);
+    const epk = generateExtendedMasterPrivateKey(seed);
     const child = try deriveChildFromExtendedPrivateKey(epk, 0);
-    const str: [64]u8 = try child.toStrPrivate();
-    const str2: [64]u8 = try child.toStrChainCode();
 
-    try std.testing.expectEqualSlices(u8, "f13967de2c2ef9341f1336ab3cb6ff43c2b7b9166e23019ad216e0eba47c4d1d", &str);
-    try std.testing.expectEqualSlices(u8, "a9a319ef6f8f4b0a04513ee111f7683c2d74be1fab6c01bd6c937b985aa60100", &str2);
+    const expectedprivatekeyaddr = "xprv9vHkqa6EV4sPZHYqZznhT2NPtPCjKuDKGY38FBWLvgaDx45zo9WQRUT3dKYnjwih2yJD9mkrocEZXo1ex8G81dwSM1fwqWpWkeS3v86pgKt".*;
+    const expectedprivate = try ExtendedPrivateKey.fromAddress(expectedprivatekeyaddr);
+    try std.testing.expectEqualSlices(u8, &expectedprivate.privatekey, &child.privatekey);
 }
 
 test "deriveChildFromExtendedPublicKey" {
-    const seed = [64]u8{ 0b10111000, 0b01110011, 0b00100001, 0b00101111, 0b10001000, 0b01011100, 0b11001111, 0b11111011, 0b11110100, 0b01101001, 0b00101010, 0b11111100, 0b10111000, 0b01001011, 0b11000010, 0b11100101, 0b01011000, 0b10000110, 0b11011110, 0b00101101, 0b11111010, 0b00000111, 0b11011001, 0b00001111, 0b01011100, 0b00111100, 0b00100011, 0b10011010, 0b10111100, 0b00110001, 0b11000000, 0b10100110, 0b11001110, 0b00000100, 0b01111110, 0b00110000, 0b11111101, 0b10001011, 0b11110110, 0b10100010, 0b10000001, 0b11100111, 0b00010011, 0b10001001, 0b10101010, 0b10000010, 0b11010111, 0b00111101, 0b11110111, 0b01001100, 0b01111011, 0b10111111, 0b10110011, 0b10110000, 0b01101011, 0b01000110, 0b00111001, 0b10100101, 0b11001110, 0b11100111, 0b01110101, 0b11001100, 0b11001101, 0b00111100 };
-    const epk: ExtendedPrivateKey = generateExtendedMasterPrivateKey(seed);
+    const seedhex = "81a79e3c7df2fc3376b087b5d5db952eb3c29eaf958b73aaad4ebc9eedb29e55abd8880457171d73ee4adeeaa3950812e6d1d935202f4ecc4aa62d8974665bcf".*;
+    var seed: [64]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&seed, &seedhex);
+    const epk = generateExtendedMasterPrivateKey(seed);
     const public = generatePublicKey(epk.privatekey);
+    const extendedpublic = ExtendedPublicKey{ .key = public, .chaincode = epk.chaincode };
+    const extendedchild = try deriveChildFromExtendedPublicKey(extendedpublic, 0);
+    const expectedPublicAddr = "xpub6812wt8cXaNNpj6dn1q7cYvhyyyYHAECx3Dx1vZYtJS9Ts5gz2BsmgBVxnbwg3g6vrZJSWJuBSmVSyyMwMKYRohB6WxCCnACY97JAF7AshB".*;
+    const expectedpublic = try ExtendedPublicKey.fromAddress(expectedPublicAddr);
 
-    const child = try deriveChildFromExtendedPublicKey(public, epk.chaincode, 0);
-    const str: [66]u8 = try child.toStrCompressed();
-
-    try std.testing.expectEqualSlices(u8, "03a11a24457b5ca09618ba5bf3c50529afda0d533599eaeff942e17894ffcbb1cf", &str);
+    try std.testing.expectEqual(extendedchild.key.point, expectedpublic.key.point);
+    try std.testing.expectEqualSlices(u8, &extendedchild.chaincode, &expectedpublic.chaincode);
 }
 
 test "deriveHardenedChild" {
-    const seed = [64]u8{ 0b10111000, 0b01110011, 0b00100001, 0b00101111, 0b10001000, 0b01011100, 0b11001111, 0b11111011, 0b11110100, 0b01101001, 0b00101010, 0b11111100, 0b10111000, 0b01001011, 0b11000010, 0b11100101, 0b01011000, 0b10000110, 0b11011110, 0b00101101, 0b11111010, 0b00000111, 0b11011001, 0b00001111, 0b01011100, 0b00111100, 0b00100011, 0b10011010, 0b10111100, 0b00110001, 0b11000000, 0b10100110, 0b11001110, 0b00000100, 0b01111110, 0b00110000, 0b11111101, 0b10001011, 0b11110110, 0b10100010, 0b10000001, 0b11100111, 0b00010011, 0b10001001, 0b10101010, 0b10000010, 0b11010111, 0b00111101, 0b11110111, 0b01001100, 0b01111011, 0b10111111, 0b10110011, 0b10110000, 0b01101011, 0b01000110, 0b00111001, 0b10100101, 0b11001110, 0b11100111, 0b01110101, 0b11001100, 0b11001101, 0b00111100 };
-    const epk: ExtendedPrivateKey = generateExtendedMasterPrivateKey(seed);
-    const child = try deriveHardenedChild(epk, 2147483648);
+    const seedhex = "fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542".*;
+    var seed: [64]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&seed, &seedhex);
+    const epk = generateExtendedMasterPrivateKey(seed);
+    const child = try deriveHardenedChild(epk, 2147483648); // 0'
+    const expectedprivatekeyaddr = "xprv9vHkqa6NpjQMiZJLz4sFbVqYk7EXEUrWBd8drQZCp4furXS13egriq1pr2ncv2UBok3GifpitiQfp9kxNitz2RXbwtAo8hiv4CieaLTHyRL".*;
+    const expectedprivate = try ExtendedPrivateKey.fromAddress(expectedprivatekeyaddr);
 
-    const str: [64]u8 = try child.toStrPrivate();
-    const str2: [64]u8 = try child.toStrChainCode();
-    try std.testing.expectEqualSlices(u8, "7f03ba6e108da0292e289c308dc716d12334c949384f1dfe9fb5b17389b63297", &str);
-    try std.testing.expectEqualSlices(u8, "cc7b21c95d472561a2092d48c65a0d1e68b772a0e89db188fbe8cbd49dc78bdf", &str2);
+    try std.testing.expectEqualSlices(u8, &expectedprivate.privatekey, &child.privatekey);
 }
 
 test "toWif" {
@@ -523,6 +562,20 @@ test "privateKeyAddress" {
     try std.testing.expectEqualStrings(&expected, &base58);
 }
 
+test "extendedPrivateKeyFromAddress" {
+    const addr = "xprvA35vcVznDBo4f5dPwVtqdFoqxXrADVyad5xb6Hk37pcExHa8z8xK9761jiWDkyAudCPVCbdqko4k2EUjSVcVz1xxkggfkULjGzWdnzG7zKf".*;
+    const expected = "1205ace2508d2b0376a6826c6b2a0f4573fb926a432d4ae3f9e6976fc566afd5".*;
+    const expectedchaincode = "7d44cde0cdd0423cfa61fc4ac0e371fa6eba38e6fe5081eca5fcf4ae934a26d3".*;
+    const epk = try ExtendedPrivateKey.fromAddress(addr);
+    var strprivatekey: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&strprivatekey, "{x}", .{std.fmt.fmtSliceHexLower(&epk.privatekey)});
+    var strchaincode: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&strchaincode, "{x}", .{std.fmt.fmtSliceHexLower(&epk.chaincode)});
+
+    try std.testing.expectEqualStrings(&expected, &strprivatekey);
+    try std.testing.expectEqualStrings(&expectedchaincode, &strchaincode);
+}
+
 test "serializePublicKey" {
     var pubkeystr = "0262e67fa65a016bd71defb6a161b3a0068a1e4582948654b30a77e1624ced3302".*;
     var ccstr = "d1ca94c25198ce7cd330f8b8c2c1cc2a56a042837711a4143bef371934aa3bdf".*;
@@ -563,6 +616,52 @@ test "extendedPublicKeyAddress" {
     _ = try std.fmt.hexToBytes(&fingerprint, &fingerprintstr);
     const base58 = try epk.address(3, fingerprint, 18);
 
-    var expected = "xpub6BfkKmAArYaLxNUQE8d87QuhPwipqTykFJLMND7NgihE9GSo317PjazsLo2Ex2JmDmwXGyiB5K5nyx6n3rpW5oJc8TXXvEex6ipo9rrCUWw".*;
+    const expected = "xpub6BfkKmAArYaLxNUQE8d87QuhPwipqTykFJLMND7NgihE9GSo317PjazsLo2Ex2JmDmwXGyiB5K5nyx6n3rpW5oJc8TXXvEex6ipo9rrCUWw".*;
     try std.testing.expectEqualStrings(&expected, &base58);
 }
+
+test "extendedPublicKeyFromAddress" {
+    const addr = "xpub6BfkKmAArYaLxNUQE8d87QuhPwipqTykFJLMND7NgihE9GSo317PjazsLo2Ex2JmDmwXGyiB5K5nyx6n3rpW5oJc8TXXvEex6ipo9rrCUWw".*;
+    const expected = "0262e67fa65a016bd71defb6a161b3a0068a1e4582948654b30a77e1624ced3302".*;
+    const epk = try ExtendedPublicKey.fromAddress(addr);
+    const strcompressed = try epk.key.toStrCompressed();
+    try std.testing.expectEqualStrings(&expected, &strcompressed);
+}
+
+test "test" {
+    const seedhex = "81a79e3c7df2fc3376b087b5d5db952eb3c29eaf958b73aaad4ebc9eedb29e55abd8880457171d73ee4adeeaa3950812e6d1d935202f4ecc4aa62d8974665bcf".*;
+    var seed: [64]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&seed, &seedhex);
+    const epk = generateExtendedMasterPrivateKey(seed);
+    // 0488b21e010f552ae9800000006c92ad75d329458edc9cb4da94119b2b81be73c3307faa05139c4804361d493d03f6ff408f069de24fe02354f0d4a472b6d327f78769740b847e6f3131db71a6bb37fb216f
+    const expectedpublicaddress = "xpub6812wt8ksEuM1YAtmVThkjdt1MkD6J46AAVrqHrYQkZTtGjaP5ozvajBCHCtnaZeV9M71UcSsxGFFnRaWMfP2yc8BKMdfCZiitUkh5Zaq3L".*;
+    const expectedpublic = try ExtendedPublicKey.fromAddress(expectedpublicaddress);
+
+    const d = try deriveHardenedChild(epk, 2147483648);
+    const p = generatePublicKey(d.privatekey);
+
+    const expectedstrcompressed = try expectedpublic.key.toStrCompressed();
+    const strcompressed = try p.toStrCompressed();
+
+    try std.testing.expectEqualStrings(&strcompressed, &expectedstrcompressed);
+    // try std.testing.expectEqual(expectedpublic.key.comp, p.point);
+}
+
+//test "test2" {
+//    const seedhex = "81a79e3c7df2fc3376b087b5d5db952eb3c29eaf958b73aaad4ebc9eedb29e55abd8880457171d73ee4adeeaa3950812e6d1d935202f4ecc4aa62d8974665bcf".*;
+//    var seed: [64]u8 = undefined;
+//    _ = try std.fmt.hexToBytes(&seed, &seedhex);
+//    const epk = generateExtendedMasterPrivateKey(seed);
+//    // 0488b21e010f552ae9800000006c92ad75d329458edc9cb4da94119b2b81be73c3307faa05139c4804361d493d03f6ff408f069de24fe02354f0d4a472b6d327f78769740b847e6f3131db71a6bb37fb216f
+//    const expectedpublicaddress = "xpub6812wt8cXaNNpj6dn1q7cYvhyyyYHAECx3Dx1vZYtJS9Ts5gz2BsmgBVxnbwg3g6vrZJSWJuBSmVSyyMwMKYRohB6WxCCnACY97JAF7AshB".*;
+//    const expectedpublic = try ExtendedPublicKey.fromAddress(expectedpublicaddress);
+//
+//    const d = try deriveChildFromExtendedPrivateKey(epk, 0);
+//    const p = generatePublicKey(d.privatekey);
+//
+//    const expectedstrcompressed = try expectedpublic.key.toStrCompressed();
+//    const strcompressed = try p.toStrCompressed();
+//
+//    try std.testing.expectEqualStrings(&strcompressed, &expectedstrcompressed);
+//    // try std.testing.expectEqual(expectedpublic.key.comp, p.point);
+//}
