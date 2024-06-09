@@ -142,7 +142,7 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
     const marker = bytes[4]; // used to indicate segwit tx. Must be 00
     const flag = bytes[5]; // used to indicate segwit tx. Must be gte 01
 
-    const l = bytes[bytes.len - 5 ..][0..4].*;
+    const l = bytes[bytes.len - 4 ..][0..4].*;
     const locktime = std.mem.readIntLittle(u32, &l);
 
     var transaction = Transaction.init(allocator, version, locktime, marker, flag);
@@ -233,7 +233,7 @@ test "createTx" {
     try std.testing.expectError(TxError.AmountTooLowError, createTx(&outputs, 31000));
 }
 
-test "decodeRawTx" {
+test "decodeRawTxCoinbase" {
     const allocator = std.testing.allocator;
     var raw: [334]u8 = "020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff025100ffffffff0200f2052a01000000160014dd3d4b7d821d44331e31a818d15f583302e8e1c00000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000".*;
     const tx = try decodeRawTx(allocator, &raw);
@@ -259,4 +259,41 @@ test "decodeRawTx" {
     try std.testing.expectEqual(tx.witness.items.len, 1);
     var expectedWitness = "0000000000000000000000000000000000000000000000000000000000000000".*;
     try std.testing.expectEqualStrings(&expectedWitness, tx.witness.items[0].item);
+}
+
+test "decodeRawTxSimple" {
+    const allocator = std.testing.allocator;
+    var raw: [1036]u8 = "02000000000103c0483c7c93aaefd5ee008cbec6f114d45d7502ffd8c427e9aac13eec327486730000000000fdffffffdaf971319fa0477b53ea4890c647c755c9a0021265f9fc3661ef0c4b7db6ef330000000000fdffffff01bb0ca2b5819c7b6a173cd36b8807d0809cc8bd3f9d5189a354e51b9f9337b00000000000fdffffff0200e40b54020000001600147218978afd7fd9270bae7595399b6bc1986e7a4eecf0052a01000000160014009724e4053330c337bb803eca1007146282124602473044022034141a0bc3da3adfa9162a8ab8f64eed52c94e7cdbc1aa49b0c1bf699c807b2c022015ff3eed0047ab1a202edd89d49cc9a144abeb20a89ff594b7fc50ca723e28870121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4024730440220571285fdbac00b8828883744503ae30bf846fdab3fa197f843f74ec8b6c8627602206a9aa3a646f5a67f62c04f8a181a63f5d4db37ae4e69af5e7f6912b60170bd9b0121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a40247304402206d542feca659eed9a470867e1d820b372f434d2a72688143fe68c4c66671a5e50220782b0bd5884d220a537bf86b438cd40eee0a58d08151eb1757e33286658a86110121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4c8000000".*;
+    const tx = try decodeRawTx(allocator, &raw);
+    defer tx.deinit();
+    try std.testing.expectEqual(tx.version, 2);
+    try std.testing.expectEqual(tx.marker, 0);
+    try std.testing.expectEqual(tx.flag, 1);
+    try std.testing.expectEqual(tx.locktime, 200);
+    try std.testing.expectEqual(tx.vin.items.len, 3);
+    try std.testing.expectEqual(tx.vout.items.len, 2);
+    try std.testing.expectEqual(tx.witness.items.len, 2);
+
+    const expectedTxIn1 = "c0483c7c93aaefd5ee008cbec6f114d45d7502ffd8c427e9aac13eec32748673".*;
+    try std.testing.expectEqualStrings(&expectedTxIn1, &tx.vin.items[0].prevout.?.txid);
+
+    const expectedTxIn2 = "daf971319fa0477b53ea4890c647c755c9a0021265f9fc3661ef0c4b7db6ef33".*;
+    try std.testing.expectEqualStrings(&expectedTxIn2, &tx.vin.items[1].prevout.?.txid);
+
+    const expectedTxIn3 = "01bb0ca2b5819c7b6a173cd36b8807d0809cc8bd3f9d5189a354e51b9f9337b0".*;
+    try std.testing.expectEqualStrings(&expectedTxIn3, &tx.vin.items[2].prevout.?.txid);
+
+    try std.testing.expectEqual(tx.vout.items[0].amount, 10000000000);
+    const expectedPubkey1 = "00147218978afd7fd9270bae7595399b6bc1986e7a4e".*;
+    try std.testing.expectEqualStrings(&expectedPubkey1, tx.vout.items[0].script_pubkey);
+
+    try std.testing.expectEqual(tx.vout.items[1].amount, 4999999724);
+    const expectedPubkey2 = "0014009724e4053330c337bb803eca10071462821246".*;
+    try std.testing.expectEqualStrings(&expectedPubkey2, tx.vout.items[1].script_pubkey);
+
+    //const expectedWitness1 = "3044022034141a0bc3da3adfa9162a8ab8f64eed52c94e7cdbc1aa49b0c1bf699c807b2c022015ff3eed0047ab1a202edd89d49cc9a144abeb20a89ff594b7fc50ca723e288701".*;
+    //try std.testing.expectEqualStrings(&expectedWitness1, tx.witness.items[0].item);
+    //
+    //const expectedWitness2 = "30440220571285fdbac00b8828883744503ae30bf846fdab3fa197f843f74ec8b6c8627602206a9aa3a646f5a67f62c04f8a181a63f5d4db37ae4e69af5e7f6912b60170bd9b01".*;
+    //try std.testing.expectEqualStrings(&expectedWitness2, tx.witness.items[1].item);
 }
