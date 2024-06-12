@@ -4,6 +4,11 @@ const base58 = @import("base58");
 const unicode = std.unicode;
 const ripemd = @import("ripemd160/ripemd160.zig");
 
+pub const CompactSize = struct {
+    totalBytes: u8,
+    n: u64,
+};
+
 pub fn intToHexStr(comptime T: type, data: T, buffer: []u8) !void {
     // Number of characters to represent data in hex
     // log16(data) + 1
@@ -18,6 +23,11 @@ pub fn intToHexStr(comptime T: type, data: T, buffer: []u8) !void {
 pub fn toBase58(buffer: []u8, bytes: []const u8) !void {
     const encoder = base58.Encoder.init(.{});
     _ = try encoder.encode(bytes, buffer);
+}
+
+pub fn toBase58Allocator(allocator: std.mem.Allocator, bytes: []const u8) ![]u8 {
+    const encoder = base58.Encoder.init(.{});
+    return try encoder.encodeAlloc(allocator, bytes);
 }
 
 pub fn fromBase58(encoded: []const u8, buffer: []u8) !void {
@@ -71,6 +81,24 @@ pub fn encodeutf8(in: []const u8, buffer: []u8) !u16 {
         cur += len;
     }
     return cur;
+}
+
+pub fn calculateCompactSize(v: []u8) CompactSize {
+    return switch (v[0]) {
+        0...252 => CompactSize{ .totalBytes = 1, .n = v[0] },
+        253 => {
+            const n = std.mem.readIntBig(u16, v[1..3]);
+            return CompactSize{ .totalBytes = 3, .n = n };
+        },
+        254 => {
+            const n = std.mem.readIntBig(u32, v[1..5]);
+            return CompactSize{ .totalBytes = 5, .n = n };
+        },
+        255 => {
+            const n = std.mem.readIntBig(u64, v[1..9]);
+            return CompactSize{ .totalBytes = 9, .n = n };
+        },
+    };
 }
 
 test "intToHexStr" {

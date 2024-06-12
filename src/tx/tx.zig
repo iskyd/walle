@@ -1,5 +1,6 @@
 const std = @import("std");
 const script = @import("../script/script.zig");
+const utils = @import("../utils.zig");
 
 const TxError = error{
     AmountTooLowError,
@@ -49,19 +50,41 @@ const TxOutput = struct {
     }
 };
 
-pub const TxWitness = struct {
+pub const WitnessItem = struct {
     allocator: std.mem.Allocator,
     item: []const u8,
 
     // item in bytes
-    pub fn init(allocator: std.mem.Allocator, item: []const u8) !TxWitness {
+    pub fn init(allocator: std.mem.Allocator, item: []const u8) !WitnessItem {
         var itemhex = try allocator.alloc(u8, item.len * 2);
         _ = try std.fmt.bufPrint(itemhex, "{x}", .{std.fmt.fmtSliceHexLower(item)});
-        return TxWitness{ .allocator = allocator, .item = itemhex };
+        return WitnessItem{ .allocator = allocator, .item = itemhex };
+    }
+
+    pub fn deinit(self: WitnessItem) void {
+        self.allocator.free(self.item);
+    }
+};
+
+pub const TxWitness = struct {
+    allocator: std.mem.Allocator,
+    stackitems: std.ArrayList(WitnessItem),
+
+    pub fn init(allocator: std.mem.Allocator) TxWitness {
+        return TxWitness{ .allocator = allocator, .stackitems = std.ArrayList(WitnessItem).init(allocator) };
     }
 
     pub fn deinit(self: TxWitness) void {
-        self.allocator.free(self.item);
+        for (self.stackitems.items) |i| {
+            i.deinit();
+        }
+        self.stackitems.deinit();
+    }
+
+    // Item in byte
+    pub fn addItem(self: *TxWitness, item: []const u8) !void {
+        const witnessitem = try WitnessItem.init(self.allocator, item);
+        try self.stackitems.append(witnessitem);
     }
 };
 
@@ -147,18 +170,16 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
 
     var transaction = Transaction.init(allocator, version, locktime, marker, flag);
 
-    // Compat Size
+    // Compact Size
     // This byte indicates which bytes encode the integer representing the numbers of inputs.
     // <= FC then this byte, FD then the next two bytes, FE the next four bytes, FF the next eight bytes.
-    // ATM just using this bytes as byte count
-    // TODO: add the other scenario
-    const ci = bytes[6];
-    var currentByte: u32 = 7;
-    for (0..ci) |i| {
+    // Compact Size Input
+    const csi = utils.calculateCompactSize(bytes[6..15]);
+    var currentByte: u64 = 6 + csi.totalBytes;
+    for (0..csi.n) |_| {
         const txid = bytes[currentByte .. currentByte + 32];
         var txidhex: [64]u8 = undefined;
         _ = try std.fmt.bufPrint(&txidhex, "{x}", .{std.fmt.fmtSliceHexLower(txid)});
-        _ = i;
         currentByte += 32;
         const vo: [4]u8 = bytes[currentByte .. currentByte + 4][0..4].*;
         const vout = std.mem.readIntLittle(u32, &vo);
@@ -176,11 +197,10 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
         try transaction.addInput(input);
     }
 
-    // Compat size, same as ic
-    const oc = bytes[currentByte];
-    currentByte += 1;
-    for (0..oc) |i| {
-        _ = i;
+    // Compat size output
+    const cso = utils.calculateCompactSize(bytes[currentByte .. currentByte + 9]);
+    currentByte += cso.totalBytes;
+    for (0..cso.n) |_| {
         const a = bytes[currentByte .. currentByte + 8][0..8].*;
         currentByte += 8;
         const amount = std.mem.readIntLittle(u64, &a);
@@ -192,16 +212,21 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
         try transaction.addOutput(output);
     }
 
-    // Compat size, same as ic and oc
-    const stackitems = bytes[currentByte];
-    currentByte += 1;
-    for (0..stackitems) |i| {
-        _ = i;
-        const size = bytes[currentByte];
-        currentByte += 1;
-        const item = bytes[currentByte .. currentByte + size];
-        currentByte += size;
-        const witness = try TxWitness.init(allocator, item);
+    // 1 witness for every input
+    for (0..csi.n) |_| {
+        // Compat size, same as ic and oc
+        var witness = TxWitness.init(allocator);
+        // compact size stack items
+        const cssi = utils.calculateCompactSize(bytes[currentByte .. currentByte + 9]);
+        currentByte += cssi.totalBytes;
+        for (0..cssi.n) |_| {
+            // compact size item
+            const s = utils.calculateCompactSize(bytes[currentByte .. currentByte + 9]);
+            currentByte += s.totalBytes;
+            const item = bytes[currentByte .. currentByte + s.n];
+            currentByte += s.n;
+            try witness.addItem(item);
+        }
         try transaction.addWitness(witness);
     }
 
@@ -258,7 +283,7 @@ test "decodeRawTxCoinbase" {
     try std.testing.expectEqualStrings(&expectedPubKeyScript2, tx.vout.items[1].script_pubkey);
     try std.testing.expectEqual(tx.witness.items.len, 1);
     var expectedWitness = "0000000000000000000000000000000000000000000000000000000000000000".*;
-    try std.testing.expectEqualStrings(&expectedWitness, tx.witness.items[0].item);
+    try std.testing.expectEqualStrings(&expectedWitness, tx.witness.items[0].stackitems.items[0].item);
 }
 
 test "decodeRawTxSimple" {
@@ -272,7 +297,7 @@ test "decodeRawTxSimple" {
     try std.testing.expectEqual(tx.locktime, 200);
     try std.testing.expectEqual(tx.vin.items.len, 3);
     try std.testing.expectEqual(tx.vout.items.len, 2);
-    try std.testing.expectEqual(tx.witness.items.len, 2);
+    try std.testing.expectEqual(tx.witness.items.len, 3);
 
     const expectedTxIn1 = "c0483c7c93aaefd5ee008cbec6f114d45d7502ffd8c427e9aac13eec32748673".*;
     try std.testing.expectEqualStrings(&expectedTxIn1, &tx.vin.items[0].prevout.?.txid);
@@ -291,9 +316,18 @@ test "decodeRawTxSimple" {
     const expectedPubkey2 = "0014009724e4053330c337bb803eca10071462821246".*;
     try std.testing.expectEqualStrings(&expectedPubkey2, tx.vout.items[1].script_pubkey);
 
-    //const expectedWitness1 = "3044022034141a0bc3da3adfa9162a8ab8f64eed52c94e7cdbc1aa49b0c1bf699c807b2c022015ff3eed0047ab1a202edd89d49cc9a144abeb20a89ff594b7fc50ca723e288701".*;
-    //try std.testing.expectEqualStrings(&expectedWitness1, tx.witness.items[0].item);
-    //
-    //const expectedWitness2 = "30440220571285fdbac00b8828883744503ae30bf846fdab3fa197f843f74ec8b6c8627602206a9aa3a646f5a67f62c04f8a181a63f5d4db37ae4e69af5e7f6912b60170bd9b01".*;
-    //try std.testing.expectEqualStrings(&expectedWitness2, tx.witness.items[1].item);
+    const expectedWitness1Item1 = "3044022034141a0bc3da3adfa9162a8ab8f64eed52c94e7cdbc1aa49b0c1bf699c807b2c022015ff3eed0047ab1a202edd89d49cc9a144abeb20a89ff594b7fc50ca723e288701".*;
+    const expectedWitness1Item2 = "029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4".*;
+    try std.testing.expectEqualStrings(&expectedWitness1Item1, tx.witness.items[0].stackitems.items[0].item);
+    try std.testing.expectEqualStrings(&expectedWitness1Item2, tx.witness.items[0].stackitems.items[1].item);
+
+    const expectedWitness2Item1 = "30440220571285fdbac00b8828883744503ae30bf846fdab3fa197f843f74ec8b6c8627602206a9aa3a646f5a67f62c04f8a181a63f5d4db37ae4e69af5e7f6912b60170bd9b01".*;
+    const expectedWitness2Item2 = "029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4".*;
+    try std.testing.expectEqualStrings(&expectedWitness2Item1, tx.witness.items[1].stackitems.items[0].item);
+    try std.testing.expectEqualStrings(&expectedWitness2Item2, tx.witness.items[1].stackitems.items[1].item);
+
+    const expectedWitness3Item1 = "304402206d542feca659eed9a470867e1d820b372f434d2a72688143fe68c4c66671a5e50220782b0bd5884d220a537bf86b438cd40eee0a58d08151eb1757e33286658a861101".*;
+    const expectedWitness3Item2 = "029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4".*;
+    try std.testing.expectEqualStrings(&expectedWitness3Item1, tx.witness.items[2].stackitems.items[0].item);
+    try std.testing.expectEqualStrings(&expectedWitness3Item2, tx.witness.items[2].stackitems.items[1].item);
 }
