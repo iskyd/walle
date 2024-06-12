@@ -4,7 +4,13 @@ const base58 = @import("base58");
 const unicode = std.unicode;
 const ripemd = @import("ripemd160/ripemd160.zig");
 
-pub const CompactSize = struct {
+pub const DecodedCompactSize = struct {
+    totalBytes: u8,
+    n: u64,
+};
+
+pub const EncodedCompactSize = struct {
+    compactSizeByte: u8,
     totalBytes: u8,
     n: u64,
 };
@@ -83,21 +89,30 @@ pub fn encodeutf8(in: []const u8, buffer: []u8) !u16 {
     return cur;
 }
 
-pub fn calculateCompactSize(v: []u8) CompactSize {
+pub fn decodeCompactSize(v: []u8) DecodedCompactSize {
     return switch (v[0]) {
-        0...252 => CompactSize{ .totalBytes = 1, .n = v[0] },
+        0...252 => DecodedCompactSize{ .totalBytes = 1, .n = v[0] },
         253 => {
             const n = std.mem.readIntBig(u16, v[1..3]);
-            return CompactSize{ .totalBytes = 3, .n = n };
+            return DecodedCompactSize{ .totalBytes = 3, .n = n };
         },
         254 => {
             const n = std.mem.readIntBig(u32, v[1..5]);
-            return CompactSize{ .totalBytes = 5, .n = n };
+            return DecodedCompactSize{ .totalBytes = 5, .n = n };
         },
         255 => {
             const n = std.mem.readIntBig(u64, v[1..9]);
-            return CompactSize{ .totalBytes = 9, .n = n };
+            return DecodedCompactSize{ .totalBytes = 9, .n = n };
         },
+    };
+}
+
+pub fn encodeCompactSize(n: u64) EncodedCompactSize {
+    return switch (n) {
+        0...252 => EncodedCompactSize{ .compactSizeByte = @intCast(n), .totalBytes = 0, .n = n },
+        253...65535 => EncodedCompactSize{ .compactSizeByte = 253, .totalBytes = 2, .n = n },
+        65536...4294967295 => EncodedCompactSize{ .compactSizeByte = 254, .totalBytes = 4, .n = n },
+        4294967296...18446744073709551615 => EncodedCompactSize{ .compactSizeByte = 255, .totalBytes = 8, .n = n },
     };
 }
 
