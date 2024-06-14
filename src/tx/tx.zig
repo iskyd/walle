@@ -144,6 +144,17 @@ pub const Transaction = struct {
         }
         return v;
     }
+
+    pub fn getTxID(self: Transaction) ![64]u8 {
+        var totalBytes: usize = encodeTxCap(self, true);
+        var encoded = try self.allocator.alloc(u8, totalBytes);
+        defer self.allocator.free(encoded);
+        try encodeTx(self.allocator, encoded, self, true);
+        const txid = utils.doubleSha256(encoded);
+        var txidhex: [64]u8 = undefined;
+        _ = try std.fmt.bufPrint(&txidhex, "{x}", .{std.fmt.fmtSliceHexLower(&txid)});
+        return txidhex;
+    }
 };
 
 pub fn createTx(inputs: []Output, amount: u32) TxError!void {
@@ -233,15 +244,19 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
     return transaction;
 }
 
-pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction) !void {
+pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction, txid: bool) !void {
     std.mem.copy(u8, buffer[0..4], std.mem.asBytes(&tx.version));
-    buffer[4] = std.mem.asBytes(&tx.marker)[0];
-    buffer[5] = std.mem.asBytes(&tx.flag)[0];
+    var currentByte: u64 = 4;
+    if (txid == false) {
+        buffer[4] = std.mem.asBytes(&tx.marker)[0];
+        buffer[5] = std.mem.asBytes(&tx.flag)[0];
+        currentByte += 2;
+    }
 
     // Encoded compact size input
     const inputsize = utils.encodeCompactSize(tx.inputs.items.len);
-    buffer[6] = inputsize.compactSizeByte;
-    var currentByte: u64 = 7;
+    buffer[currentByte] = inputsize.compactSizeByte;
+    currentByte += 1;
     if (inputsize.totalBytes > 0) {
         std.mem.copy(u8, buffer[currentByte .. currentByte + inputsize.totalBytes], std.mem.asBytes(&inputsize.n));
         currentByte += inputsize.totalBytes;
@@ -295,34 +310,104 @@ pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction) !vo
         currentByte += output.script_pubkey.len / 2;
     }
 
-    // 1 witness for every input, reuse ecsi
-    for (0..tx.inputs.items.len) |i| {
-        const witness = tx.witness.items[i];
-        // encoded compact size stack
-        const witnessstacksize = utils.encodeCompactSize(witness.stackitems.items.len);
-        buffer[currentByte] = witnessstacksize.compactSizeByte;
-        currentByte += 1;
-        if (witnessstacksize.totalBytes > 0) {
-            std.mem.copy(u8, buffer[currentByte .. currentByte + witnessstacksize.totalBytes], std.mem.asBytes(&witnessstacksize.n));
-            currentByte += witnessstacksize.totalBytes;
-        }
-        for (0..witness.stackitems.items.len) |j| {
-            const stackitem = witness.stackitems.items[j];
-            const stackitemsize = utils.encodeCompactSize(stackitem.item.len / 2);
-            buffer[currentByte] = stackitemsize.compactSizeByte;
+    if (txid == false) {
+        // 1 witness for every input
+        for (0..tx.inputs.items.len) |i| {
+            const witness = tx.witness.items[i];
+            // encoded compact size stack
+            const witnessstacksize = utils.encodeCompactSize(witness.stackitems.items.len);
+            buffer[currentByte] = witnessstacksize.compactSizeByte;
             currentByte += 1;
-            if (stackitemsize.totalBytes > 0) {
-                std.mem.copy(u8, buffer[currentByte .. currentByte + stackitemsize.totalBytes], std.mem.asBytes(&stackitemsize.n));
-                currentByte += stackitemsize.totalBytes;
+            if (witnessstacksize.totalBytes > 0) {
+                std.mem.copy(u8, buffer[currentByte .. currentByte + witnessstacksize.totalBytes], std.mem.asBytes(&witnessstacksize.n));
+                currentByte += witnessstacksize.totalBytes;
             }
-            var stackitembytes = try allocator.alloc(u8, stackitem.item.len / 2);
-            defer allocator.free(stackitembytes);
-            _ = try std.fmt.hexToBytes(stackitembytes, stackitem.item);
-            std.mem.copy(u8, buffer[currentByte .. currentByte + stackitem.item.len / 2], stackitembytes);
-            currentByte += stackitem.item.len / 2;
+            for (0..witness.stackitems.items.len) |j| {
+                const stackitem = witness.stackitems.items[j];
+                const stackitemsize = utils.encodeCompactSize(stackitem.item.len / 2);
+                buffer[currentByte] = stackitemsize.compactSizeByte;
+                currentByte += 1;
+                if (stackitemsize.totalBytes > 0) {
+                    std.mem.copy(u8, buffer[currentByte .. currentByte + stackitemsize.totalBytes], std.mem.asBytes(&stackitemsize.n));
+                    currentByte += stackitemsize.totalBytes;
+                }
+                var stackitembytes = try allocator.alloc(u8, stackitem.item.len / 2);
+                defer allocator.free(stackitembytes);
+                _ = try std.fmt.hexToBytes(stackitembytes, stackitem.item);
+                std.mem.copy(u8, buffer[currentByte .. currentByte + stackitem.item.len / 2], stackitembytes);
+                currentByte += stackitem.item.len / 2;
+            }
         }
-        std.mem.copy(u8, buffer[currentByte .. currentByte + 4], std.mem.asBytes(&tx.locktime));
     }
+    std.mem.copy(u8, buffer[currentByte .. currentByte + 4], std.mem.asBytes(&tx.locktime));
+}
+
+pub fn encodeTxCap(tx: Transaction, txid: bool) usize {
+    var currentByte: usize = 4; // version
+    if (txid == false) {
+        currentByte += 2; // marker + flag
+    }
+
+    // Encoded compact size input
+    const inputsize = utils.encodeCompactSize(tx.inputs.items.len);
+    currentByte += 1;
+    if (inputsize.totalBytes > 0) {
+        currentByte += inputsize.totalBytes;
+    }
+    for (0..tx.inputs.items.len) |i| {
+        const input = tx.inputs.items[i];
+        currentByte += 32; // input prevout txid
+        currentByte += 4; // input prevout n
+        // encoded compact size script
+        const ecss = utils.encodeCompactSize(input.scriptsig.len);
+        currentByte += 1;
+        if (ecss.totalBytes > 0) {
+            currentByte += ecss.totalBytes;
+        }
+        currentByte += input.scriptsig.len;
+        currentByte += 4; // sequence
+    }
+
+    // encoded compact size output
+    const outputsize = utils.encodeCompactSize(tx.outputs.items.len);
+    currentByte += 1; // outputsize
+    if (outputsize.totalBytes > 0) {
+        currentByte += outputsize.totalBytes;
+    }
+    for (0..tx.outputs.items.len) |i| {
+        const output = tx.outputs.items[i];
+        currentByte += 8; // output amount
+        // encoded compact size script pubkey
+        const ecssp = utils.encodeCompactSize(output.script_pubkey.len / 2); // script_pubkey is in hex format, /2 for bytes representation
+        currentByte += 1;
+        if (ecssp.totalBytes > 0) {
+            currentByte += ecssp.totalBytes;
+        }
+        currentByte += output.script_pubkey.len / 2; // script pubkey
+    }
+
+    if (txid == false) {
+        // 1 witness for every input
+        for (0..tx.inputs.items.len) |i| {
+            const witness = tx.witness.items[i];
+            // encoded compact size stack
+            const witnessstacksize = utils.encodeCompactSize(witness.stackitems.items.len);
+            currentByte += 1;
+            if (witnessstacksize.totalBytes > 0) {
+                currentByte += witnessstacksize.totalBytes;
+            }
+            for (0..witness.stackitems.items.len) |j| {
+                const stackitem = witness.stackitems.items[j];
+                const stackitemsize = utils.encodeCompactSize(stackitem.item.len / 2);
+                currentByte += 1;
+                if (stackitemsize.totalBytes > 0) {
+                    currentByte += stackitemsize.totalBytes;
+                }
+                currentByte += stackitem.item.len / 2; // stackitem
+            }
+        }
+    }
+    return currentByte + 4; //locktime
 }
 
 test "getOutputValue" {
@@ -430,9 +515,35 @@ test "encodeTx" {
     const tx = try decodeRawTx(allocator, &raw);
     defer tx.deinit();
     var buffer: [518]u8 = undefined;
-    try encodeTx(allocator, &buffer, tx);
+    try encodeTx(allocator, &buffer, tx, false);
     var encodedhex: [1036]u8 = undefined;
     _ = try std.fmt.bufPrint(&encodedhex, "{x}", .{std.fmt.fmtSliceHexLower(&buffer)});
 
     try std.testing.expectEqualStrings(&raw, &encodedhex);
+}
+
+test "txid" {
+    const expectedtxid = "f455759f8e184926b7b6a2af4f33fb026da94920a850b3091e1654b9236d33e8".*;
+    const allocator = std.testing.allocator;
+    var raw: [1036]u8 = "02000000000103c0483c7c93aaefd5ee008cbec6f114d45d7502ffd8c427e9aac13eec327486730000000000fdffffffdaf971319fa0477b53ea4890c647c755c9a0021265f9fc3661ef0c4b7db6ef330000000000fdffffff01bb0ca2b5819c7b6a173cd36b8807d0809cc8bd3f9d5189a354e51b9f9337b00000000000fdffffff0200e40b54020000001600147218978afd7fd9270bae7595399b6bc1986e7a4eecf0052a01000000160014009724e4053330c337bb803eca1007146282124602473044022034141a0bc3da3adfa9162a8ab8f64eed52c94e7cdbc1aa49b0c1bf699c807b2c022015ff3eed0047ab1a202edd89d49cc9a144abeb20a89ff594b7fc50ca723e28870121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4024730440220571285fdbac00b8828883744503ae30bf846fdab3fa197f843f74ec8b6c8627602206a9aa3a646f5a67f62c04f8a181a63f5d4db37ae4e69af5e7f6912b60170bd9b0121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a40247304402206d542feca659eed9a470867e1d820b372f434d2a72688143fe68c4c66671a5e50220782b0bd5884d220a537bf86b438cd40eee0a58d08151eb1757e33286658a86110121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4c8000000".*;
+    const tx = try decodeRawTx(allocator, &raw);
+    defer tx.deinit();
+    const txid = try tx.getTxID();
+    try std.testing.expectEqualStrings(&expectedtxid, &txid);
+}
+
+test "encodeTxCap" {
+    const allocator = std.testing.allocator;
+    var raw: [1036]u8 = "02000000000103c0483c7c93aaefd5ee008cbec6f114d45d7502ffd8c427e9aac13eec327486730000000000fdffffffdaf971319fa0477b53ea4890c647c755c9a0021265f9fc3661ef0c4b7db6ef330000000000fdffffff01bb0ca2b5819c7b6a173cd36b8807d0809cc8bd3f9d5189a354e51b9f9337b00000000000fdffffff0200e40b54020000001600147218978afd7fd9270bae7595399b6bc1986e7a4eecf0052a01000000160014009724e4053330c337bb803eca1007146282124602473044022034141a0bc3da3adfa9162a8ab8f64eed52c94e7cdbc1aa49b0c1bf699c807b2c022015ff3eed0047ab1a202edd89d49cc9a144abeb20a89ff594b7fc50ca723e28870121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4024730440220571285fdbac00b8828883744503ae30bf846fdab3fa197f843f74ec8b6c8627602206a9aa3a646f5a67f62c04f8a181a63f5d4db37ae4e69af5e7f6912b60170bd9b0121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a40247304402206d542feca659eed9a470867e1d820b372f434d2a72688143fe68c4c66671a5e50220782b0bd5884d220a537bf86b438cd40eee0a58d08151eb1757e33286658a86110121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4c8000000".*;
+    const tx = try decodeRawTx(allocator, &raw);
+    defer tx.deinit();
+    try std.testing.expectEqual(encodeTxCap(tx, false), 518);
+}
+
+test "encodeTxCapTxID" {
+    const allocator = std.testing.allocator;
+    var raw: [1036]u8 = "02000000000103c0483c7c93aaefd5ee008cbec6f114d45d7502ffd8c427e9aac13eec327486730000000000fdffffffdaf971319fa0477b53ea4890c647c755c9a0021265f9fc3661ef0c4b7db6ef330000000000fdffffff01bb0ca2b5819c7b6a173cd36b8807d0809cc8bd3f9d5189a354e51b9f9337b00000000000fdffffff0200e40b54020000001600147218978afd7fd9270bae7595399b6bc1986e7a4eecf0052a01000000160014009724e4053330c337bb803eca1007146282124602473044022034141a0bc3da3adfa9162a8ab8f64eed52c94e7cdbc1aa49b0c1bf699c807b2c022015ff3eed0047ab1a202edd89d49cc9a144abeb20a89ff594b7fc50ca723e28870121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4024730440220571285fdbac00b8828883744503ae30bf846fdab3fa197f843f74ec8b6c8627602206a9aa3a646f5a67f62c04f8a181a63f5d4db37ae4e69af5e7f6912b60170bd9b0121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a40247304402206d542feca659eed9a470867e1d820b372f434d2a72688143fe68c4c66671a5e50220782b0bd5884d220a537bf86b438cd40eee0a58d08151eb1757e33286658a86110121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4c8000000".*;
+    const tx = try decodeRawTx(allocator, &raw);
+    defer tx.deinit();
+    try std.testing.expectEqual(encodeTxCap(tx, true), 195);
 }
