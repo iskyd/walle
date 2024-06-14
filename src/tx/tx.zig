@@ -16,15 +16,15 @@ const Output = struct {
 // Input of a transaction
 const TxInput = struct {
     allocator: std.mem.Allocator,
-    preoutputs: ?Output, // nullable due to coinbase transaction
+    prevout: ?Output, // nullable due to coinbase transaction
     scriptsig: []u8,
     sequence: u32,
 
     // scriptsig in bytes
-    pub fn init(allocator: std.mem.Allocator, preoutputs: ?Output, scriptsig: []u8, sequence: u32) !TxInput {
+    pub fn init(allocator: std.mem.Allocator, prevout: ?Output, scriptsig: []u8, sequence: u32) !TxInput {
         var scriptsighex = try allocator.alloc(u8, scriptsig.len * 2);
         _ = try std.fmt.bufPrint(scriptsighex, "{x}", .{std.fmt.fmtSliceHexLower(scriptsig)});
-        return TxInput{ .allocator = allocator, .preoutputs = preoutputs, .scriptsig = scriptsighex, .sequence = sequence };
+        return TxInput{ .allocator = allocator, .prevout = prevout, .scriptsig = scriptsighex, .sequence = sequence };
     }
 
     pub fn deinit(self: TxInput) void {
@@ -131,7 +131,7 @@ pub const Transaction = struct {
     }
 
     pub fn isCoinbase(self: Transaction) bool {
-        if (self.inputs.items.len == 1 and self.inputs.items[0].preoutputs == null) {
+        if (self.inputs.items.len == 1 and self.inputs.items[0].prevout == null) {
             return true;
         }
         return false;
@@ -183,7 +183,7 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
         currentByte += 32;
         const vo: [4]u8 = bytes[currentByte .. currentByte + 4][0..4].*;
         const outputs = std.mem.readIntLittle(u32, &vo);
-        const preoutputs = Output{ .txid = txidhex, .n = outputs, .amount = 0 };
+        const prevout = Output{ .txid = txidhex, .n = outputs, .amount = 0 };
         currentByte += 4;
         const scriptsigsize = bytes[currentByte];
         currentByte += 1;
@@ -193,7 +193,7 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
         const sequence = std.mem.readIntLittle(u32, &s);
         currentByte += 4;
 
-        const input = try TxInput.init(allocator, preoutputs, scriptsig, sequence);
+        const input = try TxInput.init(allocator, prevout, scriptsig, sequence);
         try transaction.addInput(input);
     }
 
@@ -249,10 +249,10 @@ pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction) !vo
     for (0..tx.inputs.items.len) |i| {
         const input = tx.inputs.items[i];
         var txb: [32]u8 = undefined;
-        _ = try std.fmt.hexToBytes(&txb, &input.preoutputs.?.txid);
+        _ = try std.fmt.hexToBytes(&txb, &input.prevout.?.txid);
         std.mem.copy(u8, buffer[currentByte .. currentByte + 32], &txb);
         currentByte += 32;
-        std.mem.copy(u8, buffer[currentByte .. currentByte + 4], std.mem.asBytes(&input.preoutputs.?.n));
+        std.mem.copy(u8, buffer[currentByte .. currentByte + 4], std.mem.asBytes(&input.prevout.?.n));
         currentByte += 4;
         // encoded compact size script
         const ecss = utils.encodeCompactSize(input.scriptsig.len);
@@ -361,9 +361,9 @@ test "decodeRawTxCoinbase" {
     try std.testing.expectEqual(tx.locktime, 0);
     try std.testing.expectEqual(tx.inputs.items.len, 1);
     try std.testing.expectEqual(tx.inputs.items[0].sequence, 4294967295);
-    try std.testing.expectEqual(tx.inputs.items[0].preoutputs.?.n, 4294967295);
-    var expectedPreoutputsTxId = "0000000000000000000000000000000000000000000000000000000000000000".*;
-    try std.testing.expectEqualStrings(&expectedPreoutputsTxId, &tx.inputs.items[0].preoutputs.?.txid);
+    try std.testing.expectEqual(tx.inputs.items[0].prevout.?.n, 4294967295);
+    var expectedPrevoutTxId = "0000000000000000000000000000000000000000000000000000000000000000".*;
+    try std.testing.expectEqualStrings(&expectedPrevoutTxId, &tx.inputs.items[0].prevout.?.txid);
     var expectedScriptSig = "5100".*;
     try std.testing.expectEqualStrings(&expectedScriptSig, tx.inputs.items[0].scriptsig);
     try std.testing.expectEqual(tx.outputs.items.len, 2);
@@ -392,13 +392,13 @@ test "decodeRawTxSimple" {
     try std.testing.expectEqual(tx.witness.items.len, 3);
 
     const expectedTxIn1 = "c0483c7c93aaefd5ee008cbec6f114d45d7502ffd8c427e9aac13eec32748673".*;
-    try std.testing.expectEqualStrings(&expectedTxIn1, &tx.inputs.items[0].preoutputs.?.txid);
+    try std.testing.expectEqualStrings(&expectedTxIn1, &tx.inputs.items[0].prevout.?.txid);
 
     const expectedTxIn2 = "daf971319fa0477b53ea4890c647c755c9a0021265f9fc3661ef0c4b7db6ef33".*;
-    try std.testing.expectEqualStrings(&expectedTxIn2, &tx.inputs.items[1].preoutputs.?.txid);
+    try std.testing.expectEqualStrings(&expectedTxIn2, &tx.inputs.items[1].prevout.?.txid);
 
     const expectedTxIn3 = "01bb0ca2b5819c7b6a173cd36b8807d0809cc8bd3f9d5189a354e51b9f9337b0".*;
-    try std.testing.expectEqualStrings(&expectedTxIn3, &tx.inputs.items[2].preoutputs.?.txid);
+    try std.testing.expectEqualStrings(&expectedTxIn3, &tx.inputs.items[2].prevout.?.txid);
 
     try std.testing.expectEqual(tx.outputs.items[0].amount, 10000000000);
     const expectedPubkey1 = "00147218978afd7fd9270bae7595399b6bc1986e7a4e".*;
