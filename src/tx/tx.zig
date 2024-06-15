@@ -281,12 +281,12 @@ pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction, txi
         std.mem.copy(u8, buffer[currentByte .. currentByte + 4], std.mem.asBytes(&input.prevout.?.n));
         currentByte += 4;
         // encoded compact size script
-        const ecss = utils.encodeCompactSize(input.scriptsig.len);
-        buffer[currentByte] = ecss.compactSizeByte;
+        const scriptsize = utils.encodeCompactSize(input.scriptsig.len);
+        buffer[currentByte] = scriptsize.compactSizeByte;
         currentByte += 1;
-        if (ecss.totalBytes > 0) {
-            std.mem.copy(u8, buffer[currentByte .. currentByte + ecss.totalBytes], std.mem.asBytes(&ecss.n));
-            currentByte += ecss.totalBytes;
+        if (scriptsize.totalBytes > 0) {
+            std.mem.copy(u8, buffer[currentByte .. currentByte + scriptsize.totalBytes], std.mem.asBytes(&scriptsize.n));
+            currentByte += scriptsize.totalBytes;
         }
         std.mem.copy(u8, buffer[currentByte .. currentByte + input.scriptsig.len], input.scriptsig);
         currentByte += input.scriptsig.len;
@@ -307,12 +307,12 @@ pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction, txi
         std.mem.copy(u8, buffer[currentByte .. currentByte + 8], std.mem.asBytes(&output.amount));
         currentByte += 8;
         // encoded compact size script pubkey
-        const ecssp = utils.encodeCompactSize(output.script_pubkey.len / 2); // script_pubkey is in hex format, /2 for bytes representation
-        buffer[currentByte] = ecssp.compactSizeByte;
+        const scriptsizepubkey = utils.encodeCompactSize(output.script_pubkey.len / 2); // script_pubkey is in hex format, /2 for bytes representation
+        buffer[currentByte] = scriptsizepubkey.compactSizeByte;
         currentByte += 1;
-        if (ecssp.totalBytes > 0) {
-            std.mem.copy(u8, buffer[currentByte .. currentByte + ecssp.totalBytes], std.mem.asBytes(&ecssp.n));
-            currentByte += ecssp.totalBytes;
+        if (scriptsizepubkey.totalBytes > 0) {
+            std.mem.copy(u8, buffer[currentByte .. currentByte + scriptsizepubkey.totalBytes], std.mem.asBytes(&scriptsizepubkey.n));
+            currentByte += scriptsizepubkey.totalBytes;
         }
         var bytes: []u8 = try allocator.alloc(u8, output.script_pubkey.len / 2);
         defer allocator.free(bytes);
@@ -370,10 +370,10 @@ pub fn encodeTxCap(tx: Transaction, txid: bool) usize {
         currentByte += 32; // input prevout txid
         currentByte += 4; // input prevout n
         // encoded compact size script
-        const ecss = utils.encodeCompactSize(input.scriptsig.len);
+        const scriptsize = utils.encodeCompactSize(input.scriptsig.len);
         currentByte += 1;
-        if (ecss.totalBytes > 0) {
-            currentByte += ecss.totalBytes;
+        if (scriptsize.totalBytes > 0) {
+            currentByte += scriptsize.totalBytes;
         }
         currentByte += input.scriptsig.len;
         currentByte += 4; // sequence
@@ -389,10 +389,10 @@ pub fn encodeTxCap(tx: Transaction, txid: bool) usize {
         const output = tx.outputs.items[i];
         currentByte += 8; // output amount
         // encoded compact size script pubkey
-        const ecssp = utils.encodeCompactSize(output.script_pubkey.len / 2); // script_pubkey is in hex format, /2 for bytes representation
+        const scriptsizepubkey = utils.encodeCompactSize(output.script_pubkey.len / 2); // script_pubkey is in hex format, /2 for bytes representation
         currentByte += 1;
-        if (ecssp.totalBytes > 0) {
-            currentByte += ecssp.totalBytes;
+        if (scriptsizepubkey.totalBytes > 0) {
+            currentByte += scriptsizepubkey.totalBytes;
         }
         currentByte += output.script_pubkey.len / 2; // script pubkey
     }
