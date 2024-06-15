@@ -167,7 +167,11 @@ pub const Script = struct {
                 ScriptOp.op => |op| {
                     const opv = @intFromEnum(op);
                     var opbuf: [2]u8 = undefined;
-                    _ = try std.fmt.bufPrint(&opbuf, "{x}", .{opv});
+                    if (opv <= 15) {
+                        _ = try std.fmt.bufPrint(&opbuf, "0{x}", .{opv});
+                    } else {
+                        _ = try std.fmt.bufPrint(&opbuf, "{x}", .{opv});
+                    }
                     std.mem.copy(u8, buffer[cur .. cur + 2], opbuf[0..2]);
                     cur += 2;
                 },
@@ -254,6 +258,15 @@ pub fn p2pkh(allocator: std.mem.Allocator, pkeyhash: []const u8) !Script {
     return script;
 }
 
+// pay to witness pubkey hash
+pub fn p2wpkh(allocator: std.mem.Allocator, pubkeyhash: []const u8) !Script {
+    var script = Script.init(allocator);
+    try script.push(ScriptOp{ .v = pubkeyhash });
+    try script.push(ScriptOp{ .pushbytes = 32 });
+    try script.push(ScriptOp{ .op = opcode.OP_FALSE });
+    return script;
+}
+
 // to implement p2pkh, p2sh
 test "test p2pk" {
     const uncompressedpubkey: [130]u8 = "04ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84c".*;
@@ -328,4 +341,17 @@ test "toHex" {
     try script3.toHex(&hexbuf3);
     const expectedhex3: [270]u8 = "514104cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4410461cbdcc5409fb4b4d42b51d33381354d80e550078cb532a34bfa2fcfdeb7d76519aecc62770f5b0e4ef8551946d8a540911abe3e7854a26f39f58b25c15342af52ae".*;
     try std.testing.expectEqualSlices(u8, &expectedhex3, &hexbuf3);
+}
+
+test "p2wpkh" {
+    const allocator = std.testing.allocator;
+    const hash: [64]u8 = "65f91a53cb7120057db3d378bd0f7d944167d43a7dcbff15d6afc4823f1d3ed3".*;
+    const script = try p2wpkh(allocator, &hash);
+    defer script.deinit();
+    const cap = script.hexCap();
+    var buffer = try allocator.alloc(u8, cap);
+    defer allocator.free(buffer);
+    try script.toHex(buffer);
+    const expectedhex: [68]u8 = "002065f91a53cb7120057db3d378bd0f7d944167d43a7dcbff15d6afc4823f1d3ed3".*;
+    try std.testing.expectEqualStrings(&expectedhex, buffer);
 }
