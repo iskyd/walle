@@ -34,11 +34,11 @@ pub fn modinv(comptime T: type, _a: T, _m: T) T {
     }
 
     while (a > 1) {
-        var q: T = @divFloor(m, a);
-        var tmp_y = y;
+        const q: T = @divFloor(m, a);
+        const tmp_y = y;
         y = prevy - q * y;
         prevy = tmp_y;
-        var tmp_a = a;
+        const tmp_a = a;
         a = @mod(m, a);
         m = tmp_a;
     }
@@ -47,8 +47,8 @@ pub fn modinv(comptime T: type, _a: T, _m: T) T {
 }
 
 pub fn uncompress(publicKey: [33]u8) !Point {
-    const parity = std.mem.readIntBig(u8, publicKey[0..1]);
-    const public_key_x = std.mem.readIntBig(u256, publicKey[1..]);
+    const parity = std.mem.readInt(u8, publicKey[0..1], .big);
+    const public_key_x = std.mem.readInt(u256, publicKey[1..], .big);
     const y_sq = @mod(powmod(public_key_x, 3, PRIME_MODULUS) + 7, NUMBER_OF_POINTS);
     var y = powmod(y_sq, (PRIME_MODULUS + 1) / 4, PRIME_MODULUS);
     if (@mod(y, 2) != @mod(parity, 2)) {
@@ -96,7 +96,7 @@ pub const Point = struct {
         // So we loop from 0 to log2(x)
         const bits = std.math.log2_int(u256, k);
         for (0..bits) |i| {
-            var y = std.math.shr(u256, k, bits - i - 1) & 1;
+            const y = std.math.shr(u256, k, bits - i - 1) & 1;
             current.double();
 
             if (y == 1) {
@@ -155,9 +155,9 @@ test "powmod" {
 }
 
 test "uncompress" {
-    var buffer = "02aeb803a9ace6dcc5f11d06e8f30e24186c904f463be84f303d15bb7d48d1201f";
-    const v = try std.fmt.parseInt(u264, buffer, 16);
-    var compressed: [33]u8 = @bitCast(@byteSwap(v));
+    const buffer = "02aeb803a9ace6dcc5f11d06e8f30e24186c904f463be84f303d15bb7d48d1201f".*;
+    const v = try std.fmt.parseInt(u264, &buffer, 16);
+    const compressed: [33]u8 = @bitCast(@byteSwap(v));
     const p = try uncompress(compressed);
     try std.testing.expectEqual(p.x, 79027560793086286861659885563794118884743103107570705965389288630856279203871);
     try std.testing.expectEqual(p.y, 70098904748994065624629803197701842741428754294763691930704573059552158053128);

@@ -172,17 +172,17 @@ pub const Script = struct {
                     } else {
                         _ = try std.fmt.bufPrint(&opbuf, "{x}", .{opv});
                     }
-                    std.mem.copy(u8, buffer[cur .. cur + 2], opbuf[0..2]);
+                    @memcpy(buffer[cur .. cur + 2], opbuf[0..2]);
                     cur += 2;
                 },
                 ScriptOp.v => |v| {
-                    std.mem.copy(u8, buffer[cur .. cur + v.len], v);
+                    @memcpy(buffer[cur .. cur + v.len], v);
                     cur += v.len;
                 },
                 ScriptOp.pushbytes => |pb| {
                     var pbbuf: [2]u8 = undefined;
                     _ = try std.fmt.bufPrint(&pbbuf, "{x}", .{pb});
-                    std.mem.copy(u8, buffer[cur .. cur + 2], pbbuf[0..2]);
+                    @memcpy(buffer[cur .. cur + 2], pbbuf[0..2]);
                     cur += 2;
                 },
             }
@@ -214,7 +214,7 @@ pub const Script = struct {
 
     pub fn toBytes(self: Script, allocator: std.mem.Allocator, buffer: []u8) !void {
         const c = self.hexCap();
-        var redeemscript = try allocator.alloc(u8, c);
+        const redeemscript = try allocator.alloc(u8, c);
         defer allocator.free(redeemscript);
         try self.toHex(redeemscript);
         _ = try std.fmt.hexToBytes(buffer, redeemscript);
@@ -349,7 +349,7 @@ test "p2wpkh" {
     const script = try p2wpkh(allocator, &hash);
     defer script.deinit();
     const cap = script.hexCap();
-    var buffer = try allocator.alloc(u8, cap);
+    const buffer = try allocator.alloc(u8, cap);
     defer allocator.free(buffer);
     try script.toHex(buffer);
     const expectedhex: [68]u8 = "002065f91a53cb7120057db3d378bd0f7d944167d43a7dcbff15d6afc4823f1d3ed3".*;

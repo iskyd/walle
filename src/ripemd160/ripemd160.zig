@@ -17,7 +17,7 @@ pub const Ripemd160 = struct {
                 var chunk: [16]u32 = [_]u32{0} ** 16;
                 var j: usize = 0;
                 while (j < 16) : (j += 1) {
-                    chunk[j] = std.mem.readIntLittle(u32, ptr[0..4]);
+                    chunk[j] = std.mem.readInt(u32, ptr[0..4], .little);
                     ptr += 4;
                 }
                 compress(&temp, chunk);
@@ -47,7 +47,7 @@ pub const Ripemd160 = struct {
         { // write final hash
             var i: usize = 0;
             while (i < 160 / 8) : (i += 4) {
-                std.mem.writeIntLittle(u32, @as(*[4]u8, @ptrCast(&res.bytes[i])), temp[i >> 2]);
+                std.mem.writeInt(u32, @as(*[4]u8, @ptrCast(&res.bytes[i])), temp[i >> 2], .little);
             }
         }
 
@@ -84,8 +84,8 @@ fn compress(hash: *[5]u32, words: [16]u32) void {
 
     var left: [5]u32 = undefined;
     var right: [5]u32 = undefined;
-    std.mem.copy(u32, left[0..], hash[0..5]);
-    std.mem.copy(u32, right[0..], hash[0..5]);
+    @memcpy(left[0..5], hash[0..5]);
+    @memcpy(right[0..5], hash[0..5]);
 
     round(bfn1, 0, 0x00000000, permutations[0], shifts[0], &left, words);
     round(bfn2, -1, 0x5a827999, permutations[1], shifts[1], &left, words);

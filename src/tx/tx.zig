@@ -22,7 +22,7 @@ const TxInput = struct {
 
     // scriptsig in bytes
     pub fn init(allocator: std.mem.Allocator, prevout: ?Output, scriptsig: []u8, sequence: u32) !TxInput {
-        var scriptsighex = try allocator.alloc(u8, scriptsig.len * 2);
+        const scriptsighex = try allocator.alloc(u8, scriptsig.len * 2);
         _ = try std.fmt.bufPrint(scriptsighex, "{x}", .{std.fmt.fmtSliceHexLower(scriptsig)});
         return TxInput{ .allocator = allocator, .prevout = prevout, .scriptsig = scriptsighex, .sequence = sequence };
     }
@@ -40,7 +40,7 @@ const TxOutput = struct {
 
     // script_pubkey in bytes
     pub fn init(allocator: std.mem.Allocator, amount: u64, script_pubkey: []const u8) !TxOutput {
-        var scriptpubkeyhex = try allocator.alloc(u8, script_pubkey.len * 2);
+        const scriptpubkeyhex = try allocator.alloc(u8, script_pubkey.len * 2);
         _ = try std.fmt.bufPrint(scriptpubkeyhex, "{x}", .{std.fmt.fmtSliceHexLower(script_pubkey)});
         return TxOutput{ .allocator = allocator, .amount = amount, .script_pubkey = scriptpubkeyhex };
     }
@@ -56,7 +56,7 @@ pub const WitnessItem = struct {
 
     // item in bytes
     pub fn init(allocator: std.mem.Allocator, item: []const u8) !WitnessItem {
-        var itemhex = try allocator.alloc(u8, item.len * 2);
+        const itemhex = try allocator.alloc(u8, item.len * 2);
         _ = try std.fmt.bufPrint(itemhex, "{x}", .{std.fmt.fmtSliceHexLower(item)});
         return WitnessItem{ .allocator = allocator, .item = itemhex };
     }
@@ -146,8 +146,8 @@ pub const Transaction = struct {
     }
 
     pub fn getTXID(self: Transaction) ![64]u8 {
-        var totalBytes: usize = encodeTxCap(self, true);
-        var encoded = try self.allocator.alloc(u8, totalBytes);
+        const totalBytes: usize = encodeTxCap(self, true);
+        const encoded = try self.allocator.alloc(u8, totalBytes);
         defer self.allocator.free(encoded);
         try encodeTx(self.allocator, encoded, self, true);
         const txid = utils.doubleSha256(encoded);
@@ -157,8 +157,8 @@ pub const Transaction = struct {
     }
 
     pub fn getWTXID(self: Transaction) ![64]u8 {
-        var totalBytes: usize = encodeTxCap(self, false);
-        var encoded = try self.allocator.alloc(u8, totalBytes);
+        const totalBytes: usize = encodeTxCap(self, false);
+        const encoded = try self.allocator.alloc(u8, totalBytes);
         defer self.allocator.free(encoded);
         try encodeTx(self.allocator, encoded, self, false);
         const txid = utils.doubleSha256(encoded);
@@ -183,12 +183,12 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
     _ = try std.fmt.hexToBytes(bytes, raw);
     defer allocator.free(bytes);
     const v = bytes[0..4]; // Little Endian
-    const version = std.mem.readIntLittle(u32, v);
+    const version = std.mem.readInt(u32, v, .little);
     const marker = bytes[4]; // used to indicate segwit tx. Must be 00
     const flag = bytes[5]; // used to indicate segwit tx. Must be gte 01
 
     const l = bytes[bytes.len - 4 ..][0..4].*;
-    const locktime = std.mem.readIntLittle(u32, &l);
+    const locktime = std.mem.readInt(u32, &l, .little);
 
     var transaction = Transaction.init(allocator, version, locktime, marker, flag);
 
@@ -204,7 +204,7 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
         _ = try std.fmt.bufPrint(&txidhex, "{x}", .{std.fmt.fmtSliceHexLower(txid)});
         currentByte += 32;
         const vo: [4]u8 = bytes[currentByte .. currentByte + 4][0..4].*;
-        const outputs = std.mem.readIntLittle(u32, &vo);
+        const outputs = std.mem.readInt(u32, &vo, .little);
         const prevout = Output{ .txid = txidhex, .n = outputs, .amount = 0 };
         currentByte += 4;
         const scriptsigsize = bytes[currentByte];
@@ -212,7 +212,7 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
         const scriptsig = bytes[currentByte .. currentByte + scriptsigsize];
         currentByte += scriptsigsize;
         const s = bytes[currentByte .. currentByte + 4][0..4].*;
-        const sequence = std.mem.readIntLittle(u32, &s);
+        const sequence = std.mem.readInt(u32, &s, .little);
         currentByte += 4;
 
         const input = try TxInput.init(allocator, prevout, scriptsig, sequence);
@@ -225,7 +225,7 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
     for (0..outputsize.n) |_| {
         const a = bytes[currentByte .. currentByte + 8][0..8].*;
         currentByte += 8;
-        const amount = std.mem.readIntLittle(u64, &a);
+        const amount = std.mem.readInt(u64, &a, .little);
         const scriptpubkeysize = bytes[currentByte];
         currentByte += 1;
         const scriptpubkey = bytes[currentByte .. currentByte + scriptpubkeysize];
@@ -256,7 +256,7 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
 }
 
 pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction, txid: bool) !void {
-    std.mem.copy(u8, buffer[0..4], std.mem.asBytes(&tx.version));
+    @memcpy(buffer[0..4], std.mem.asBytes(&tx.version));
     var currentByte: u64 = 4;
     if (txid == false) {
         buffer[4] = std.mem.asBytes(&tx.marker)[0];
@@ -269,28 +269,28 @@ pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction, txi
     buffer[currentByte] = inputsize.compactSizeByte;
     currentByte += 1;
     if (inputsize.totalBytes > 0) {
-        std.mem.copy(u8, buffer[currentByte .. currentByte + inputsize.totalBytes], std.mem.asBytes(&inputsize.n));
+        @memcpy(buffer[currentByte .. currentByte + inputsize.totalBytes], std.mem.asBytes(&inputsize.n));
         currentByte += inputsize.totalBytes;
     }
     for (0..tx.inputs.items.len) |i| {
         const input = tx.inputs.items[i];
         var txb: [32]u8 = undefined;
         _ = try std.fmt.hexToBytes(&txb, &input.prevout.?.txid);
-        std.mem.copy(u8, buffer[currentByte .. currentByte + 32], &txb);
+        @memcpy(buffer[currentByte .. currentByte + 32], &txb);
         currentByte += 32;
-        std.mem.copy(u8, buffer[currentByte .. currentByte + 4], std.mem.asBytes(&input.prevout.?.n));
+        @memcpy(buffer[currentByte .. currentByte + 4], std.mem.asBytes(&input.prevout.?.n));
         currentByte += 4;
         // encoded compact size script
         const scriptsize = utils.encodeCompactSize(input.scriptsig.len);
         buffer[currentByte] = scriptsize.compactSizeByte;
         currentByte += 1;
         if (scriptsize.totalBytes > 0) {
-            std.mem.copy(u8, buffer[currentByte .. currentByte + scriptsize.totalBytes], std.mem.asBytes(&scriptsize.n));
+            @memcpy(buffer[currentByte .. currentByte + scriptsize.totalBytes], std.mem.asBytes(&scriptsize.n));
             currentByte += scriptsize.totalBytes;
         }
-        std.mem.copy(u8, buffer[currentByte .. currentByte + input.scriptsig.len], input.scriptsig);
+        @memcpy(buffer[currentByte .. currentByte + input.scriptsig.len], input.scriptsig);
         currentByte += input.scriptsig.len;
-        std.mem.copy(u8, buffer[currentByte .. currentByte + 4], std.mem.asBytes(&input.sequence));
+        @memcpy(buffer[currentByte .. currentByte + 4], std.mem.asBytes(&input.sequence));
         currentByte += 4;
     }
 
@@ -299,25 +299,25 @@ pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction, txi
     buffer[currentByte] = outputsize.compactSizeByte;
     currentByte += 1;
     if (outputsize.totalBytes > 0) {
-        std.mem.copy(u8, buffer[currentByte .. currentByte + outputsize.totalBytes], std.mem.asBytes(&outputsize.n));
+        @memcpy(buffer[currentByte .. currentByte + outputsize.totalBytes], std.mem.asBytes(&outputsize.n));
         currentByte += outputsize.totalBytes;
     }
     for (0..tx.outputs.items.len) |i| {
         const output = tx.outputs.items[i];
-        std.mem.copy(u8, buffer[currentByte .. currentByte + 8], std.mem.asBytes(&output.amount));
+        @memcpy(buffer[currentByte .. currentByte + 8], std.mem.asBytes(&output.amount));
         currentByte += 8;
         // encoded compact size script pubkey
         const scriptsizepubkey = utils.encodeCompactSize(output.script_pubkey.len / 2); // script_pubkey is in hex format, /2 for bytes representation
         buffer[currentByte] = scriptsizepubkey.compactSizeByte;
         currentByte += 1;
         if (scriptsizepubkey.totalBytes > 0) {
-            std.mem.copy(u8, buffer[currentByte .. currentByte + scriptsizepubkey.totalBytes], std.mem.asBytes(&scriptsizepubkey.n));
+            @memcpy(buffer[currentByte .. currentByte + scriptsizepubkey.totalBytes], std.mem.asBytes(&scriptsizepubkey.n));
             currentByte += scriptsizepubkey.totalBytes;
         }
-        var bytes: []u8 = try allocator.alloc(u8, output.script_pubkey.len / 2);
+        const bytes: []u8 = try allocator.alloc(u8, output.script_pubkey.len / 2);
         defer allocator.free(bytes);
         _ = try std.fmt.hexToBytes(bytes, output.script_pubkey);
-        std.mem.copy(u8, buffer[currentByte .. currentByte + output.script_pubkey.len / 2], bytes);
+        @memcpy(buffer[currentByte .. currentByte + output.script_pubkey.len / 2], bytes);
         currentByte += output.script_pubkey.len / 2;
     }
 
@@ -330,7 +330,7 @@ pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction, txi
             buffer[currentByte] = witnessstacksize.compactSizeByte;
             currentByte += 1;
             if (witnessstacksize.totalBytes > 0) {
-                std.mem.copy(u8, buffer[currentByte .. currentByte + witnessstacksize.totalBytes], std.mem.asBytes(&witnessstacksize.n));
+                @memcpy(buffer[currentByte .. currentByte + witnessstacksize.totalBytes], std.mem.asBytes(&witnessstacksize.n));
                 currentByte += witnessstacksize.totalBytes;
             }
             for (0..witness.stackitems.items.len) |j| {
@@ -339,18 +339,18 @@ pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction, txi
                 buffer[currentByte] = stackitemsize.compactSizeByte;
                 currentByte += 1;
                 if (stackitemsize.totalBytes > 0) {
-                    std.mem.copy(u8, buffer[currentByte .. currentByte + stackitemsize.totalBytes], std.mem.asBytes(&stackitemsize.n));
+                    @memcpy(buffer[currentByte .. currentByte + stackitemsize.totalBytes], std.mem.asBytes(&stackitemsize.n));
                     currentByte += stackitemsize.totalBytes;
                 }
-                var stackitembytes = try allocator.alloc(u8, stackitem.item.len / 2);
+                const stackitembytes = try allocator.alloc(u8, stackitem.item.len / 2);
                 defer allocator.free(stackitembytes);
                 _ = try std.fmt.hexToBytes(stackitembytes, stackitem.item);
-                std.mem.copy(u8, buffer[currentByte .. currentByte + stackitem.item.len / 2], stackitembytes);
+                @memcpy(buffer[currentByte .. currentByte + stackitem.item.len / 2], stackitembytes);
                 currentByte += stackitem.item.len / 2;
             }
         }
     }
-    std.mem.copy(u8, buffer[currentByte .. currentByte + 4], std.mem.asBytes(&tx.locktime));
+    @memcpy(buffer[currentByte .. currentByte + 4], std.mem.asBytes(&tx.locktime));
 }
 
 pub fn encodeTxCap(tx: Transaction, txid: bool) usize {
@@ -428,10 +428,10 @@ test "getOutputValue" {
     const public: [130]u8 = "04cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4".*;
     var tx = Transaction.init(allocator, 0, 1, 0, 1);
     defer tx.deinit();
-    var txin = try TxInput.init(allocator, o, &r, 0);
+    const txin = try TxInput.init(allocator, o, &r, 0);
     try tx.addInput(txin);
-    var txout1 = try TxOutput.init(allocator, 130000, &public);
-    var txout2 = try TxOutput.init(allocator, 37000, &public);
+    const txout1 = try TxOutput.init(allocator, 130000, &public);
+    const txout2 = try TxOutput.init(allocator, 37000, &public);
     try tx.addOutput(txout1);
     try tx.addOutput(txout2);
     const outputv = tx.getOutputValue();

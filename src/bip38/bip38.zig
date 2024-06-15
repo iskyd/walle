@@ -64,14 +64,14 @@ pub fn encrypt(allocator: std.mem.Allocator, privatekey: [32]u8, passphrase: []c
     ctx.encrypt(&encryptedhalf2, &block2);
 
     var encryptedpk: [43]u8 = undefined;
-    std.mem.copy(u8, encryptedpk[0..2], EC_NO_MULTIPLY_FLAG[0..2]);
-    std.mem.copy(u8, encryptedpk[2..3], FLAG_BYTE[0..]);
-    std.mem.copy(u8, encryptedpk[3..7], &salt);
-    std.mem.copy(u8, encryptedpk[7..23], &encryptedhalf1);
-    std.mem.copy(u8, encryptedpk[23..39], &encryptedhalf2);
+    @memcpy(encryptedpk[0..2], EC_NO_MULTIPLY_FLAG[0..2]);
+    @memcpy(encryptedpk[2..3], FLAG_BYTE[0..]);
+    @memcpy(encryptedpk[3..7], &salt);
+    @memcpy(encryptedpk[7..23], &encryptedhalf1);
+    @memcpy(encryptedpk[23..39], &encryptedhalf2);
 
     const checksum = utils.calculateChecksum(encryptedpk[0..39]);
-    std.mem.copy(u8, encryptedpk[39..43], checksum[0..4]);
+    @memcpy(encryptedpk[39..43], checksum[0..4]);
 
     var encoded: [58]u8 = undefined;
     _ = try utils.toBase58(&encoded, &encryptedpk);

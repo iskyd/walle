@@ -55,7 +55,7 @@ pub fn main() !void {
             try bip39.generateMnemonic(allocator, entropy, wordlist, &mnemonic);
             defer for (mnemonic) |word| allocator.free(word);
             var seed: [64]u8 = undefined;
-            try bip39.mnemonicToSeed(allocator, mnemonic, "", &seed);
+            try bip39.mnemonicToSeed(allocator, &mnemonic, "", &seed);
             var seed_str: [128]u8 = undefined;
             _ = try std.fmt.bufPrint(&seed_str, "{x}", .{std.fmt.fmtSliceHexLower(&seed)});
 

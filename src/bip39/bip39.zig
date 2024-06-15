@@ -48,8 +48,8 @@ pub fn generateMnemonic(allocator: std.mem.Allocator, entropy: []u8, wordlist: W
     std.crypto.hash.sha2.Sha256.hash(entropy, &checksum, .{});
     var concatenated = try allocator.alloc(u8, entropy.len + checksum_bits);
     defer allocator.free(concatenated);
-    std.mem.copy(u8, concatenated[0..entropy.len], entropy);
-    std.mem.copy(u8, concatenated[entropy.len..], checksum[0..checksum_bits]);
+    @memcpy(concatenated[0..entropy.len], entropy);
+    @memcpy(concatenated[entropy.len..], checksum[0..checksum_bits]);
 
     const u_entropy: u264 = @byteSwap(@as(*align(1) u264, @ptrCast(concatenated.ptr)).*);
     const mask: u64 = (1 << 11) - 1;
@@ -66,8 +66,8 @@ pub fn generateMnemonic(allocator: std.mem.Allocator, entropy: []u8, wordlist: W
 pub fn mnemonicToSeed(allocator: std.mem.Allocator, mnemonic: [][]u8, passphrase: []const u8, buffer: []u8) !void {
     var salt = try allocator.alloc(u8, "mnemonic".len + passphrase.len);
     defer allocator.free(salt);
-    std.mem.copy(u8, salt[0..], "mnemonic");
-    std.mem.copy(u8, salt["mnemonic".len..], passphrase);
+    @memcpy(salt[0..8], "mnemonic");
+    @memcpy(salt["mnemonic".len..], passphrase);
 
     const prf = std.crypto.auth.hmac.sha2.HmacSha512;
 
@@ -144,7 +144,7 @@ test "mnemonicToSeed" {
 
     var s1: [64]u8 = undefined;
     try mnemonicToSeed(allocator, &b1, "TREZOR", &s1);
-    const actualSeed1 = std.mem.readIntBig(u512, &s1);
+    const actualSeed1 = std.mem.readInt(u512, &s1, .big);
     const expectedSeed1: u512 = 102649027874290713724689767472589284055554927022246786148344662858622900049166640615657055568848458507251256416806294161430513004959825609395163960773016;
     try std.testing.expectEqual(expectedSeed1, actualSeed1);
 
@@ -156,7 +156,7 @@ test "mnemonicToSeed" {
 
     var s2: [64]u8 = undefined;
     try mnemonicToSeed(allocator, &b2, "TREZOR", &s2);
-    const actualSeed2 = std.mem.readIntBig(u512, &s2);
+    const actualSeed2 = std.mem.readInt(u512, &s2, .big);
     const expectedSeed2: u512 = 2037984480896257598861395356416471090707367901180776855108909406405800700429254515648977950137835572880251515364603734010368696077549762703902611761338653;
     try std.testing.expectEqual(expectedSeed2, actualSeed2);
 
@@ -168,7 +168,7 @@ test "mnemonicToSeed" {
 
     var s3: [64]u8 = undefined;
     try mnemonicToSeed(allocator, &b3, "TREZOR", &s3);
-    const actualSeed3 = std.mem.readIntBig(u512, &s3);
+    const actualSeed3 = std.mem.readInt(u512, &s3, .big);
     const expectedSeed3: u512 = 8255326540855321261463521619631741630217762107517752183727119838575482639221952857292840619887401542272957276023929492122223117173190986974270213638571525;
     try std.testing.expectEqual(expectedSeed3, actualSeed3);
 }

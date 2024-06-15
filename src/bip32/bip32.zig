@@ -30,15 +30,15 @@ pub const ExtendedPrivateKey = struct {
     pub fn serialize(self: ExtendedPrivateKey, depth: u8, fingerprint: [4]u8, index: u32) [82]u8 {
         var indexBytes: [4]u8 = @bitCast(@byteSwap(index));
         var res: [82]u8 = undefined;
-        std.mem.copy(u8, res[0..4], &PRIVATE_KEY_ADDRESS_VERSION);
+        @memcpy(res[0..4], &PRIVATE_KEY_ADDRESS_VERSION);
         res[4] = depth;
-        std.mem.copy(u8, res[5..9], &fingerprint);
-        std.mem.copy(u8, res[9..13], &indexBytes);
-        std.mem.copy(u8, res[13..45], &self.chaincode);
+        @memcpy(res[5..9], &fingerprint);
+        @memcpy(res[9..13], &indexBytes);
+        @memcpy(res[13..45], &self.chaincode);
         res[45] = 0;
-        std.mem.copy(u8, res[46..78], &self.privatekey);
+        @memcpy(res[46..78], &self.privatekey);
         const checksum = utils.calculateChecksum(res[0..78]);
-        std.mem.copy(u8, res[78..82], &checksum);
+        @memcpy(res[78..82], &checksum);
 
         return res;
     }
@@ -117,7 +117,7 @@ pub const PublicKey = struct {
         _ = try std.fmt.hexToBytes(&bytes_hashed, &rstr);
 
         var address: [20]u8 = undefined;
-        std.mem.copy(u8, address[0..20], bytes_hashed[0..20]);
+        @memcpy(address[0..20], bytes_hashed[0..20]);
 
         return address;
     }
@@ -136,14 +136,14 @@ pub const PublicKey = struct {
 
         const checksum = utils.calculateChecksum(&b);
         var addr: [25]u8 = undefined;
-        std.mem.copy(u8, addr[0..21], b[0..]);
-        std.mem.copy(u8, addr[21..25], checksum[0..4]);
+        @memcpy(addr[0..21], b[0..]);
+        @memcpy(addr[21..25], checksum[0..4]);
         return addr;
     }
 
     pub fn fromStrCompressed(compressed: [66]u8) !PublicKey {
         const v = try std.fmt.parseInt(u264, &compressed, 16);
-        var c: [33]u8 = @bitCast(@byteSwap(v));
+        const c: [33]u8 = @bitCast(@byteSwap(v));
         const p = try secp256k1.uncompress(c);
         return PublicKey{ .point = p };
     }
@@ -164,15 +164,15 @@ pub const ExtendedPublicKey = struct {
     pub fn serialize(self: ExtendedPublicKey, depth: u8, fingerprint: [4]u8, index: u32) ![82]u8 {
         var indexBytes: [4]u8 = @bitCast(@byteSwap(index));
         var res: [82]u8 = undefined;
-        std.mem.copy(u8, res[0..4], &PUBLIC_KEY_ADDRESS_VERSION);
+        @memcpy(res[0..4], &PUBLIC_KEY_ADDRESS_VERSION);
         res[4] = depth;
-        std.mem.copy(u8, res[5..9], &fingerprint);
-        std.mem.copy(u8, res[9..13], &indexBytes);
-        std.mem.copy(u8, res[13..45], &self.chaincode);
+        @memcpy(res[5..9], &fingerprint);
+        @memcpy(res[9..13], &indexBytes);
+        @memcpy(res[13..45], &self.chaincode);
         const compressed = try self.key.compress();
-        std.mem.copy(u8, res[45..78], &compressed);
+        @memcpy(res[45..78], &compressed);
         const checksum = utils.calculateChecksum(res[0..78]);
-        std.mem.copy(u8, res[78..82], &checksum);
+        @memcpy(res[78..82], &checksum);
 
         return res;
     }
@@ -236,7 +236,7 @@ pub fn generateExtendedMasterPrivateKey(seed: [64]u8) ExtendedPrivateKey {
 }
 
 pub fn generatePublicKey(pk: [32]u8) PublicKey {
-    const k = std.mem.readIntBig(u256, &pk);
+    const k = std.mem.readInt(u256, &pk, .big);
     var public = secp256k1.Point{ .x = secp256k1.BASE_POINT.x, .y = secp256k1.BASE_POINT.y };
     public.multiply(k);
 
@@ -265,8 +265,8 @@ pub fn deriveChildFromExtendedPrivateKey(epk: ExtendedPrivateKey, index: u32) !E
     var I: [std.crypto.auth.hmac.sha2.HmacSha512.mac_length]u8 = undefined;
     std.crypto.auth.hmac.sha2.HmacSha512.create(I[0..], &bytes, &bytes_chaincode);
 
-    const private: u256 = std.mem.readIntBig(u256, &epk.privatekey);
-    const random: u256 = std.mem.readIntBig(u256, I[0..32]);
+    const private: u256 = std.mem.readInt(u256, &epk.privatekey, .big);
+    const random: u256 = std.mem.readInt(u256, I[0..32], .big);
     const k: u256 = @intCast(@mod(@as(u512, private) + random, secp256k1.NUMBER_OF_POINTS));
 
     return ExtendedPrivateKey{
@@ -295,7 +295,7 @@ pub fn deriveChildFromExtendedPublicKey(pk: ExtendedPublicKey, index: u32) !Exte
     var I: [std.crypto.auth.hmac.sha2.HmacSha512.mac_length]u8 = undefined;
     std.crypto.auth.hmac.sha2.HmacSha512.create(I[0..], &bytes, &bytes_chaincode);
 
-    const random: u256 = std.mem.readIntBig(u256, I[0..32]);
+    const random: u256 = std.mem.readInt(u256, I[0..32], .big);
     var point_hmac: secp256k1.Point = secp256k1.Point{ .x = secp256k1.BASE_POINT.x, .y = secp256k1.BASE_POINT.y };
     point_hmac.multiply(random);
     var public: secp256k1.Point = secp256k1.Point{ .x = pk.key.point.x, .y = pk.key.point.y };
@@ -324,8 +324,8 @@ pub fn deriveHardenedChild(epk: ExtendedPrivateKey, index: u32) !ExtendedPrivate
     var I: [std.crypto.auth.hmac.sha2.HmacSha512.mac_length]u8 = undefined;
     std.crypto.auth.hmac.sha2.HmacSha512.create(I[0..], &bytes, &bytes_chaincode);
 
-    const private: u256 = std.mem.readIntBig(u256, &epk.privatekey);
-    const random: u256 = std.mem.readIntBig(u256, I[0..32]);
+    const private: u256 = std.mem.readInt(u256, &epk.privatekey, .big);
+    const random: u256 = std.mem.readInt(u256, I[0..32], .big);
     const k: u256 = @intCast(@mod(@as(u512, private) + random, secp256k1.NUMBER_OF_POINTS));
 
     return ExtendedPrivateKey{
@@ -336,9 +336,9 @@ pub fn deriveHardenedChild(epk: ExtendedPrivateKey, index: u32) !ExtendedPrivate
 
 pub fn toWif(wpk: WifPrivateKey) ![52]u8 {
     var extended: [34]u8 = undefined;
-    std.mem.copy(u8, extended[0..], wpk.net[0..]);
-    std.mem.copy(u8, extended[1..33], wpk.key[0..]);
-    std.mem.copy(u8, extended[33..], wpk.suffix[0..]);
+    @memcpy(extended[0..1], wpk.net[0..1]);
+    @memcpy(extended[1..33], wpk.key[0..]);
+    @memcpy(extended[33..], wpk.suffix[0..]);
 
     var str: [68]u8 = undefined;
     _ = try std.fmt.bufPrint(&str, "{x}", .{std.fmt.fmtSliceHexLower(&extended)});
@@ -349,8 +349,8 @@ pub fn toWif(wpk: WifPrivateKey) ![52]u8 {
     var checksum: [32]u8 = utils.doubleSha256(&bytes);
 
     var wif: [38]u8 = undefined;
-    std.mem.copy(u8, wif[0..34], bytes[0..]);
-    std.mem.copy(u8, wif[34..], checksum[0..4]);
+    @memcpy(wif[0..34], bytes[0..]);
+    @memcpy(wif[34..], checksum[0..4]);
 
     var wif_base58: [52]u8 = undefined;
     try utils.toBase58(&wif_base58, &wif);
@@ -468,7 +468,7 @@ test "fromWif" {
 test "pubKeyCompress" {
     const x = 79027560793086286861659885563794118884743103107570705965389288630856279203871;
     const y = 70098904748994065624629803197701842741428754294763691930704573059552158053128;
-    var p = secp256k1.Point{ .x = x, .y = y };
+    const p = secp256k1.Point{ .x = x, .y = y };
     const pk = PublicKey{ .point = p };
     const compressed = try pk.compress();
     var compress_hex_str: [66]u8 = undefined;
@@ -479,7 +479,7 @@ test "pubKeyCompress" {
 test "toStrCompressed" {
     const x = 79027560793086286861659885563794118884743103107570705965389288630856279203871;
     const y = 70098904748994065624629803197701842741428754294763691930704573059552158053128;
-    var p = secp256k1.Point{ .x = x, .y = y };
+    const p = secp256k1.Point{ .x = x, .y = y };
     const pk = PublicKey{ .point = p };
     const str = try pk.toStrCompressed();
     try std.testing.expectEqualSlices(u8, &str, "02aeb803a9ace6dcc5f11d06e8f30e24186c904f463be84f303d15bb7d48d1201f");
@@ -488,7 +488,7 @@ test "toStrCompressed" {
 test "toStrUncompressed" {
     const x = 79027560793086286861659885563794118884743103107570705965389288630856279203871;
     const y = 70098904748994065624629803197701842741428754294763691930704573059552158053128;
-    var p = secp256k1.Point{ .x = x, .y = y };
+    const p = secp256k1.Point{ .x = x, .y = y };
     const pk = PublicKey{ .point = p };
     const str = try pk.toStrUncompressed();
     try std.testing.expectEqualSlices(u8, &str, "04aeb803a9ace6dcc5f11d06e8f30e24186c904f463be84f303d15bb7d48d1201f9afa92f683a2ed207bcba8f4c3354190cb5eb416802016c5c432b22a00c67308");
@@ -505,7 +505,7 @@ test "toHash" {
 
     const pubkeystr = "02e3af28965693b9ce1228f9d468149b831d6a0540b25e8a9900f71372c11fb277".*;
     const v = try std.fmt.parseInt(u264, &pubkeystr, 16);
-    var c: [33]u8 = @bitCast(@byteSwap(v));
+    const c: [33]u8 = @bitCast(@byteSwap(v));
     const p = try secp256k1.uncompress(c);
     const pk1 = PublicKey{ .point = p };
     const addr = try pk1.toHash();
@@ -515,7 +515,7 @@ test "toHash" {
 
     const pubkeystr2 = "03f0609c81a45f8cab67fc2d050c21b1acd3d37c7acfd54041be6601ab4cef4f31".*;
     const v2 = try std.fmt.parseInt(u264, &pubkeystr2, 16);
-    var c2: [33]u8 = @bitCast(@byteSwap(v2));
+    const c2: [33]u8 = @bitCast(@byteSwap(v2));
     const p2 = try secp256k1.uncompress(c2);
     const pk2 = PublicKey{ .point = p2 };
     const addr2 = try pk2.toHash();
@@ -583,7 +583,7 @@ test "serializePublicKey" {
     _ = try std.fmt.hexToBytes(&cc, &ccstr);
 
     const v = try std.fmt.parseInt(u264, &pubkeystr, 16);
-    var c: [33]u8 = @bitCast(@byteSwap(v));
+    const c: [33]u8 = @bitCast(@byteSwap(v));
     const p = try secp256k1.uncompress(c);
     const pk = PublicKey{ .point = p };
 
@@ -606,7 +606,7 @@ test "extendedPublicKeyAddress" {
     _ = try std.fmt.hexToBytes(&cc, &ccstr);
 
     const v = try std.fmt.parseInt(u264, &pubkeystr, 16);
-    var c: [33]u8 = @bitCast(@byteSwap(v));
+    const c: [33]u8 = @bitCast(@byteSwap(v));
     const p = try secp256k1.uncompress(c);
     const pk = PublicKey{ .point = p };
 

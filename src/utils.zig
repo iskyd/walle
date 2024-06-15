@@ -83,7 +83,7 @@ pub fn encodeutf8(in: []const u8, buffer: []u8) !u16 {
     while (it.nextCodepoint()) |codepoint| {
         var b: [4]u8 = undefined;
         const len: u16 = @as(u16, try unicode.utf8Encode(codepoint, &b));
-        std.mem.copy(u8, buffer[cur .. cur + len], b[0..len]);
+        @memcpy(buffer[cur .. cur + len], b[0..len]);
         cur += len;
     }
     return cur;
@@ -93,15 +93,15 @@ pub fn decodeCompactSize(v: []u8) DecodedCompactSize {
     return switch (v[0]) {
         0...252 => DecodedCompactSize{ .totalBytes = 1, .n = v[0] },
         253 => {
-            const n = std.mem.readIntBig(u16, v[1..3]);
+            const n = std.mem.readInt(u16, v[1..3], .big);
             return DecodedCompactSize{ .totalBytes = 3, .n = n };
         },
         254 => {
-            const n = std.mem.readIntBig(u32, v[1..5]);
+            const n = std.mem.readInt(u32, v[1..5], .big);
             return DecodedCompactSize{ .totalBytes = 5, .n = n };
         },
         255 => {
-            const n = std.mem.readIntBig(u64, v[1..9]);
+            const n = std.mem.readInt(u64, v[1..9], .big);
             return DecodedCompactSize{ .totalBytes = 9, .n = n };
         },
     };
@@ -125,9 +125,9 @@ test "intToHexStr" {
 }
 
 test "toBase58" {
-    var str = "00f57f296d748bb310dc0512b28231e8ebd62454557d5edaef";
+    const str = "00f57f296d748bb310dc0512b28231e8ebd62454557d5edaef".*;
     var b: [25]u8 = undefined;
-    _ = try std.fmt.hexToBytes(&b, str);
+    _ = try std.fmt.hexToBytes(&b, &str);
     var base58_address: [34]u8 = undefined;
     _ = try toBase58(&base58_address, &b);
     try std.testing.expectEqualSlices(u8, base58_address[0..], "1PP4tMi6tep8qo8NwUDRaNw5cdiDVZYEnJ");

@@ -22,6 +22,12 @@ pub fn main() !void {
     std.debug.print("WALL-E. Bitcoin Wallet written in Zig\n", .{});
     f(opcode.OP_FALSE);
 
+    const n: u32 = 252;
+    switch (n) {
+        0...252 => std.debug.print("Inclusive\n", .{}),
+        else => std.debug.print("Exclusive\n", .{}),
+    }
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer std.debug.assert(gpa.deinit() == .ok);
@@ -122,7 +128,7 @@ pub fn main() !void {
     var p1: [130]u8 = "04cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4".*;
     var p2: [130]u8 = "0461cbdcc5409fb4b4d42b51d33381354d80e550078cb532a34bfa2fcfdeb7d76519aecc62770f5b0e4ef8551946d8a540911abe3e7854a26f39f58b25c15342af".*;
 
-    var pubkeys: [2]bip32.PublicKey = [2]bip32.PublicKey{ public2, public1 };
+    const pubkeys: [2]bip32.PublicKey = [2]bip32.PublicKey{ public2, public1 };
     _ = pubkeys;
     var pubkyesstr: [2][]u8 = [2][]u8{ &p2, &p1 };
 
@@ -164,7 +170,7 @@ pub fn main() !void {
 
     const ccc = "02e3af28965693b9ce1228f9d468149b831d6a0540b25e8a9900f71372c11fb277".*;
     const v = try std.fmt.parseInt(u264, &ccc, 16);
-    var c: [33]u8 = @bitCast(@byteSwap(v));
+    const c: [33]u8 = @bitCast(@byteSwap(v));
     const p = try secp256k1.uncompress(c);
     const pk1 = bip32.PublicKey{ .point = p };
     const addr = try pk1.toHash();

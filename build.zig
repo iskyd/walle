@@ -25,13 +25,17 @@ pub fn build(b: *std.Build) void {
     });
 
     const base58 = b.addModule("base58", .{
-        .source_file = .{ .path = "lib/base58/src/lib.zig" },
+        .root_source_file = .{ .path = "lib/base58/src/lib.zig" },
     });
     const clap = b.addModule("clap", .{
-        .source_file = .{ .path = "lib/clap/clap.zig" },
+        .root_source_file = .{ .path = "lib/clap/clap.zig" },
     });
-    exe.addModule("base58", base58);
-    exe.addModule("clap", clap);
+
+    exe.root_module.addImport("base58", base58);
+    exe.root_module.addImport("clap", clap);
+
+    //exe.addModule("base58", base58);
+    //exe.addModule("clap", clap);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -71,7 +75,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    exe_p.addModule("base58", base58);
+    exe_p.root_module.addImport("base58", base58);
 
     b.installArtifact(exe_p);
     const run_p_cmd = b.addRunArtifact(exe_p);
@@ -98,9 +102,9 @@ pub fn build(b: *std.Build) void {
             .root_source_file = .{ .path = test_file },
             .target = target,
             .optimize = optimize,
-            .main_pkg_path = .{ .path = "." }, // .main_mod_path in zig 0.12.0
+            //.main_mod_path = .{ .path = "." }, // .main_mod_path in zig 0.12.0
         });
-        unit_tests.addModule("base58", base58);
+        unit_tests.root_module.addImport("base58", base58);
         const run_unit_tests = b.addRunArtifact(unit_tests);
         test_step.dependOn(&run_unit_tests.step);
     }

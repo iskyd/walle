@@ -13,7 +13,7 @@ pub const Address = struct {
     pub fn init(allocator: std.mem.Allocator, comptime n: usize, val: [n]u8) !Address {
         var s = try allocator.alloc(u8, n);
         errdefer comptime unreachable; // From now on, no more error
-        std.mem.copy(u8, s[0..], &val);
+        @memcpy(s[0..n], &val);
         return Address{ .allocator = allocator, .val = s, .n = n };
     }
 
@@ -36,8 +36,8 @@ pub fn deriveP2PKHAddress(allocator: std.mem.Allocator, pk: PublicKey, n: Networ
 
     var checksum: [4]u8 = utils.calculateChecksum(&b);
     var addr: [25]u8 = undefined;
-    std.mem.copy(u8, addr[0..21], b[0..]);
-    std.mem.copy(u8, addr[21..25], &checksum);
+    @memcpy(addr[0..21], b[0..21]);
+    @memcpy(addr[21..25], &checksum);
 
     var base58addr: [34]u8 = undefined;
     try utils.toBase58(&base58addr, &addr);
@@ -46,7 +46,7 @@ pub fn deriveP2PKHAddress(allocator: std.mem.Allocator, pk: PublicKey, n: Networ
 
 pub fn deriveP2SHAddress(allocator: std.mem.Allocator, s: script.Script, n: Network) !Address {
     const cap = s.hexCapBytes();
-    var bytes = try allocator.alloc(u8, cap);
+    const bytes = try allocator.alloc(u8, cap);
     try s.toBytes(allocator, bytes);
     defer allocator.free(bytes);
 
@@ -60,8 +60,8 @@ pub fn deriveP2SHAddress(allocator: std.mem.Allocator, s: script.Script, n: Netw
     _ = try std.fmt.hexToBytes(&bytes_hashed, &rstr);
     var checksum: [32]u8 = utils.doubleSha256(&bytes_hashed);
     var addr: [25]u8 = undefined;
-    std.mem.copy(u8, addr[0..21], bytes_hashed[0..21]);
-    std.mem.copy(u8, addr[21..], checksum[0..4]);
+    @memcpy(addr[0..21], bytes_hashed[0..21]);
+    @memcpy(addr[21..], checksum[0..4]);
 
     return switch (n) {
         Network.MAINNET => {
@@ -87,7 +87,7 @@ test "deriveP2PKHAddress" {
     var i: u8 = 0;
     for (pubkeys) |pubkeystr| {
         const v = try std.fmt.parseInt(u264, &pubkeystr, 16);
-        var c: [33]u8 = @bitCast(@byteSwap(v));
+        const c: [33]u8 = @bitCast(@byteSwap(v));
         const p = try secp256k1.uncompress(c);
         const pk = PublicKey{ .point = p };
         const addrmainnet = try deriveP2PKHAddress(allocator, pk, Network.MAINNET);
