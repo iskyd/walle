@@ -247,6 +247,7 @@ pub fn p2ms(allocator: std.mem.Allocator, pubkeys: [][]const u8, m: u8, n: u8) !
     return script;
 }
 
+// NOT TESTED
 pub fn p2pkh(allocator: std.mem.Allocator, pkeyhash: []const u8) !Script {
     var script = Script.init(allocator);
     try script.push(ScriptOp{ .op = opcode.OP_CHECKSIG });
@@ -262,7 +263,7 @@ pub fn p2pkh(allocator: std.mem.Allocator, pkeyhash: []const u8) !Script {
 pub fn p2wpkh(allocator: std.mem.Allocator, pubkeyhash: []const u8) !Script {
     var script = Script.init(allocator);
     try script.push(ScriptOp{ .v = pubkeyhash });
-    try script.push(ScriptOp{ .pushbytes = 32 });
+    try script.push(ScriptOp{ .pushbytes = 20 });
     try script.push(ScriptOp{ .op = opcode.OP_FALSE });
     return script;
 }
@@ -345,13 +346,16 @@ test "toHex" {
 
 test "p2wpkh" {
     const allocator = std.testing.allocator;
-    const hash: [64]u8 = "65f91a53cb7120057db3d378bd0f7d944167d43a7dcbff15d6afc4823f1d3ed3".*;
+    const hash: [40]u8 = "64cb674c9fdcb5c033ccb5d860978974ff02f400".*;
     const script = try p2wpkh(allocator, &hash);
     defer script.deinit();
+    try std.testing.expectEqualStrings(&hash, script.stack.items[0].v);
+    try std.testing.expectEqual(20, script.stack.items[1].pushbytes);
+    try std.testing.expectEqual(opcode.OP_FALSE, script.stack.items[2].op);
     const cap = script.hexCap();
     const buffer = try allocator.alloc(u8, cap);
     defer allocator.free(buffer);
     try script.toHex(buffer);
-    const expectedhex: [68]u8 = "002065f91a53cb7120057db3d378bd0f7d944167d43a7dcbff15d6afc4823f1d3ed3".*;
+    const expectedhex: [44]u8 = "001464cb674c9fdcb5c033ccb5d860978974ff02f400".*;
     try std.testing.expectEqualStrings(&expectedhex, buffer);
 }
