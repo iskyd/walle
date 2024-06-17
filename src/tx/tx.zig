@@ -7,14 +7,14 @@ const TxError = error{
 };
 
 // Output represented by transaction hash and index n to its outputs
-const Output = struct {
+pub const Output = struct {
     txid: [64]u8,
     n: u32,
     amount: u32,
 };
 
 // Input of a transaction
-const TxInput = struct {
+pub const TxInput = struct {
     allocator: std.mem.Allocator,
     prevout: ?Output, // nullable due to coinbase transaction
     scriptsig: []u8,
@@ -33,7 +33,7 @@ const TxInput = struct {
 };
 
 // Output of a transaction
-const TxOutput = struct {
+pub const TxOutput = struct {
     allocator: std.mem.Allocator,
     amount: u64,
     script_pubkey: []const u8,
