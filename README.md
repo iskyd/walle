@@ -61,11 +61,10 @@ curl --verbose -L --user walle --data-binary '{"jsonrpc": "1.0", "id": "walle", 
 - [x] BIP32 (HD Wallets)
 - [x] Serialized Extendend Private/Public Key (https://learnmeabitcoin.com/technical/keys/hd-wallets/extended-keys/)
 - [x] BIP38 (Encrypting Bitcoin Private Key)
-- [ ] BIP43
-- [ ] BIP44
+- [x] BIP44
 - [x] P2PK and P2SH Address Generation
 - [ ] Wallet files
-- [ ] ECDSA Signagures
+- [x] ECDSA Signatures
 - [ ] Segwit
 - [ ] BTC Node integration
 - [ ] Wallet Sync
