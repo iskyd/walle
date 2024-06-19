@@ -16,6 +16,12 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
+    //const app: []const u8 = if (b.args) |args| args[0] else &"vault".*;
+    //if (std.mem.eql(u8, app, "vault") != true and std.mem.eql(u8, app, "indexer") != true) {
+    //    std.debug.print("invalid app, supported vault or indexer\n", .{});
+    //    return;
+    //}
+
     const exe = b.addExecutable(.{
         .name = "walle",
         // In this case the main source file is merely a path, however, in more
