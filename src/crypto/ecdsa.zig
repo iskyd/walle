@@ -13,16 +13,25 @@ pub const Signature = struct {
 // z is the hash of the msg we want to sign
 pub fn sign(pk: [32]u8, z: [32]u8) Signature {
     const n = Secp256k1NumberOfPoints;
-    const k = rand.intRangeAtMost(u256, 0, n - 1);
-    var p = Secp256k1Point.getBasePoint();
-    p.multiply(k);
-    const r = @mod(p.x, n);
-    const uz = std.mem.readInt(u256, &z, .big);
-    const d = std.mem.readInt(u256, &pk, .big);
-    const invk = modinv(i512, k, n);
-    const s: u256 = @intCast(@mod(@as(i1024, (uz + (@as(i512, r) * d))) * invk, n));
+    while (true) {
+        const k = rand.intRangeAtMost(u256, 0, n - 1);
+        var p = Secp256k1Point.getBasePoint();
+        p.multiply(k);
+        const r = @mod(p.x, n);
+        if (r == 0) {
+            continue;
+        }
+        const uz = std.mem.readInt(u256, &z, .big);
+        const d = std.mem.readInt(u256, &pk, .big);
+        const invk = modinv(i512, k, n);
+        const s: u256 = @intCast(@mod(@as(i1024, (uz + (@as(i512, r) * d))) * invk, n));
+        if (s == 0) {
+            continue;
+        }
+        return Signature{ .r = r, .s = s };
+    }
 
-    return Signature{ .r = r, .s = s };
+    unreachable;
 }
 
 test "sign" {
