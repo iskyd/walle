@@ -1,9 +1,9 @@
 const std = @import("std");
-const utils = @import("../utils.zig");
-const Network = @import("../const.zig").Network;
-const script = @import("../script/script.zig");
-const PublicKey = @import("../bip32/bip32.zig").PublicKey;
-const ripemd = @import("../ripemd160/ripemd160.zig");
+const utils = @import("utils.zig");
+const Network = @import("const.zig").Network;
+const script = @import("script.zig");
+const PublicKey = @import("bip32.zig").PublicKey;
+const Secp256k1Point = @import("crypto").Secp256k1Point;
 
 pub const Address = struct {
     val: []u8,
@@ -79,7 +79,6 @@ pub fn deriveP2SHAddress(allocator: std.mem.Allocator, s: script.Script, n: Netw
 
 test "deriveP2PKHAddress" {
     const allocator = std.testing.allocator;
-    const secp256k1 = @import("../secp256k1/secp256k1.zig");
 
     const pubkeys = [4][66]u8{ "02e3af28965693b9ce1228f9d468149b831d6a0540b25e8a9900f71372c11fb277".*, "0398426aee0ea0f493af6082689368cac9cdc58e2211f9278b83137489361506e0".*, "021300826a376a51bfa57dc472d9f4a8aee66a9fe17a6d2e3a8377de4497313603".*, "02e54fd5846317beee43336707872879e28df4c6a47cddfe21deaf95eb85d64610".* };
     const expected: [8][]u8 = [8][]u8{ @constCast("13mKVN2PVGYdNLSLG8egVXwnPFrSUtWCTE"), @constCast("miHGnR7NJHyt9Suwyhd4KTA7FFT9S9Tc9H"), @constCast("15VfPhqqqHE4x8tNdka1RjHK1bnVr8D8Fi"), @constCast("mk1cgkvpeJfKjFMzMKYPFeVdsbPCiCDEDc"), @constCast("1Q9Eb1cy93vTVN7sGwqHPAZjT46wSBpSou"), @constCast("n4fBt4hwx5MiGUbUzWofD5n4K3heLRMmVC"), @constCast("1FsadxqoEcJLf8u6grqBQttDD95NNr8We8"), @constCast("mvPXw1vn3djbSFNiQRoZEp6Y58g5HXZ8yC") };
@@ -88,7 +87,7 @@ test "deriveP2PKHAddress" {
     for (pubkeys) |pubkeystr| {
         const v = try std.fmt.parseInt(u264, &pubkeystr, 16);
         const c: [33]u8 = @bitCast(@byteSwap(v));
-        const p = try secp256k1.uncompress(c);
+        const p = try Secp256k1Point.fromCompressed(c);
         const pk = PublicKey{ .point = p };
         const addrmainnet = try deriveP2PKHAddress(allocator, pk, Network.MAINNET);
         const addrtestnet = try deriveP2PKHAddress(allocator, pk, Network.TESTNET);

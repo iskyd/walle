@@ -1,4 +1,5 @@
 const std = @import("std");
+const Build = std.Build;
 
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
@@ -30,9 +31,13 @@ pub fn build(b: *std.Build) void {
     const clap = b.addModule("clap", .{
         .root_source_file = .{ .path = "lib/clap/clap.zig" },
     });
+    const crypto = b.addModule("crypto", .{
+        .root_source_file = .{ .path = "src/crypto/crypto.zig" },
+    });
 
     exe.root_module.addImport("base58", base58);
     exe.root_module.addImport("clap", clap);
+    exe.root_module.addImport("crypto", crypto);
 
     //exe.addModule("base58", base58);
     //exe.addModule("clap", clap);
@@ -65,30 +70,6 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    // Run p.zig
-    const exe_p = b.addExecutable(.{
-        .name = "walle",
-        // In this case the main source file is merely a path, however, in more
-        // complicated build scripts, this could be a generated file.
-        .root_source_file = .{ .path = "src/p.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
-
-    exe_p.root_module.addImport("base58", base58);
-
-    b.installArtifact(exe_p);
-    const run_p_cmd = b.addRunArtifact(exe_p);
-
-    run_p_cmd.step.dependOn(b.getInstallStep());
-
-    if (b.args) |args| {
-        run_p_cmd.addArgs(args);
-    }
-
-    const run_p_step = b.step("run-p", "Run p.zig");
-    run_p_step.dependOn(&run_p_cmd.step);
-
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request
     // running the unit tests.
@@ -99,14 +80,27 @@ pub fn build(b: *std.Build) void {
     // but does not run it.
     for (tests) |test_file| {
         const unit_tests = b.addTest(.{
-            .root_source_file = .{ .path = test_file },
+            .root_source_file = b.path(test_file),
             .target = target,
             .optimize = optimize,
-            //.main_mod_path = .{ .path = "." }, // .main_mod_path in zig 0.12.0
+            // .main_mod_path = .{ .path = "." }, // .main_mod_path in zig 0.12.0
         });
         unit_tests.root_module.addImport("base58", base58);
+        unit_tests.root_module.addImport("crypto", crypto);
         const run_unit_tests = b.addRunArtifact(unit_tests);
         run_unit_tests.has_side_effects = true; // Always execute test, do not cache
+        test_step.dependOn(&run_unit_tests.step);
+    }
+
+    // add tests for crypto module
+    if (b.args == null) {
+        const unit_tests = b.addTest(.{
+            .root_source_file = b.path("unit_test_crypto.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        const run_unit_tests = b.addRunArtifact(unit_tests);
+        run_unit_tests.has_side_effects = false;
         test_step.dependOn(&run_unit_tests.step);
     }
 }

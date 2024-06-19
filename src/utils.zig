@@ -1,8 +1,8 @@
 const std = @import("std");
 const math = std.math;
-const base58 = @import("base58");
 const unicode = std.unicode;
-const ripemd = @import("ripemd160/ripemd160.zig");
+const base58 = @import("base58");
+const Ripemd160 = @import("crypto").Ripemd160;
 
 pub const DecodedCompactSize = struct {
     totalBytes: u8,
@@ -72,7 +72,7 @@ pub fn doubleSha256(bytes: []const u8) [32]u8 {
 pub fn hash160(bytes: []const u8) [20]u8 {
     var hashed: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(bytes, &hashed, .{});
-    const r = ripemd.Ripemd160.hash(&hashed);
+    const r = Ripemd160.hash(&hashed);
     return r.bytes;
 }
 

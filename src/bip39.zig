@@ -1,8 +1,8 @@
 const std = @import("std");
-const utils = @import("../utils.zig");
 const assert = std.debug.assert;
-
+const utils = @import("utils.zig");
 const builtin = @import("builtin");
+
 const wordseparator = if (builtin.os.tag == .windows) "\r\n" else "\n";
 
 pub const WordList = struct {

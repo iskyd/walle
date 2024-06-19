@@ -1,8 +1,8 @@
 const std = @import("std");
-const bip32 = @import("../bip32/bip32.zig");
-const Network = @import("../const.zig").Network;
-const utils = @import("../utils.zig");
 const assert = std.debug.assert;
+const bip32 = @import("bip32.zig");
+const Network = @import("const.zig").Network;
+const utils = @import("utils.zig");
 
 pub const BIP_44_PURPOSE = 44;
 pub const BIP_84_PURPOSE = 84; // Segwit

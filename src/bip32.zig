@@ -1,11 +1,12 @@
 const std = @import("std");
-const secp256k1 = @import("../secp256k1/secp256k1.zig");
-const utils = @import("../utils.zig");
 const math = std.math;
-const ripemd = @import("../ripemd160/ripemd160.zig");
 const assert = std.debug.assert;
-const Network = @import("../const.zig").Network;
-const script = @import("../script/script.zig");
+const Secp256k1Point = @import("crypto").Secp256k1Point;
+const Secp256k1NumberOfPoints = @import("crypto").Secp256k1NumberOfPoints;
+const Ripemd160 = @import("crypto").Ripemd160;
+const utils = @import("utils.zig");
+const Network = @import("const.zig").Network;
+const script = @import("script.zig");
 
 const PRIVATE_KEY_ADDRESS_VERSION = [4]u8{ 0b00000100, 0b10001000, 0b10101101, 0b11100100 };
 const PUBLIC_KEY_ADDRESS_VERSION = [4]u8{ 0b00000100, 0b10001000, 0b10110010, 0b00011110 };
@@ -73,7 +74,7 @@ pub const ExtendedPrivateKey = struct {
 };
 
 pub const PublicKey = struct {
-    point: secp256k1.Point, // Public Key
+    point: Secp256k1Point, // Public Key
 
     pub fn compress(self: PublicKey) ![33]u8 {
         var buffer: [66]u8 = undefined;
@@ -110,7 +111,7 @@ pub const PublicKey = struct {
         var hashed: [32]u8 = undefined;
         std.crypto.hash.sha2.Sha256.hash(&bytes, &hashed, .{});
 
-        const r = ripemd.Ripemd160.hash(&hashed);
+        const r = Ripemd160.hash(&hashed);
         var rstr: [40]u8 = undefined;
         _ = try std.fmt.bufPrint(&rstr, "{x}", .{std.fmt.fmtSliceHexLower(r.bytes[0..])});
         var bytes_hashed: [20]u8 = undefined;
@@ -144,7 +145,7 @@ pub const PublicKey = struct {
     pub fn fromStrCompressed(compressed: [66]u8) !PublicKey {
         const v = try std.fmt.parseInt(u264, &compressed, 16);
         const c: [33]u8 = @bitCast(@byteSwap(v));
-        const p = try secp256k1.uncompress(c);
+        const p = try Secp256k1Point.fromCompressed(c);
         return PublicKey{ .point = p };
     }
 
@@ -237,7 +238,7 @@ pub fn generateExtendedMasterPrivateKey(seed: [64]u8) ExtendedPrivateKey {
 
 pub fn generatePublicKey(pk: [32]u8) PublicKey {
     const k = std.mem.readInt(u256, &pk, .big);
-    var public = secp256k1.Point{ .x = secp256k1.BASE_POINT.x, .y = secp256k1.BASE_POINT.y };
+    var public = Secp256k1Point.getBasePoint();
     public.multiply(k);
 
     return PublicKey{ .point = public };
@@ -267,7 +268,7 @@ pub fn deriveChildFromExtendedPrivateKey(epk: ExtendedPrivateKey, index: u32) !E
 
     const private: u256 = std.mem.readInt(u256, &epk.privatekey, .big);
     const random: u256 = std.mem.readInt(u256, I[0..32], .big);
-    const k: u256 = @intCast(@mod(@as(u512, private) + random, secp256k1.NUMBER_OF_POINTS));
+    const k: u256 = @intCast(@mod(@as(u512, private) + random, Secp256k1NumberOfPoints));
 
     return ExtendedPrivateKey{
         .privatekey = @bitCast(@byteSwap(k)),
@@ -296,9 +297,9 @@ pub fn deriveChildFromExtendedPublicKey(pk: ExtendedPublicKey, index: u32) !Exte
     std.crypto.auth.hmac.sha2.HmacSha512.create(I[0..], &bytes, &bytes_chaincode);
 
     const random: u256 = std.mem.readInt(u256, I[0..32], .big);
-    var point_hmac: secp256k1.Point = secp256k1.Point{ .x = secp256k1.BASE_POINT.x, .y = secp256k1.BASE_POINT.y };
+    var point_hmac: Secp256k1Point = Secp256k1Point.getBasePoint();
     point_hmac.multiply(random);
-    var public: secp256k1.Point = secp256k1.Point{ .x = pk.key.point.x, .y = pk.key.point.y };
+    var public: Secp256k1Point = Secp256k1Point{ .x = pk.key.point.x, .y = pk.key.point.y };
     public.add(point_hmac);
 
     return ExtendedPublicKey{ .key = PublicKey{ .point = public }, .chaincode = I[32..].* };
@@ -326,7 +327,7 @@ pub fn deriveHardenedChild(epk: ExtendedPrivateKey, index: u32) !ExtendedPrivate
 
     const private: u256 = std.mem.readInt(u256, &epk.privatekey, .big);
     const random: u256 = std.mem.readInt(u256, I[0..32], .big);
-    const k: u256 = @intCast(@mod(@as(u512, private) + random, secp256k1.NUMBER_OF_POINTS));
+    const k: u256 = @intCast(@mod(@as(u512, private) + random, Secp256k1NumberOfPoints));
 
     return ExtendedPrivateKey{
         .privatekey = @bitCast(@byteSwap(k)),
@@ -468,7 +469,7 @@ test "fromWif" {
 test "pubKeyCompress" {
     const x = 79027560793086286861659885563794118884743103107570705965389288630856279203871;
     const y = 70098904748994065624629803197701842741428754294763691930704573059552158053128;
-    const p = secp256k1.Point{ .x = x, .y = y };
+    const p = Secp256k1Point{ .x = x, .y = y };
     const pk = PublicKey{ .point = p };
     const compressed = try pk.compress();
     var compress_hex_str: [66]u8 = undefined;
@@ -479,7 +480,7 @@ test "pubKeyCompress" {
 test "toStrCompressed" {
     const x = 79027560793086286861659885563794118884743103107570705965389288630856279203871;
     const y = 70098904748994065624629803197701842741428754294763691930704573059552158053128;
-    const p = secp256k1.Point{ .x = x, .y = y };
+    const p = Secp256k1Point{ .x = x, .y = y };
     const pk = PublicKey{ .point = p };
     const str = try pk.toStrCompressed();
     try std.testing.expectEqualSlices(u8, &str, "02aeb803a9ace6dcc5f11d06e8f30e24186c904f463be84f303d15bb7d48d1201f");
@@ -488,7 +489,7 @@ test "toStrCompressed" {
 test "toStrUncompressed" {
     const x = 79027560793086286861659885563794118884743103107570705965389288630856279203871;
     const y = 70098904748994065624629803197701842741428754294763691930704573059552158053128;
-    const p = secp256k1.Point{ .x = x, .y = y };
+    const p = Secp256k1Point{ .x = x, .y = y };
     const pk = PublicKey{ .point = p };
     const str = try pk.toStrUncompressed();
     try std.testing.expectEqualSlices(u8, &str, "04aeb803a9ace6dcc5f11d06e8f30e24186c904f463be84f303d15bb7d48d1201f9afa92f683a2ed207bcba8f4c3354190cb5eb416802016c5c432b22a00c67308");
@@ -506,7 +507,7 @@ test "toHash" {
     const pubkeystr = "02e3af28965693b9ce1228f9d468149b831d6a0540b25e8a9900f71372c11fb277".*;
     const v = try std.fmt.parseInt(u264, &pubkeystr, 16);
     const c: [33]u8 = @bitCast(@byteSwap(v));
-    const p = try secp256k1.uncompress(c);
+    const p = try Secp256k1Point.fromCompressed(c);
     const pk1 = PublicKey{ .point = p };
     const addr = try pk1.toHash();
     var s: [40]u8 = undefined;
@@ -516,7 +517,7 @@ test "toHash" {
     const pubkeystr2 = "03f0609c81a45f8cab67fc2d050c21b1acd3d37c7acfd54041be6601ab4cef4f31".*;
     const v2 = try std.fmt.parseInt(u264, &pubkeystr2, 16);
     const c2: [33]u8 = @bitCast(@byteSwap(v2));
-    const p2 = try secp256k1.uncompress(c2);
+    const p2 = try Secp256k1Point.fromCompressed(c2);
     const pk2 = PublicKey{ .point = p2 };
     const addr2 = try pk2.toHash();
     var s2: [40]u8 = undefined;
@@ -584,7 +585,7 @@ test "serializePublicKey" {
 
     const v = try std.fmt.parseInt(u264, &pubkeystr, 16);
     const c: [33]u8 = @bitCast(@byteSwap(v));
-    const p = try secp256k1.uncompress(c);
+    const p = try Secp256k1Point.fromCompressed(c);
     const pk = PublicKey{ .point = p };
 
     const epk = ExtendedPublicKey{ .key = pk, .chaincode = cc };
@@ -607,7 +608,7 @@ test "extendedPublicKeyAddress" {
 
     const v = try std.fmt.parseInt(u264, &pubkeystr, 16);
     const c: [33]u8 = @bitCast(@byteSwap(v));
-    const p = try secp256k1.uncompress(c);
+    const p = try Secp256k1Point.fromCompressed(c);
     const pk = PublicKey{ .point = p };
 
     const epk = ExtendedPublicKey{ .key = pk, .chaincode = cc };

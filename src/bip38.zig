@@ -1,11 +1,11 @@
 const std = @import("std");
-const bip32 = @import("../bip32/bip32.zig");
 const scrypt = std.crypto.pwhash.scrypt;
 const aes = std.crypto.core.aes;
-const utils = @import("../utils.zig");
-const addrlib = @import("../address/address.zig");
+const bip32 = @import("bip32.zig");
+const utils = @import("utils.zig");
+const addrlib = @import("address.zig");
+const Network = @import("const.zig").Network;
 
-const Network = @import("../const.zig").Network;
 const EC_NO_MULTIPLY_FLAG = [2]u8{ 0b00000001, 0b01000010 };
 const FLAG_BYTE = [1]u8{0b11100000};
 

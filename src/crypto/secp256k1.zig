@@ -1,10 +1,9 @@
 const std = @import("std");
 const math = @import("std").math;
 
-pub const PRIME_MODULUS: u256 = @intCast(math.pow(u512, 2, 256) - math.pow(u256, 2, 32) - math.pow(u256, 2, 9) - math.pow(u256, 2, 8) - math.pow(u256, 2, 7) - math.pow(u256, 2, 6) - math.pow(u256, 2, 4) - 1);
+const PRIME_MODULUS: u256 = @intCast(math.pow(u512, 2, 256) - math.pow(u256, 2, 32) - math.pow(u256, 2, 9) - math.pow(u256, 2, 8) - math.pow(u256, 2, 7) - math.pow(u256, 2, 6) - math.pow(u256, 2, 4) - 1);
 pub const NUMBER_OF_POINTS = 115792089237316195423570985008687907852837564279074904382605163141518161494337;
-
-pub const BASE_POINT = Point{ .x = 55066263022277343669578718895168534326250603453777594175500187360389116729240, .y = 32670510020758816978083085130507043184471273380659243275938904335757337482424 };
+const BASE_POINT = Point{ .x = 55066263022277343669578718895168534326250603453777594175500187360389116729240, .y = 32670510020758816978083085130507043184471273380659243275938904335757337482424 };
 
 fn powmod(base: u256, exponent: u256, modulus: u256) u256 {
     var result: u256 = 1;
@@ -23,7 +22,7 @@ fn powmod(base: u256, exponent: u256, modulus: u256) u256 {
     return @intCast(result);
 }
 
-pub fn modinv(comptime T: type, _a: T, _m: T) T {
+fn modinv(comptime T: type, _a: T, _m: T) T {
     var prevy: T = 0;
     var y: T = 1;
     var a: T = _a;
@@ -44,17 +43,6 @@ pub fn modinv(comptime T: type, _a: T, _m: T) T {
     }
 
     return y;
-}
-
-pub fn uncompress(publicKey: [33]u8) !Point {
-    const parity = std.mem.readInt(u8, publicKey[0..1], .big);
-    const public_key_x = std.mem.readInt(u256, publicKey[1..], .big);
-    const y_sq = @mod(powmod(public_key_x, 3, PRIME_MODULUS) + 7, NUMBER_OF_POINTS);
-    var y = powmod(y_sq, (PRIME_MODULUS + 1) / 4, PRIME_MODULUS);
-    if (@mod(y, 2) != @mod(parity, 2)) {
-        y = @intCast(PRIME_MODULUS - y);
-    }
-    return Point{ .x = public_key_x, .y = y };
 }
 
 pub const Point = struct {
@@ -107,6 +95,21 @@ pub const Point = struct {
         self.x = current.x;
         self.y = current.y;
     }
+
+    pub fn fromCompressed(compressed: [33]u8) !Point {
+        const parity = std.mem.readInt(u8, compressed[0..1], .big);
+        const x = std.mem.readInt(u256, compressed[1..], .big);
+        const y_sq = @mod(powmod(x, 3, PRIME_MODULUS) + 7, NUMBER_OF_POINTS);
+        var y = powmod(y_sq, (PRIME_MODULUS + 1) / 4, PRIME_MODULUS);
+        if (@mod(y, 2) != @mod(parity, 2)) {
+            y = @intCast(PRIME_MODULUS - y);
+        }
+        return Point{ .x = x, .y = y };
+    }
+
+    pub fn getBasePoint() Point {
+        return Point{ .x = BASE_POINT.x, .y = BASE_POINT.y };
+    }
 };
 
 test "modinv" {
@@ -158,7 +161,7 @@ test "uncompress" {
     const buffer = "02aeb803a9ace6dcc5f11d06e8f30e24186c904f463be84f303d15bb7d48d1201f".*;
     const v = try std.fmt.parseInt(u264, &buffer, 16);
     const compressed: [33]u8 = @bitCast(@byteSwap(v));
-    const p = try uncompress(compressed);
+    const p = try Point.fromCompressed(compressed);
     try std.testing.expectEqual(p.x, 79027560793086286861659885563794118884743103107570705965389288630856279203871);
     try std.testing.expectEqual(p.y, 70098904748994065624629803197701842741428754294763691930704573059552158053128);
 }

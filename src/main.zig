@@ -1,8 +1,7 @@
 const std = @import("std");
 const io = std.io;
-const bip39 = @import("bip39/bip39.zig");
-const bip32 = @import("bip32/bip32.zig");
-const secp256k1 = @import("secp256k1/secp256k1.zig");
+const bip39 = @import("bip39.zig");
+const bip32 = @import("bip32.zig");
 const utils = @import("utils.zig");
 const clap = @import("clap");
 

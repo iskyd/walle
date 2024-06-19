@@ -1,6 +1,6 @@
 const std = @import("std");
-const script = @import("../script/script.zig");
-const utils = @import("../utils.zig");
+const script = @import("script.zig");
+const utils = @import("utils.zig");
 
 const TxError = error{
     AmountTooLowError,
