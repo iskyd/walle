@@ -1,49 +1,11 @@
 const std = @import("std");
+const powmod = @import("math.zig").powmod;
+const modinv = @import("math.zig").modinv;
 const math = @import("std").math;
 
 const PRIME_MODULUS: u256 = @intCast(math.pow(u512, 2, 256) - math.pow(u256, 2, 32) - math.pow(u256, 2, 9) - math.pow(u256, 2, 8) - math.pow(u256, 2, 7) - math.pow(u256, 2, 6) - math.pow(u256, 2, 4) - 1);
 pub const NUMBER_OF_POINTS = 115792089237316195423570985008687907852837564279074904382605163141518161494337;
 const BASE_POINT = Point{ .x = 55066263022277343669578718895168534326250603453777594175500187360389116729240, .y = 32670510020758816978083085130507043184471273380659243275938904335757337482424 };
-
-fn powmod(base: u256, exponent: u256, modulus: u256) u256 {
-    var result: u256 = 1;
-    var b: u256 = base;
-    var e: u256 = exponent;
-    while (e > 0) {
-        if (@mod(e, 2) == 1) {
-            b = @mod(b, modulus);
-            result = @intCast(@mod(@as(u512, result) * b, modulus));
-        }
-        e = e >> 1;
-        b = @mod(b, modulus);
-        b = @intCast(@mod(@as(u512, b) * b, modulus));
-        b = @mod(b, modulus);
-    }
-    return @intCast(result);
-}
-
-fn modinv(comptime T: type, _a: T, _m: T) T {
-    var prevy: T = 0;
-    var y: T = 1;
-    var a: T = _a;
-    var m: T = _m;
-
-    if (a < 0) {
-        a = @mod(a, m);
-    }
-
-    while (a > 1) {
-        const q: T = @divFloor(m, a);
-        const tmp_y = y;
-        y = prevy - q * y;
-        prevy = tmp_y;
-        const tmp_a = a;
-        a = @mod(m, a);
-        m = tmp_a;
-    }
-
-    return y;
-}
 
 pub const Point = struct {
     x: u256,
@@ -112,11 +74,6 @@ pub const Point = struct {
     }
 };
 
-test "modinv" {
-    try std.testing.expectEqual(modinv(i32, 15, 26), 7);
-    try std.testing.expectEqual(modinv(i32, 26, 15), -4);
-}
-
 test "double" {
     var point = Point{ .x = 100, .y = 100 };
     point.double();
@@ -149,12 +106,6 @@ test "multiply" {
     p1.multiply(4);
     try std.testing.expectEqual(p1.x, 83958751277781481219825361860495351419593385084310388531537482022592812456470);
     try std.testing.expectEqual(p1.y, 91813336768047772184641076719937475964665959333856505805054708940286741019295);
-}
-
-test "powmod" {
-    try std.testing.expectEqual(powmod(2, 3, 5), 3);
-    try std.testing.expectEqual(powmod(2, 3, 15), 8);
-    try std.testing.expectEqual(powmod(49001864144210927699347487322952736965656659160088668794646536877889645920220, 28948022309329048855892746252171976963317496166410141009864396001977208667916, 115792089237316195423570985008687907853269984665640564039457584007908834671663), 45693184488322129798941181810986065111841230370876872108753010948356676618535);
 }
 
 test "uncompress" {
