@@ -23,8 +23,8 @@ pub fn sign(pk: [32]u8, z: [32]u8) Signature {
         }
         const uz = std.mem.readInt(u256, &z, .big);
         const d = std.mem.readInt(u256, &pk, .big);
-        const invk = modinv(i512, k, n);
-        const s: u256 = @intCast(@mod(@as(i1024, (uz + (@as(i512, r) * d))) * invk, n));
+        const invk = modinv(i1024, k, n);
+        const s: u256 = @intCast(@mod(@as(i1024, (uz + (@as(i1024, r) * d))) * invk, n));
         if (s == 0) {
             continue;
         }
@@ -56,7 +56,7 @@ test "sign" {
     var Q = Secp256k1Point.getBasePoint();
     Q.multiply(upk); // public key
 
-    const w = modinv(i512, signature.s, Secp256k1NumberOfPoints);
+    const w = modinv(i1024, signature.s, Secp256k1NumberOfPoints);
 
     const uu1: u256 = @intCast(@mod(uz * w, Secp256k1NumberOfPoints));
     const uu2: u256 = @intCast(@mod(signature.r * w, Secp256k1NumberOfPoints));
