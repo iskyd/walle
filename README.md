@@ -55,6 +55,9 @@ Test bitcoin node from outside container:
 curl --verbose -L --user walle --data-binary '{"jsonrpc": "1.0", "id": "walle", "method": "getblockchaininfo", "params": []}' -H 'content-type: text/plain;' 0.0.0.0:18444
 ```
 
+### Contributing
+Join [WALL•E's Discord channel](https://discord.gg/9e9qnzQAH6) to chat with the contributors and understand next steps, available tasks and bugs to be fixed.
+
 
 ### TODO
 - [x] BIP39 (Mnemonic generation)
