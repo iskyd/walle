@@ -43,6 +43,11 @@ docker volume create btcnode
 docker run --rm --name btcnode -v btcnode:/bitcoin-25.0/data -p 18444:18443 btcnode
 ```
 
+For mac users use this code to build docker image.
+``` bash
+docker build -t btcnode -f Dockerfile.arm .
+```
+
 The first time you run the node you need to create a new wallet (it is no longer created automatically, if the walle was already created use loadwallet) then you can getnewaddress.
 
 ``` bash
