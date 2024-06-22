@@ -1,0 +1,15 @@
+FROM debian:bookworm
+
+ENV PATH="${PATH}:/bitcoin-25.0/bin"
+
+RUN apt update && apt install -y wget
+
+RUN wget https://bitcoin.org/bin/bitcoin-core-25.0/bitcoin-25.0-aarch64-linux-gnu.tar.gz
+RUN tar xzf bitcoin-25.0-aarch64-linux-gnu.tar.gz
+
+RUN mkdir bitcoin-25.0/data
+RUN mkdir /.bitcoin
+
+ADD node/bitcoin.conf /.bitcoin/bitcoin.conf
+
+CMD ["bitcoind", "-conf=/.bitcoin/bitcoin.conf"]
