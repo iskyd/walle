@@ -51,8 +51,8 @@ test "generateAccount" {
     const masterExtendedPrivate = try bip32.ExtendedPrivateKey.fromAddress(serializedAddr);
     const public = try generateAccount(masterExtendedPrivate, BIP_84_PURPOSE, 1, 0, 0, 0);
     const compressed = try public.key.toStrCompressed();
-    const expected = "03c260ee3c4975bf34ae63854c0f9309302d27cf588984ec943c2b1139aa7984ed".*;
-    try std.testing.expectEqualStrings(expected, compressed);
+    const expected = "03c260ee3c4975bf34ae63854c0f9309302d27cf588984ec943c2b1139aa7984ed";
+    try std.testing.expectEqualStrings(expected, &compressed);
 }
 
 test "generatePrivateAccount" {
@@ -61,6 +61,6 @@ test "generatePrivateAccount" {
     const private = try generateAccountPrivate(masterExtendedPrivate, BIP_84_PURPOSE, 1, 0, 0, 0);
     const public = bip32.generatePublicKey(private.privatekey);
     const compressed = try public.toStrCompressed();
-    const expected = "03c260ee3c4975bf34ae63854c0f9309302d27cf588984ec943c2b1139aa7984ed".*;
-    try std.testing.expectEqualStrings(expected, compressed);
+    const expected = "03c260ee3c4975bf34ae63854c0f9309302d27cf588984ec943c2b1139aa7984ed";
+    try std.testing.expectEqualStrings(expected, &compressed);
 }
