@@ -33,11 +33,7 @@ fn generateBody(allocator: std.mem.Allocator, rpcId: []const u8, method: []const
     // Number of chars in rpc body (static ones).
     var cap: usize = 49;
     cap += rpcId.len + method.len;
-
-    // Stringify parameters in order to bring them into the final buffer;
-    var paramsJSON = std.ArrayList(u8).init(allocator);
-    defer paramsJSON.deinit();
-
+    var paramsCap: usize = 0;
     if (params != null) {
         // Number of commas in params.
         cap += params.?.items.len - 1;
@@ -48,13 +44,11 @@ fn generateBody(allocator: std.mem.Allocator, rpcId: []const u8, method: []const
                 RpcParams.num => |num| {
                     if (num == 0) {
                         cap += 1;
+                        paramsCap += 1;
                     } else {
-                        cap += std.math.log10(num);
+                        cap += std.math.log10(num) + 1;
+                        paramsCap += std.math.log10(num) + 1;
                     }
-                    const stringedNum = try std.fmt.allocPrint(allocator, "{d}", .{num});
-                    try paramsJSON.appendSlice(stringedNum);
-                    try paramsJSON.appendSlice(",");
-                    allocator.free(stringedNum);
                 },
                 // RpcParams.str => |str| {
                 //     return str.len;
@@ -62,11 +56,18 @@ fn generateBody(allocator: std.mem.Allocator, rpcId: []const u8, method: []const
             }
             // cap += paramCap;
         }
-        _ = paramsJSON.pop();
     }
+
     // std.debug.print("{s}", .{paramsJSON});
     const buffer = try allocator.alloc(u8, cap);
-    _ = try std.fmt.bufPrint(buffer, "{{\"jsonrpc\":\"1.0\",\"id\":\"{s}\",\"method\":\"{s}\",\"params\":[]}}", .{ rpcId, method });
+    if (params != null) {
+        var paramsBuffer = try allocator.alloc(u8, paramsCap);
+        defer allocator.free(paramsBuffer);
+        _ = try std.fmt.bufPrint(paramsBuffer[0..], "{d}", .{params.?.items[0].num});
+        _ = try std.fmt.bufPrint(buffer, "{{\"jsonrpc\":\"1.0\",\"id\":\"{s}\",\"method\":\"{s}\",\"params\":[{s}]}}", .{ rpcId, method, paramsBuffer });
+    } else {
+        _ = try std.fmt.bufPrint(buffer, "{{\"jsonrpc\":\"1.0\",\"id\":\"{s}\",\"method\":\"{s}\",\"params\":[]}}", .{ rpcId, method });
+    }
     return buffer;
 }
 
@@ -92,6 +93,25 @@ pub fn getBlockCount(allocator: std.mem.Allocator, client: *std.http.Client, loc
     const rpcId = "walle".*;
     const rpcMethod = "getblockcount".*;
     const body = try generateBody(allocator, &rpcId, &rpcMethod, null);
+    defer allocator.free(body);
+    var request = try req(client, uri, auth, body);
+    defer request.deinit();
+    const response = try request.reader().readAllAlloc(allocator, 8192);
+    defer allocator.free(response);
+    const parsed = try std.json.parseFromSlice(BlockCount, allocator, response, .{ .allocate = .alloc_always });
+    defer parsed.deinit();
+    return parsed.value.result;
+}
+
+pub fn getBlockHash(allocator: std.mem.Allocator, client: *std.http.Client, location: []const u8, auth: []const u8, blockcount: usize) ![64]u8 {
+    const uri = try std.Uri.parse(location);
+    const rpcId = "walle".*;
+    const rpcMethod = "getblockhash".*;
+    var params = std.ArrayList(RpcParams).init(allocator);
+    defer params.deinit();
+    const p = RpcParams{ .num = blockcount };
+    try params.append(p);
+    const body = try generateBody(allocator, &rpcId, &rpcMethod, params);
     defer allocator.free(body);
     var request = try req(client, uri, auth, body);
     defer request.deinit();
@@ -166,19 +186,19 @@ pub fn getBlockCount(allocator: std.mem.Allocator, client: *std.http.Client, loc
 //     try std.testing.expectEqualString(&expectedString, body);
 // }
 
-test "getBlockCount" {
-    const allocator = std.testing.allocator;
-    var client = std.http.Client{ .allocator = allocator };
-    defer client.deinit();
-    const location = "http://0.0.0.0:18444".*;
-    const user = "walle".*;
-    const pass = "password".*;
-    const auth = try generateAuth(allocator, &user, &pass);
-    defer allocator.free(auth);
-    const blockCount = try getBlockCount(allocator, &client, &location, auth);
-    std.debug.print("block: {d}\n", .{blockCount});
-    try std.testing.expect(blockCount >= 0);
-}
+//test "getBlockCount" {
+//    const allocator = std.testing.allocator;
+//    var client = std.http.Client{ .allocator = allocator };
+//    defer client.deinit();
+//    const location = "http://0.0.0.0:18444".*;
+//    const user = "walle".*;
+//    const pass = "password".*;
+//    const auth = try generateAuth(allocator, &user, &pass);
+//    defer allocator.free(auth);
+//    const blockCount = try getBlockCount(allocator, &client, &location, auth);
+//    std.debug.print("block: {d}\n", .{blockCount});
+//    try std.testing.expect(blockCount >= 0);
+//}
 
 // test "getBlockHash" {
 //     const allocator = std.testing.allocator;
@@ -200,4 +220,18 @@ test "generateAuth" {
     const auth = try generateAuth(allocator, &user, &pass);
     defer allocator.free(auth);
     try std.testing.expectEqualStrings(&expected, auth);
+}
+
+test "generateBodyParams" {
+    const allocator = std.testing.allocator;
+    const rpcId = "walle".*;
+    const method = "getblockcount".*;
+    var params = std.ArrayList(RpcParams).init(allocator);
+    defer params.deinit();
+    const p = RpcParams{ .num = 300 };
+    try params.append(p);
+    const body = try generateBody(allocator, &rpcId, &method, params);
+    defer allocator.free(body);
+    const expectedString = "{\"jsonrpc\":\"1.0\",\"id\":\"walle\",\"method\":\"getblockcount\",\"params\":[300]}".*;
+    try std.testing.expectEqualStrings(&expectedString, body);
 }
