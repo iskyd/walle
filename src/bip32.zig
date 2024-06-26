@@ -79,10 +79,11 @@ pub const PublicKey = struct {
     pub fn compress(self: PublicKey) ![33]u8 {
         var buffer: [66]u8 = undefined;
         if (@mod(self.point.y, 2) == 0) {
-            _ = try std.fmt.bufPrint(&buffer, "02{x}", .{self.point.x});
+            @memcpy(buffer[0..2], "02");
         } else {
-            _ = try std.fmt.bufPrint(&buffer, "03{x}", .{self.point.x});
+            @memcpy(buffer[0..2], "03");
         }
+        try utils.intToHexStr(u256, self.point.x, buffer[2..]);
         const v: u264 = try std.fmt.parseInt(u264, &buffer, 16);
         const compressed: [33]u8 = @bitCast(@byteSwap(v));
         return compressed;
@@ -649,4 +650,11 @@ test "bip44Dervivation" {
 
     try std.testing.expectEqualSlices(u8, &expectedprivate.privatekey, &child3.privatekey);
     try std.testing.expectEqual(child5.key.point, expectedpublic.key.point);
+}
+
+test "toStrCompressedLessHexChars" {
+    const expected = "0203888acbf80676b8118d2ea5e1f821723aa1257ed5da18402025a17b09b2d4bc".*;
+    const pk = try PublicKey.fromStrCompressed(expected);
+    const compressed = try pk.toStrCompressed();
+    try std.testing.expectEqualStrings(&expected, &compressed);
 }

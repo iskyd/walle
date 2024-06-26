@@ -18,8 +18,8 @@ pub const EncodedCompactSize = struct {
 pub fn intToHexStr(comptime T: type, data: T, buffer: []u8) !void {
     // Number of characters to represent data in hex
     // log16(data) + 1
-    const n: u32 = @intCast(math.log(T, 16, data) + 1);
-    const missing: u32 = @intCast(buffer.len - n);
+    const n: usize = @intCast(math.log(T, 16, data) + 1);
+    const missing: usize = @intCast(buffer.len - n);
     for (0..missing) |i| {
         buffer[i] = '0';
     }
