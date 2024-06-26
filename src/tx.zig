@@ -96,10 +96,10 @@ pub const Transaction = struct {
     witness: std.ArrayList(TxWitness),
     version: u32,
     locktime: u32,
-    marker: u8,
-    flag: u8,
+    marker: ?u8,
+    flag: ?u8,
 
-    pub fn init(allocator: std.mem.Allocator, version: u32, locktime: u32, marker: u8, flag: u8) Transaction {
+    pub fn init(allocator: std.mem.Allocator, version: u32, locktime: u32, marker: ?u8, flag: ?u8) Transaction {
         return Transaction{ .allocator = allocator, .locktime = locktime, .version = version, .marker = marker, .flag = flag, .inputs = std.ArrayList(TxInput).init(allocator), .outputs = std.ArrayList(TxOutput).init(allocator), .witness = std.ArrayList(TxWitness).init(allocator) };
     }
 
@@ -184,8 +184,17 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
     defer allocator.free(bytes);
     const v = bytes[0..4]; // Little Endian
     const version = std.mem.readInt(u32, v, .little);
-    const marker = bytes[4]; // used to indicate segwit tx. Must be 00
-    const flag = bytes[5]; // used to indicate segwit tx. Must be gte 01
+    std.debug.assert(version == 1 or version == 2);
+    var currentByte: u64 = 4;
+    // Marker and flag are used to indicate segwit tx. Can be null for version 1 tx
+    // https://github.com/bitcoin/bips/blob/master/bip-0144.mediawiki
+    var marker: ?u8 = null;
+    var flag: ?u8 = null;
+    if (bytes[4] == 0 and bytes[5] == 1) { // match the pattern
+        marker = bytes[4]; // used to indicate segwit tx. Must be 00
+        flag = bytes[5]; // used to indicate segwit tx. Must be gte 01
+        currentByte += 2;
+    }
 
     const l = bytes[bytes.len - 4 ..][0..4].*;
     const locktime = std.mem.readInt(u32, &l, .little);
@@ -196,8 +205,8 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
     // This byte indicates which bytes encode the integer representing the numbers of inputs.
     // <= FC then this byte, FD then the next two bytes, FE the next four bytes, FF the next eight bytes.
     // Compact Size Input
-    const inputsize = utils.decodeCompactSize(bytes[6..15]);
-    var currentByte: u64 = 6 + inputsize.totalBytes;
+    const inputsize = utils.decodeCompactSize(bytes[currentByte .. currentByte + 9]);
+    currentByte += inputsize.totalBytes;
     for (0..inputsize.n) |_| {
         const txid = bytes[currentByte .. currentByte + 32];
         var txidhex: [64]u8 = undefined;
@@ -234,22 +243,24 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
         try transaction.addOutput(output);
     }
 
-    // 1 witness for every input
-    for (0..inputsize.n) |_| {
-        // Compat size, same as ic and oc
-        var witness = TxWitness.init(allocator);
-        // compact size stack items
-        const cssi = utils.decodeCompactSize(bytes[currentByte .. currentByte + 9]);
-        currentByte += cssi.totalBytes;
-        for (0..cssi.n) |_| {
-            // compact size item
-            const s = utils.decodeCompactSize(bytes[currentByte .. currentByte + 9]);
-            currentByte += s.totalBytes;
-            const item = bytes[currentByte .. currentByte + s.n];
-            currentByte += s.n;
-            try witness.addItem(item);
+    if (marker != null and marker.? == 0 and flag != null and flag != 0) { // it's segwit
+        // 1 witness for every input
+        for (0..inputsize.n) |_| {
+            // Compat size, same as ic and oc
+            var witness = TxWitness.init(allocator);
+            // compact size stack items
+            const stackitemssize = utils.decodeCompactSize(bytes[currentByte .. currentByte + 9]);
+            currentByte += stackitemssize.totalBytes;
+            for (0..stackitemssize.n) |_| {
+                // compact size item
+                const s = utils.decodeCompactSize(bytes[currentByte .. currentByte + 9]);
+                currentByte += s.totalBytes;
+                const item = bytes[currentByte .. currentByte + s.n];
+                currentByte += s.n;
+                try witness.addItem(item);
+            }
+            try transaction.addWitness(witness);
         }
-        try transaction.addWitness(witness);
     }
 
     return transaction;
@@ -258,9 +269,10 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
 pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction, txid: bool) !void {
     @memcpy(buffer[0..4], std.mem.asBytes(&tx.version));
     var currentByte: u64 = 4;
-    if (txid == false) {
-        buffer[4] = std.mem.asBytes(&tx.marker)[0];
-        buffer[5] = std.mem.asBytes(&tx.flag)[0];
+    if (txid == false and tx.marker != null and tx.flag != null) {
+        std.debug.assert(tx.marker != null and tx.flag != null); // Marker and flag are required for tx version 2 as describe in bip144
+        buffer[4] = std.mem.asBytes(&tx.marker.?)[0];
+        buffer[5] = std.mem.asBytes(&tx.flag.?)[0];
         currentByte += 2;
     }
 
@@ -546,10 +558,20 @@ test "txid" {
     try std.testing.expectEqualStrings(&expectedtxid, &txid);
 }
 
-test "txidcoinbase" {
+test "txversion2coinbase" {
     const expectedtxid = "5afb3d180b56a65f3ac5c29633e941007a8ad4cc19164eafd626457f2174c46e".*;
     const allocator = std.testing.allocator;
     const raw = "020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff025100ffffffff0200f2052a010000001600141065b3dd70fa8d3f9a16a070e7d68d8ea39beb880000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000".*;
+    const tx = try decodeRawTx(allocator, @constCast(&raw));
+    defer tx.deinit();
+    const txid = try tx.getTXID();
+    try std.testing.expectEqualStrings(&expectedtxid, &txid);
+}
+
+test "txversion1genesis" {
+    const allocator = std.testing.allocator;
+    const expectedtxid = "3ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a".*;
+    const raw = "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff4d04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73ffffffff0100f2052a01000000434104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac00000000".*;
     const tx = try decodeRawTx(allocator, @constCast(&raw));
     defer tx.deinit();
     const txid = try tx.getTXID();
