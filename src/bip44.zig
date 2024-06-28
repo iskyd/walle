@@ -46,6 +46,13 @@ pub fn generateAccountPrivate(epk: bip32.ExtendedPrivateKey, purpose: u32, coint
     return indexepk;
 }
 
+pub fn generatePublicFromAccountPublicKey(pk: bip32.ExtendedPublicKey, change: u32, index: u32) !bip32.PublicKey {
+    const changepk = try bip32.deriveChildFromExtendedPublicKey(pk, change);
+    const indexepk = try bip32.deriveChildFromExtendedPublicKey(changepk, index);
+
+    return indexepk.key;
+}
+
 test "generateAccount" {
     const serializedAddr = "tprv8ZgxMBicQKsPefj8cBDzcXJYcnvWBLQwG9sAvKyAYRPiLtdZXvdAmqtjzeHbX7ZX2LY8Sfb7SaLSJbGCFBPMFZdnmv4D7UebvyLTC974BA4".*;
     const masterExtendedPrivate = try bip32.ExtendedPrivateKey.fromAddress(serializedAddr);
