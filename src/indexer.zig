@@ -3,6 +3,7 @@ const Block = @import("block.zig").Block;
 const tx = @import("tx.zig");
 const ExtendedPublicKey = @import("bip32.zig").ExtendedPublicKey;
 const PublicKey = @import("bip32.zig").PublicKey;
+const bip44 = @import("bip44.zig");
 const Network = @import("const.zig").Network;
 const script = @import("script.zig");
 const utils = @import("utils.zig");
@@ -11,12 +12,22 @@ const rpc = @import("rpc/rpc.zig");
 
 const P2WPKH_SCRIPT_PREFIX = "0014".*;
 
+const KeyPath = struct {
+    change: u32,
+    index: u32,
+};
+
 pub fn main() !void {
     std.debug.print("WALL-E. Bitcoin Wallet written in Zig.\nIndexer...\n", .{});
 
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    const allocator = arena.allocator();
-    defer arena.deinit();
+    // used for transactions to easily reset all the memory after each loop
+    //var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    //const aa = arena.allocator();
+    //defer arena.deinit();
+
+    // used for everything else
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
 
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit.
@@ -40,34 +51,55 @@ pub fn main() !void {
         return clap.usage(std.io.getStdErr().writer(), clap.Help, &params);
     }
 
-    const pk = try PublicKey.fromStrCompressed("0203888acbf80676b8118d2ea5e1f821723aa1257ed5da18402025a17b09b2d4bc".*);
-    const hash = try pk.toHash();
-    var hashhex: [40]u8 = undefined;
-    _ = try std.fmt.bufPrint(&hashhex, "{x}", .{std.fmt.fmtSliceHexLower(&hash)});
+    // Get the public key of the user
+    // We start from the account public key so that we can derive both change and index from that following bip44
+    // A new index for both internal and external address should be generated everytime we find an output from the previous key
+    const pkaddress = "tpubDCqjeTSmMEVcovTXiEJ8xNCZXobYFckihB9M6LsRMF9XNPX87ndZkLvGmY2z6PguGJDyUdzpF7tc1EtmqK1zJmPuJkfvutYGTz15JE7QW2Y".*;
+    const accountpublickey = try ExtendedPublicKey.fromAddress(pkaddress);
+    // use hashmap to store public key hash for fast check
+    var publickeys = std.AutoHashMap([40]u8, KeyPath).init(allocator);
+
+    // Generate first 20 keys
+    var lastderivationindex: u32 = 0;
+    for (0..20) |i| {
+        const pkchange = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_INTERNAL_CHAIN, 0);
+        const pkexternal = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_EXTERNAL_CHAIN, 0);
+        try publickeys.put(try pkchange.toHashHex(), KeyPath{ .change = bip44.CHANGE_INTERNAL_CHAIN, .index = 0 });
+        try publickeys.put(try pkexternal.toHashHex(), KeyPath{ .change = bip44.CHANGE_EXTERNAL_CHAIN, .index = 0 });
+        lastderivationindex = i;
+    }
 
     const auth = try rpc.generateAuth(allocator, res.args.user.?, res.args.password.?);
     var client = std.http.Client{ .allocator = allocator };
     defer client.deinit();
     const blockcount = try rpc.getBlockCount(allocator, &client, res.args.location.?, auth);
     std.debug.print("Total blocks {d}\n", .{blockcount});
-    var balance: usize = 0;
+    const balance: usize = 0;
     for (res.args.block.?..blockcount) |i| {
         const blockhash = try rpc.getBlockHash(allocator, &client, res.args.location.?, auth, i);
         const rawtransactions = try rpc.getBlockRawTx(allocator, &client, res.args.location.?, auth, blockhash);
-        for (rawtransactions) |raw| {
+
+        var totaloutputs: usize = 0;
+        var j: usize = 0;
+        while (j < rawtransactions.len) : (j += 1) {
+            const raw = rawtransactions[j];
             const transaction = try tx.decodeRawTx(allocator, raw);
-            const txid = try transaction.getTXID();
-            std.debug.print("rawtx {s}\n", .{raw});
-            std.debug.print("txid {s}\n", .{txid});
-            const outputs = try getOutputsFor(allocator, transaction, hashhex);
-            if (outputs != null and outputs.?.len > 0) {
-                std.debug.print("Found output for user {d}\n", .{outputs.?.len});
-                for (outputs.?) |output| {
-                    std.debug.print("output amount: {d}\n", .{output.amount});
-                    balance += output.amount;
-                }
+            const totaltxoutputs = totalOutputsFor(transaction, publickeys);
+
+            if (totaltxoutputs.n > 0 and totaltxoutputs.maxindex == lastderivationindex) {
+                // derive new keys, set totaloutputs to 0 and restart
+                totaloutputs = 0;
+                j = 0;
+                const newpkchange = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_INTERNAL_CHAIN, lastderivationindex + 1);
+                const newpkexternal = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_EXTERNAL_CHAIN, lastderivationindex + 1);
+                try publickeys.put(try newpkchange.toHashHex(), .{ .change = bip44.CHANGE_INTERNAL_CHAIN, .index = lastderivationindex + 1 });
+                try publickeys.put(try newpkexternal.toHashHex(), .{ .change = bip44.CHANGE_EXTERNAL_CHAIN, .index = lastderivationindex + 1 });
+                lastderivationindex += 1;
             }
         }
+
+        // totaloutputs is now equal to the total outputs in the current block
+        // allocate memory and get all outputs
     }
     std.debug.print("total balance: {d}\n", .{balance});
 }
@@ -80,16 +112,27 @@ fn outputToPublicKeyHash(output: tx.TxOutput) ![40]u8 {
     return error.UnsupportedScriptPubKey;
 }
 
-fn totalOutputsFor(transaction: tx.Transaction, pubkeyhash: [40]u8) usize {
+const TotalOutputs = struct {
+    n: usize,
+    maxindex: usize,
+};
+
+// publickeys key is the hex hash of the public key
+fn totalOutputsFor(transaction: tx.Transaction, publickeys: std.AutoHashMap([40]u8, KeyPath)) TotalOutputs {
     var total: usize = 0;
+    var maxindex: usize = 0;
     for (0..transaction.outputs.items.len) |i| {
         const o = transaction.outputs.items[i];
-        const outputpubkeyhash = outputToPublicKeyHash(o) catch null;
-        if (outputpubkeyhash != null and std.mem.eql(u8, &pubkeyhash, &outputpubkeyhash.?)) {
-            total += 1;
+        const outputpubkeyhash = outputToPublicKeyHash(o) catch continue; // TODO: is this the best we can do?
+        const res = publickeys.get(outputpubkeyhash);
+        if (res == null) {
+            break;
         }
+
+        total += 1;
+        maxindex = if (maxindex >= res.?.index) maxindex else res.?.index;
     }
-    return total;
+    return .{ .n = total, .maxindex = maxindex };
 }
 
 // memory ownership to the caller
