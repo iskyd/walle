@@ -124,6 +124,14 @@ pub const PublicKey = struct {
         return address;
     }
 
+    // return hex string of hash
+    pub fn toHashHex(self: PublicKey) ![40]u8 {
+        const hash = try self.toHash();
+        var hashhex: [40]u8 = undefined;
+        _ = try std.fmt.bufPrint(&hashhex, "{x}", .{std.fmt.fmtSliceHexLower(&hash)});
+        return hashhex;
+    }
+
     // return bytes.
     // It also adds prefix and checksum
     pub fn toCompleteHash(self: PublicKey, n: Network) ![25]u8 {
