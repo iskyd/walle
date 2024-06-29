@@ -288,7 +288,7 @@ pub fn deriveChildFromExtendedPrivateKey(epk: ExtendedPrivateKey, index: u32) !E
 pub fn deriveChildFromExtendedPublicKey(pk: ExtendedPublicKey, index: u32) !ExtendedPublicKey {
     assert(index >= 0);
     assert(index <= 2147483647);
-    const index_bytes: [4]u8 = @bitCast(index);
+    const index_bytes: [4]u8 = @bitCast(@byteSwap(index));
     const compressed: [33]u8 = try pk.key.compress();
     const data: [37]u8 = compressed ++ index_bytes;
 
@@ -441,6 +441,20 @@ test "deriveChildFromExtendedPublicKey" {
 
     try std.testing.expectEqual(extendedchild.key.point, expectedpublic.key.point);
     try std.testing.expectEqualSlices(u8, &extendedchild.chaincode, &expectedpublic.chaincode);
+}
+
+test "deriveChildFromExtendedPublicKeyIndex1" {
+    // testing only with index = 0 is not enough since byte order matters and 0 is the same in both directions
+    const addr = "tpubDCqjeTSmMEVcovTXiEJ8xNCZXobYFckihB9M6LsRMF9XNPX87ndZkLvGmY2z6PguGJDyUdzpF7tc1EtmqK1zJmPuJkfvutYGTz15JE7QW2Y".*;
+    const epk = try ExtendedPublicKey.fromAddress(addr);
+    const derived = try deriveChildFromExtendedPublicKey(epk, 1);
+    const expectedpublic = "020387ef75af3aafba234f679ba4104b270eb8372bc7e727d13cfe4eec8122ac43".*;
+    const expectedchaincode = "b88386ce58d712d33afe158f0322655c58cfab158cb7ec25b5fb6f880e1f6716".*;
+    var chaincodehex: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&chaincodehex, "{x}", .{std.fmt.fmtSliceHexLower(&derived.chaincode)});
+    const publiccompressed = try derived.key.toStrCompressed();
+    try std.testing.expectEqualStrings(&expectedpublic, &publiccompressed);
+    try std.testing.expectEqualStrings(&expectedchaincode, &chaincodehex);
 }
 
 test "deriveHardenedChild" {
