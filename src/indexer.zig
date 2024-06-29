@@ -17,6 +17,49 @@ const KeyPath = struct {
     index: u32,
 };
 
+const Output = struct {
+    txid: [64]u8,
+    n: u32,
+    keypath: KeyPath,
+    unspent: bool,
+    amount: u64,
+};
+
+const Input = struct {
+    txid: [64]u8,
+    outputhash: [64]u8,
+};
+
+pub fn outputToUniqueHash(txid: [64]u8, n: u32) ![64]u8 {
+    var h1: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(&txid, &h1, .{});
+    var h2: [32]u8 = undefined;
+    var nhex: [8]u8 = undefined;
+    try utils.intToHexStr(u32, n, &nhex);
+    std.crypto.hash.sha2.Sha256.hash(&nhex, &h2, .{});
+    const nh1 = std.mem.readInt(u256, &h1, .big);
+    const nh2 = std.mem.readInt(u256, &h2, .big);
+    const res: u256 = nh1 ^ (nh2 << 1);
+    var hex: [64]u8 = undefined;
+    try utils.intToHexStr(u256, res, &hex);
+    return hex;
+}
+
+const RelevantTransaction = struct {
+    allocator: std.mem.Allocator,
+    txid: [64]u8,
+    blockhash: [64]u8,
+    rawtx: []u8,
+
+    pub fn init(allocator: std.mem.Allocator, txid: [64]u8, blockhash: [64]u8, rawtx: []u8) !RelevantTransaction {
+        return .{ .allocator = allocator, .txid = txid, .blockhash = blockhash, .rawtx = try allocator.dupe(u8, rawtx) };
+    }
+
+    pub fn deinit(self: RelevantTransaction) void {
+        self.allocator.free(self.rawtx);
+    }
+};
+
 pub fn main() !void {
     std.debug.print("WALL-E. Bitcoin Wallet written in Zig.\nIndexer...\n", .{});
 
@@ -28,6 +71,7 @@ pub fn main() !void {
     // used for everything else
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
+    defer std.debug.assert(gpa.deinit() == .ok);
 
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit.
@@ -54,54 +98,133 @@ pub fn main() !void {
     // Get the public key of the user
     // We start from the account public key so that we can derive both change and index from that following bip44
     // A new index for both internal and external address should be generated everytime we find an output from the previous key
+    // We start with 20 keys (and try to always keep 20 new keys) and hopefully we never need to parse a transaction twice
     const pkaddress = "tpubDCqjeTSmMEVcovTXiEJ8xNCZXobYFckihB9M6LsRMF9XNPX87ndZkLvGmY2z6PguGJDyUdzpF7tc1EtmqK1zJmPuJkfvutYGTz15JE7QW2Y".*;
     const accountpublickey = try ExtendedPublicKey.fromAddress(pkaddress);
     // use hashmap to store public key hash for fast check
     var publickeys = std.AutoHashMap([40]u8, KeyPath).init(allocator);
+    defer publickeys.deinit();
 
+    std.debug.print("init key generation", .{});
     // Generate first 20 keys
-    var lastderivationindex: u32 = 0;
-    for (0..20) |i| {
-        const pkchange = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_INTERNAL_CHAIN, 0);
-        const pkexternal = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_EXTERNAL_CHAIN, 0);
-        try publickeys.put(try pkchange.toHashHex(), KeyPath{ .change = bip44.CHANGE_INTERNAL_CHAIN, .index = 0 });
-        try publickeys.put(try pkexternal.toHashHex(), KeyPath{ .change = bip44.CHANGE_EXTERNAL_CHAIN, .index = 0 });
-        lastderivationindex = i;
-    }
+    var lastderivationindex: u32 = try generateAndAddKeys(&publickeys, accountpublickey, 0, 20);
+    std.debug.print("keys generated\n", .{});
 
     const auth = try rpc.generateAuth(allocator, res.args.user.?, res.args.password.?);
+    defer allocator.free(auth);
     var client = std.http.Client{ .allocator = allocator };
     defer client.deinit();
     const blockcount = try rpc.getBlockCount(allocator, &client, res.args.location.?, auth);
     std.debug.print("Total blocks {d}\n", .{blockcount});
-    const balance: usize = 0;
+
+    var blocks = std.AutoHashMap([64]u8, usize).init(allocator); // blockhash: heigth
+    defer blocks.deinit();
+    var outputs = std.AutoHashMap([64]u8, Output).init(allocator);
+    defer outputs.deinit();
+    // key is the hash of the output it uses and the value is the tx where it is used
+    var inputs = std.AutoHashMap([64]u8, [64]u8).init(allocator);
+    defer inputs.deinit();
+    var relevanttransactions = std.AutoHashMap([64]u8, RelevantTransaction).init(allocator);
+    defer {
+        var it = relevanttransactions.valueIterator();
+        while (it.next()) |relevanttx| {
+            relevanttx.deinit();
+        }
+        relevanttransactions.deinit();
+    }
     for (res.args.block.?..blockcount) |i| {
         const blockhash = try rpc.getBlockHash(allocator, &client, res.args.location.?, auth, i);
+        try blocks.put(blockhash, i);
+
         const rawtransactions = try rpc.getBlockRawTx(allocator, &client, res.args.location.?, auth, blockhash);
-
-        var totaloutputs: usize = 0;
-        var j: usize = 0;
-        while (j < rawtransactions.len) : (j += 1) {
-            const raw = rawtransactions[j];
-            const transaction = try tx.decodeRawTx(allocator, raw);
-            const totaltxoutputs = totalOutputsFor(transaction, publickeys);
-
-            if (totaltxoutputs.n > 0 and totaltxoutputs.maxindex == lastderivationindex) {
-                // derive new keys, set totaloutputs to 0 and restart
-                totaloutputs = 0;
-                j = 0;
-                const newpkchange = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_INTERNAL_CHAIN, lastderivationindex + 1);
-                const newpkexternal = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_EXTERNAL_CHAIN, lastderivationindex + 1);
-                try publickeys.put(try newpkchange.toHashHex(), .{ .change = bip44.CHANGE_INTERNAL_CHAIN, .index = lastderivationindex + 1 });
-                try publickeys.put(try newpkexternal.toHashHex(), .{ .change = bip44.CHANGE_EXTERNAL_CHAIN, .index = lastderivationindex + 1 });
-                lastderivationindex += 1;
+        defer {
+            for (rawtransactions) |raw| {
+                allocator.free(raw);
             }
+            allocator.free(rawtransactions);
         }
 
-        // totaloutputs is now equal to the total outputs in the current block
-        // allocate memory and get all outputs
+        const blocktransactions = try allocator.alloc(tx.Transaction, rawtransactions.len);
+        for (rawtransactions, 0..) |raw, j| {
+            const transaction = try tx.decodeRawTx(allocator, raw);
+            blocktransactions[j] = transaction;
+        }
+        defer {
+            for (blocktransactions) |blocktx| {
+                blocktx.deinit();
+            }
+            allocator.free(blocktransactions);
+        }
+
+        while (true) blk: {
+            for (blocktransactions, 0..) |transaction, k| {
+                const raw = rawtransactions[k];
+                const txid = try transaction.getTXID();
+                const txoutputs = try getOutputsFor(allocator, transaction, publickeys);
+                std.debug.print("found {d} outputs for block {d}\n", .{ txoutputs.items.len, i });
+                defer txoutputs.deinit();
+                if (txoutputs.items.len == 0) {
+                    break;
+                }
+
+                var maxindex: u32 = 0;
+                for (0..txoutputs.items.len) |j| {
+                    const txoutput = txoutputs.items[j];
+                    if (txoutput.keypath.index > maxindex) {
+                        maxindex = txoutput.keypath.index;
+                    }
+                }
+
+                // We need to parse all the transactions in the block again
+                // Because we might have loose some outputs
+                if (maxindex == lastderivationindex) {
+                    break :blk;
+                }
+
+                // Generate new keys so that we always have 20 unused keys
+                const newkeys = maxindex + 20 - lastderivationindex;
+                if (newkeys > 0) {
+                    lastderivationindex = try generateAndAddKeys(&publickeys, accountpublickey, lastderivationindex + 1, lastderivationindex + 1 + newkeys);
+                }
+
+                try relevanttransactions.put(txid, try RelevantTransaction.init(allocator, txid, blockhash, raw));
+
+                for (0..txoutputs.items.len) |j| {
+                    const txoutput = txoutputs.items[j];
+                    const uniquehash = try outputToUniqueHash(txoutput.txid, txoutput.n);
+                    try outputs.put(uniquehash, txoutput);
+                }
+            }
+
+            break;
+        }
+
+        const txinputs = try getInputsFor(allocator, outputs, blocktransactions);
+        defer txinputs.deinit();
+        for (0..txinputs.items.len) |k| {
+            const txinput = txinputs.items[k];
+            try inputs.put(txinput.outputhash, txinput.txid);
+        }
     }
-    std.debug.print("total balance: {d}\n", .{balance});
+    std.debug.print("indexing completed\n", .{});
+    std.debug.print("find a total of {d} outputs and a total of {d} inputs\n", .{ outputs.count(), inputs.count() });
+    std.debug.print("total balance: {d}\n", .{try getBalance(allocator, outputs, relevanttransactions, blocks, blockcount)});
+}
+
+// Returns last derivation index used
+fn generateAndAddKeys(publickeys: *std.AutoHashMap([40]u8, KeyPath), accountpublickey: ExtendedPublicKey, start: usize, end: usize) !u32 {
+    std.debug.assert(start != end);
+    var lastderivationindex: u32 = 0;
+    for (start..end) |i| {
+        const index = @as(u32, @intCast(i));
+        const pkchange = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_INTERNAL_CHAIN, index);
+        const pkexternal = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_EXTERNAL_CHAIN, index);
+        try publickeys.put(try pkchange.toHashHex(), KeyPath{ .change = bip44.CHANGE_INTERNAL_CHAIN, .index = index });
+        try publickeys.put(try pkexternal.toHashHex(), KeyPath{ .change = bip44.CHANGE_EXTERNAL_CHAIN, .index = index });
+        lastderivationindex = index;
+    }
+
+    return lastderivationindex;
 }
 
 // return hex value of pubkey hash
@@ -112,118 +235,69 @@ fn outputToPublicKeyHash(output: tx.TxOutput) ![40]u8 {
     return error.UnsupportedScriptPubKey;
 }
 
-const TotalOutputs = struct {
-    n: usize,
-    maxindex: usize,
-};
-
-// publickeys key is the hex hash of the public key
-fn totalOutputsFor(transaction: tx.Transaction, publickeys: std.AutoHashMap([40]u8, KeyPath)) TotalOutputs {
-    var total: usize = 0;
-    var maxindex: usize = 0;
+fn getOutputsFor(allocator: std.mem.Allocator, transaction: tx.Transaction, publickeys: std.AutoHashMap([40]u8, KeyPath)) !std.ArrayList(Output) {
+    var outputs = std.ArrayList(Output).init(allocator);
     for (0..transaction.outputs.items.len) |i| {
-        const o = transaction.outputs.items[i];
-        const outputpubkeyhash = outputToPublicKeyHash(o) catch continue; // TODO: is this the best we can do?
-        const res = publickeys.get(outputpubkeyhash);
-        if (res == null) {
+        const txoutput = transaction.outputs.items[i];
+        const outputpubkeyhash = outputToPublicKeyHash(txoutput) catch continue; // TODO: is this the best we can do?
+        const pubkey = publickeys.get(outputpubkeyhash);
+        if (pubkey == null) {
             break;
         }
 
-        total += 1;
-        maxindex = if (maxindex >= res.?.index) maxindex else res.?.index;
-    }
-    return .{ .n = total, .maxindex = maxindex };
-}
-
-// memory ownership to the caller
-fn getOutputsFor(allocator: std.mem.Allocator, transaction: tx.Transaction, pubkeyhash: [40]u8) !?[]tx.TxOutput {
-    const cap = totalOutputsFor(transaction, pubkeyhash);
-    if (cap == 0) {
-        return null;
-    }
-
-    const outputs = try allocator.alloc(tx.TxOutput, cap);
-    errdefer comptime unreachable; // no more errors
-    var cur: usize = 0;
-    for (0..transaction.outputs.items.len) |i| {
-        const o = transaction.outputs.items[i];
-        const outputpubkeyhash = outputToPublicKeyHash(o) catch null;
-        if (outputpubkeyhash != null and std.mem.eql(u8, &pubkeyhash, &outputpubkeyhash.?)) {
-            outputs[cur] = o;
-            cur += 1;
-            if (cur == cap) {
-                return outputs;
-            }
-        }
+        const txid = try transaction.getTXID();
+        const n = @as(u32, @intCast(i));
+        const output = Output{ .txid = txid, .n = n, .keypath = pubkey.?, .amount = txoutput.amount, .unspent = true };
+        try outputs.append(output);
     }
     return outputs;
 }
 
-test "index" {
-    const allocator = std.testing.allocator;
-    var rawtx: [444]u8 = "0200000000010126db029d0ea5d71b4db2e791f40bf3e185069ea2a39a1aab6bf0c783ec8f00300000000000fdffffff020065cd1d0000000016001456606c27faea9b9d0e8e6137787b8a93c733d41f7e87380c0100000016001418ce541f2d276cc58e9e07ecd2c1fcbe2a1801e50247304402203391560059819dbe991e09f34e767ae3cdc21805d87df3e80bad00d2a906c269022032edfdff0b6967b0add9b019a7e664bcf95f59ba7847d06614e49143b08b1e7e0121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a400000000".*;
-    const transaction = try tx.decodeRawTx(allocator, &rawtx);
-    defer transaction.deinit();
-    std.debug.print("Total outputs={d}\n", .{transaction.outputs.items.len});
-    const outputs = transaction.outputs;
-    for (0..outputs.items.len) |i| {
-        const output = outputs.items[i];
-        std.debug.print("Tx amount={d}, output pubkey={s}\n", .{ output.amount, output.script_pubkey });
+fn getInputsFor(allocator: std.mem.Allocator, outputs: std.AutoHashMap([64]u8, Output), transactions: []tx.Transaction) !std.ArrayList(Input) {
+    var inputs = std.ArrayList(Input).init(allocator);
+    for (transactions) |transaction| {
+        for (0..transaction.inputs.items.len) |i| {
+            //coinbase tx does not refer to any prev output
+            if (transaction.isCoinbase()) {
+                continue;
+            }
+            const input = transaction.inputs.items[i];
+
+            const hash: [64]u8 = try outputToUniqueHash(input.prevout.?.txid, input.prevout.?.n);
+            const existing = outputs.get(hash);
+            if (existing != null) {
+                const txid = try transaction.getTXID();
+                try inputs.append(.{ .txid = txid, .outputhash = hash });
+            }
+        }
     }
-    const pk = try PublicKey.fromStrCompressed("03c260ee3c4975bf34ae63854c0f9309302d27cf588984ec943c2b1139aa7984ed".*);
-    const hash = try pk.toHash();
-    var hashhex: [40]u8 = undefined;
-    _ = try std.fmt.bufPrint(&hashhex, "{x}", .{std.fmt.fmtSliceHexLower(&hash)});
-
-    const s = try script.p2wpkh(allocator, &hashhex);
-    defer s.deinit();
-    const scripthexcap = s.hexCap();
-    const scripthex = try allocator.alloc(u8, scripthexcap);
-    defer allocator.free(scripthex);
-    try s.toHex(scripthex);
-    std.debug.print("scripthex :{s}\n", .{scripthex});
+    return inputs;
 }
 
-test "outputToPublicKeyHash" {
-    const allocator = std.testing.allocator;
-    var rawtx: [444]u8 = "0200000000010126db029d0ea5d71b4db2e791f40bf3e185069ea2a39a1aab6bf0c783ec8f00300000000000fdffffff020065cd1d0000000016001456606c27faea9b9d0e8e6137787b8a93c733d41f7e87380c0100000016001418ce541f2d276cc58e9e07ecd2c1fcbe2a1801e50247304402203391560059819dbe991e09f34e767ae3cdc21805d87df3e80bad00d2a906c269022032edfdff0b6967b0add9b019a7e664bcf95f59ba7847d06614e49143b08b1e7e0121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a400000000".*;
-    const transaction = try tx.decodeRawTx(allocator, &rawtx);
-    defer transaction.deinit();
-    const outputs = transaction.outputs;
-    const expectedPublicKeyHash = "56606c27faea9b9d0e8e6137787b8a93c733d41f".*;
-    try std.testing.expectEqualStrings(&expectedPublicKeyHash, &try outputToPublicKeyHash(outputs.items[0]));
+fn getBalance(allocator: std.mem.Allocator, outputs: std.AutoHashMap([64]u8, Output), transactions: std.AutoHashMap([64]u8, RelevantTransaction), blocks: std.AutoHashMap([64]u8, usize), currentheight: usize) !u64 {
+    var balance: u64 = 0;
+    var it = outputs.valueIterator();
+    while (it.next()) |output| {
+        if (output.unspent == false) {
+            std.debug.print("setting output as unspent=false\n", .{});
+            continue;
+        }
+        const relevant = transactions.get(output.txid);
+        if (relevant == null) {
+            unreachable;
+        }
 
-    const fakescript = "001556606c27faea9b9d0e8e6137787b8a93c733d41f".*;
-    const fakeoutput = tx.TxOutput{ .allocator = allocator, .amount = 10, .script_pubkey = &fakescript };
-    const res = outputToPublicKeyHash(fakeoutput);
-    try std.testing.expectError(error.UnsupportedScriptPubKey, res);
-}
+        const transaction = try tx.decodeRawTx(allocator, relevant.?.rawtx);
+        defer transaction.deinit();
 
-test "totalOutputsFor" {
-    const allocator = std.testing.allocator;
-    var rawtx: [444]u8 = "0200000000010126db029d0ea5d71b4db2e791f40bf3e185069ea2a39a1aab6bf0c783ec8f00300000000000fdffffff020065cd1d0000000016001456606c27faea9b9d0e8e6137787b8a93c733d41f7e87380c0100000016001418ce541f2d276cc58e9e07ecd2c1fcbe2a1801e50247304402203391560059819dbe991e09f34e767ae3cdc21805d87df3e80bad00d2a906c269022032edfdff0b6967b0add9b019a7e664bcf95f59ba7847d06614e49143b08b1e7e0121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a400000000".*;
-    const transaction = try tx.decodeRawTx(allocator, &rawtx);
-    defer transaction.deinit();
-    var transactions: [1]tx.Transaction = [1]tx.Transaction{transaction};
-    const pk = try PublicKey.fromStrCompressed("03c260ee3c4975bf34ae63854c0f9309302d27cf588984ec943c2b1139aa7984ed".*);
-    const hash = try pk.toHash();
-    var hashhex: [40]u8 = undefined;
-    _ = try std.fmt.bufPrint(&hashhex, "{x}", .{std.fmt.fmtSliceHexLower(&hash)});
-    const total = totalOutputsFor(&transactions, hashhex);
-    try std.testing.expectEqual(1, total);
-}
-
-test "getOutputsFor" {
-    const allocator = std.testing.allocator;
-    var rawtx: [444]u8 = "0200000000010126db029d0ea5d71b4db2e791f40bf3e185069ea2a39a1aab6bf0c783ec8f00300000000000fdffffff020065cd1d0000000016001456606c27faea9b9d0e8e6137787b8a93c733d41f7e87380c0100000016001418ce541f2d276cc58e9e07ecd2c1fcbe2a1801e50247304402203391560059819dbe991e09f34e767ae3cdc21805d87df3e80bad00d2a906c269022032edfdff0b6967b0add9b019a7e664bcf95f59ba7847d06614e49143b08b1e7e0121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a400000000".*;
-    const transaction = try tx.decodeRawTx(allocator, &rawtx);
-    defer transaction.deinit();
-    var transactions: [1]tx.Transaction = [1]tx.Transaction{transaction};
-    const pk = try PublicKey.fromStrCompressed("03c260ee3c4975bf34ae63854c0f9309302d27cf588984ec943c2b1139aa7984ed".*);
-    const hash = try pk.toHash();
-    var hashhex: [40]u8 = undefined;
-    _ = try std.fmt.bufPrint(&hashhex, "{x}", .{std.fmt.fmtSliceHexLower(&hash)});
-    const outputs = try getOutputsFor(allocator, &transactions, hashhex);
-    defer allocator.free(outputs.?);
-    try std.testing.expectEqual(1, outputs.?.len);
+        if (transaction.isCoinbase() == true) {
+            // Can't spend coinbase transaction before 100 blocks, can't add to balance
+            const blockheight = blocks.get(relevant.?.blockhash);
+            if (currentheight > blockheight.? + 100) {
+                break;
+            }
+        }
+        balance += output.amount;
+    }
+    return balance;
 }
