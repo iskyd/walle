@@ -256,7 +256,7 @@ pub fn generatePublicKey(pk: [32]u8) PublicKey {
 pub fn deriveChildFromExtendedPrivateKey(epk: ExtendedPrivateKey, index: u32) !ExtendedPrivateKey {
     assert(index >= 0);
     assert(index <= 2147483647);
-    const index_bytes: [4]u8 = @bitCast(index);
+    const index_bytes: [4]u8 = @bitCast(@byteSwap(index));
     const public = generatePublicKey(epk.privatekey);
     const compressed = try public.compress();
     const data: [37]u8 = compressed ++ index_bytes;
@@ -426,6 +426,22 @@ test "deriveChildFromExtendedPrivateKey" {
     const expectedprivatekeyaddr = "xprv9vHkqa6EV4sPZHYqZznhT2NPtPCjKuDKGY38FBWLvgaDx45zo9WQRUT3dKYnjwih2yJD9mkrocEZXo1ex8G81dwSM1fwqWpWkeS3v86pgKt".*;
     const expectedprivate = try ExtendedPrivateKey.fromAddress(expectedprivatekeyaddr);
     try std.testing.expectEqualSlices(u8, &expectedprivate.privatekey, &child.privatekey);
+}
+
+test "deriveChildFromExtendedPrivateKeyIndex1" {
+    const seedhex = "fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542".*;
+    var seed: [64]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&seed, &seedhex);
+    const epk = generateExtendedMasterPrivateKey(seed);
+    const child = try deriveChildFromExtendedPrivateKey(epk, 1);
+    var privatekey: [64]u8 = undefined;
+    var chaincode: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&privatekey, "{x}", .{std.fmt.fmtSliceHexLower(&child.privatekey)});
+    _ = try std.fmt.bufPrint(&chaincode, "{x}", .{std.fmt.fmtSliceHexLower(&child.chaincode)});
+    const expectedpk = "63bbae9fe4abd1ff6ac75ab7306ea1d91a743246be33b2c6eb6fef812180924d".*;
+    const expectedchaincode = "009e0528bc0cd2b12baf964a6de3ee6f4c05513fe990b0077ddeb726c017c0f5".*;
+    try std.testing.expectEqualStrings(&expectedpk, &privatekey);
+    try std.testing.expectEqualStrings(&expectedchaincode, &chaincode);
 }
 
 test "deriveChildFromExtendedPublicKey" {
