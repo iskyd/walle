@@ -12,7 +12,7 @@ const TxError = error{
 pub const Output = struct {
     txid: [64]u8,
     n: u32,
-    amount: u32,
+    amount: u64,
 };
 
 // Input of a transaction
