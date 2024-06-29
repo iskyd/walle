@@ -171,7 +171,7 @@ pub const Transaction = struct {
 };
 
 pub fn createTx(inputs: []Output, amount: u32) TxError!void {
-    var total: u32 = 0;
+    var total: u64 = 0;
     for (inputs) |input| {
         total += input.amount;
     }
