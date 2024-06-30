@@ -156,18 +156,17 @@ pub fn main() !void {
             allocator.free(blocktransactions);
         }
 
+        var maxindex: u32 = 0; // max public key index found with outputs
         while (true) blk: {
             for (blocktransactions, 0..) |transaction, k| {
                 const raw = rawtransactions[k];
                 const txid = try transaction.getTXID();
                 const txoutputs = try getOutputsFor(allocator, transaction, publickeys);
-                std.debug.print("found {d} outputs for block {d}\n", .{ txoutputs.items.len, i });
                 defer txoutputs.deinit();
                 if (txoutputs.items.len == 0) {
                     break;
                 }
 
-                var maxindex: u32 = 0;
                 for (0..txoutputs.items.len) |j| {
                     const txoutput = txoutputs.items[j];
                     if (txoutput.keypath.index > maxindex) {
@@ -208,7 +207,7 @@ pub fn main() !void {
     }
     std.debug.print("indexing completed\n", .{});
     std.debug.print("find a total of {d} outputs and a total of {d} inputs\n", .{ outputs.count(), inputs.count() });
-    std.debug.print("total balance: {d}\n", .{try getBalance(allocator, outputs, relevanttransactions, blocks, blockcount)});
+    std.debug.print("total balance: {d}\n", .{try getBalance(allocator, outputs, inputs, relevanttransactions, blocks, blockcount)});
 }
 
 // Returns last derivation index used
@@ -274,12 +273,19 @@ fn getInputsFor(allocator: std.mem.Allocator, outputs: std.AutoHashMap([64]u8, O
     return inputs;
 }
 
-fn getBalance(allocator: std.mem.Allocator, outputs: std.AutoHashMap([64]u8, Output), transactions: std.AutoHashMap([64]u8, RelevantTransaction), blocks: std.AutoHashMap([64]u8, usize), currentheight: usize) !u64 {
+fn getBalance(allocator: std.mem.Allocator, outputs: std.AutoHashMap([64]u8, Output), inputs: std.AutoHashMap([64]u8, [64]u8), transactions: std.AutoHashMap([64]u8, RelevantTransaction), blocks: std.AutoHashMap([64]u8, usize), currentheight: usize) !u64 {
     var balance: u64 = 0;
     var it = outputs.valueIterator();
+    std.debug.print("total outputs: {d}\n", .{outputs.count()});
     while (it.next()) |output| {
+        const input = inputs.get(try outputToUniqueHash(output.txid, output.n));
+        if (input != null) {
+            // Output is spent by an input skipping it
+            continue;
+        }
         if (output.unspent == false) {
-            std.debug.print("setting output as unspent=false\n", .{});
+            // This is currently useless since we do not update the value of output.unspent
+            // In the previous condition we check if an input exists to achieve the same behaviour
             continue;
         }
         const relevant = transactions.get(output.txid);
@@ -293,8 +299,8 @@ fn getBalance(allocator: std.mem.Allocator, outputs: std.AutoHashMap([64]u8, Out
         if (transaction.isCoinbase() == true) {
             // Can't spend coinbase transaction before 100 blocks, can't add to balance
             const blockheight = blocks.get(relevant.?.blockhash);
-            if (currentheight > blockheight.? + 100) {
-                break;
+            if (currentheight < blockheight.? + 100) {
+                continue;
             }
         }
         balance += output.amount;
