@@ -3,7 +3,10 @@
   "packages": [
     "zig@0.12.0",
     "zls@0.12.0",
-    "libbitcoin-explorer@latest"
+    "libbitcoin-explorer@latest",
+    "lldb@17.0.6",
+    "github:nixos/nixpkgs/8706b488716e310f02e5ddc94204dc3fa81d511e#sqlite^out,dev",
+    "gcc@13.2.0"
   ],
   "shell": {
     "init_hook": [

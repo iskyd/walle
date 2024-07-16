@@ -20,7 +20,7 @@ pub fn build(b: *std.Build) void {
         .name = "walle",
         // In this case the main source file is merely a path, however, in more
         // complicated build scripts, this could be a generated file.
-        .root_source_file = .{ .path = "src/p.zig" },
+        .root_source_file = .{ .path = "src/indexer.zig" },
         .target = target,
         .optimize = optimize,
     });
@@ -39,8 +39,19 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("clap", clap);
     exe.root_module.addImport("crypto", crypto);
 
-    //exe.addModule("base58", base58);
-    //exe.addModule("clap", clap);
+    const sqlite = b.addModule("sqlite", .{
+        .root_source_file = .{ .path = "lib/zig-sqlite/sqlite.zig" },
+    });
+    sqlite.addCSourceFiles(.{
+        .files = &[_][]const u8{
+            "lib/zig-sqlite/c/workaround.c",
+        },
+        .flags = &[_][]const u8{"-std=c99"},
+    });
+    sqlite.addIncludePath(b.path("lib/zig-sqlite/c"));
+    exe.linkLibC();
+    exe.linkSystemLibrary("sqlite3");
+    exe.root_module.addImport("sqlite", sqlite);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
