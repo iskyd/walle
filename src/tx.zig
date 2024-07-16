@@ -1,6 +1,7 @@
 const std = @import("std");
 const script = @import("script.zig");
 const utils = @import("utils.zig");
+const KeyPath = @import("bip44.zig").KeyPath;
 
 const COINBASE_TX_ID: [64]u8 = "0000000000000000000000000000000000000000000000000000000000000000".*;
 
@@ -8,11 +9,19 @@ const TxError = error{
     AmountTooLowError,
 };
 
+pub const Input = struct {
+    txid: [64]u8,
+    outputtxid: [64]u8,
+    outputn: u32,
+};
+
 // Output represented by transaction hash and index n to its outputs
 pub const Output = struct {
     txid: [64]u8,
     n: u32,
     amount: u64,
+    unspent: ?bool = null,
+    keypath: ?KeyPath = null,
 };
 
 // Input of a transaction

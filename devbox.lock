@@ -1,6 +1,90 @@
 {
   "lockfile_version": "1",
   "packages": {
+    "gcc@13.2.0": {
+      "last_modified": "2024-05-22T06:18:38Z",
+      "resolved": "github:NixOS/nixpkgs/3f316d2a50699a78afe5e77ca486ad553169061e#gcc",
+      "source": "devbox-search",
+      "version": "13.2.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/bwcwdgfr3831h4lrh6cfd58bx3x4mk9f-gcc-wrapper-13.2.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/z12z1cz69l7d3spknv912xlv4f85zjjs-gcc-wrapper-13.2.0-man",
+              "default": true
+            },
+            {
+              "name": "info",
+              "path": "/nix/store/6zyjhsn4wr2rdf6a5nlbq4ch034kz385-gcc-wrapper-13.2.0-info"
+            }
+          ],
+          "store_path": "/nix/store/bwcwdgfr3831h4lrh6cfd58bx3x4mk9f-gcc-wrapper-13.2.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/bqwjxqdz2ywf5zy5lw7wbbkbswwbb26x-gcc-wrapper-13.2.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/3kxysygs6h08l5kimjimphvq9x8x6fgp-gcc-wrapper-13.2.0-man",
+              "default": true
+            },
+            {
+              "name": "info",
+              "path": "/nix/store/ajahri5ic1hmsx23c0j3mw6ynnjzryj9-gcc-wrapper-13.2.0-info"
+            }
+          ],
+          "store_path": "/nix/store/bqwjxqdz2ywf5zy5lw7wbbkbswwbb26x-gcc-wrapper-13.2.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/ay3y9j6nzcmwjdj4myvixdbqn4pr62hl-gcc-wrapper-13.2.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/3v45ibln7q7avw34mmcph75knjnqgxcx-gcc-wrapper-13.2.0-man",
+              "default": true
+            },
+            {
+              "name": "info",
+              "path": "/nix/store/zfpzdwl7ks1qzc0ahg9ly0pq8664hgxz-gcc-wrapper-13.2.0-info"
+            }
+          ],
+          "store_path": "/nix/store/ay3y9j6nzcmwjdj4myvixdbqn4pr62hl-gcc-wrapper-13.2.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/9bv7dcvmfcjnmg5mnqwqlq2wxfn8d7yi-gcc-wrapper-13.2.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/vhj52b8nfrxl2n014awiqxs3prxrw2li-gcc-wrapper-13.2.0-man",
+              "default": true
+            },
+            {
+              "name": "info",
+              "path": "/nix/store/ndw9ai50fky1s26gbx1yvchh3rw0rhw1-gcc-wrapper-13.2.0-info"
+            }
+          ],
+          "store_path": "/nix/store/9bv7dcvmfcjnmg5mnqwqlq2wxfn8d7yi-gcc-wrapper-13.2.0"
+        }
+      }
+    },
     "libbitcoin-explorer@latest": {
       "last_modified": "2024-04-19T21:36:04Z",
       "resolved": "github:NixOS/nixpkgs/92d295f588631b0db2da509f381b4fb1e74173c5#libbitcoin-explorer",
@@ -46,6 +130,50 @@
             }
           ],
           "store_path": "/nix/store/3yfqc07jma4hn941ipxa43y2rz81l110-libbitcoin-explorer-3.8.0"
+        }
+      }
+    },
+    "lldb@17.0.6": {
+      "last_modified": "2024-07-07T16:08:25Z",
+      "resolved": "github:NixOS/nixpkgs/ab82a9612aa45284d4adf69ee81871a389669a9e#lldb",
+      "source": "devbox-search",
+      "version": "17.0.6",
+      "systems": {
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/cpm3kq1y2db9plbhmkbzfi08fyj92qdv-lldb-17.0.6",
+              "default": true
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/jpfn5wvc2v014ll0mi7ni835lzhzmi2b-lldb-17.0.6-dev"
+            },
+            {
+              "name": "lib",
+              "path": "/nix/store/i46cs2r062dc142a2ch4p3jifllnplrr-lldb-17.0.6-lib"
+            }
+          ],
+          "store_path": "/nix/store/cpm3kq1y2db9plbhmkbzfi08fyj92qdv-lldb-17.0.6"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/xrql159siqj3j68vhmsv6g2c2r4wsmps-lldb-17.0.6",
+              "default": true
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/5d75as0a5xkl4vh9ap6r12s6v2wmxc8w-lldb-17.0.6-dev"
+            },
+            {
+              "name": "lib",
+              "path": "/nix/store/hjxia9fymby7ca6x49rcqm31qpzwxdij-lldb-17.0.6-lib"
+            }
+          ],
+          "store_path": "/nix/store/xrql159siqj3j68vhmsv6g2c2r4wsmps-lldb-17.0.6"
         }
       }
     },
