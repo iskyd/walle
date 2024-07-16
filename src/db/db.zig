@@ -26,15 +26,15 @@ pub fn initDB(db: *sqlite.Db) !void {
     var stmtBlocks = try db.prepare(sqlBlocks);
     defer stmtBlocks.deinit();
 
-    const sqlTxs = "CREATE TABLE IF NOT EXISTS transactions(txid VARCHAR(64) PRIMARY KEY, rawtx TEXT NOT NULL, block_heigth INTEGER NOT NULL);";
+    const sqlTxs = "CREATE TABLE IF NOT EXISTS transactions(txid VARCHAR(64) PRIMARY KEY, rawtx TEXT NOT NULL, block_heigth INTEGER NOT NULL, is_coinbase INTEGER NOT NULL);";
     var stmtTxs = try db.prepare(sqlTxs);
     defer stmtTxs.deinit();
 
-    const sqlOutputs = "CREATE TABLE IF NOT EXISTS outputs(id INTEGER PRIMARY KEY AUTOINCREMENT, txid VARCHAR(64), n INTEGER, amount INTEGER NOT NULL, unspent INTEGER, path TEXT NOT NULL);";
+    const sqlOutputs = "CREATE TABLE IF NOT EXISTS outputs(txid VARCHAR(64), n INTEGER, amount INTEGER NOT NULL, unspent INTEGER, path TEXT NOT NULL, PRIMARY KEY(txid, n));";
     var stmtOutputs = try db.prepare(sqlOutputs);
     defer stmtOutputs.deinit();
 
-    const sqlInputs = "CREATE TABLE IF NOT EXISTS inputs(id INTEGER PRIMARY KEY AUTOINCREMENT, txid VARCHAR(64), reference_output_txid VARCHAR(64) NOT NULL, reference_output_n INTEGER NOT NULL);";
+    const sqlInputs = "CREATE TABLE IF NOT EXISTS inputs(txid VARCHAR(64), reference_output_txid VARCHAR(64) NOT NULL, reference_output_n INTEGER NOT NULL, PRIMARY KEY(txid, reference_output_txid, reference_output_n));";
     var stmtInputs = try db.prepare(sqlInputs);
     defer stmtInputs.deinit();
 
@@ -147,10 +147,11 @@ pub fn saveTransaction(db: *sqlite.Db, block_heigth: usize, transactions: std.Au
     var it = transactions.keyIterator();
     while (it.next()) |txid| {
         const raw = rawtransactionsmap.get(txid.*);
-        const sqlTx = "INSERT OR IGNORE INTO transactions(txid, rawtx, block_heigth) VALUES(?, ?, ?)";
+        const sqlTx = "INSERT OR IGNORE INTO transactions(txid, rawtx, block_heigth, is_coinbase) VALUES(?, ?, ?, ?)";
         var stmtTx = try db.prepare(sqlTx);
         defer stmtTx.deinit();
-        try stmtTx.exec(.{}, .{ .txid = txid, .rawtx = raw.?, .block_heigth = block_heigth });
+        const isCoinbase = transactions.get(txid.*).?;
+        try stmtTx.exec(.{}, .{ .txid = txid, .rawtx = raw.?, .block_heigth = block_heigth, .is_coinbase = isCoinbase });
     }
 
     try stmtCommit.exec(.{}, .{});
@@ -165,4 +166,15 @@ pub fn getCurrentBlockHeigth(db: *sqlite.Db) !?usize {
         return row.?.block_heigth;
     }
     return null;
+}
+
+pub fn getBalance(db: *sqlite.Db, current_block: usize) !u64 {
+    const sql = "SELECT SUM(o.amount) AS balance FROM outputs o JOIN transactions t ON t.txid = o.txid WHERE ((t.block_heigth <= ? AND is_coinbase is true) OR (is_coinbase is false)) AND unspent = true;";
+    var stmt = try db.prepare(sql);
+    defer stmt.deinit();
+    const row = try stmt.one(struct { balance: u64 }, .{}, .{ .block_heigth = current_block - 100 });
+    if (row != null) {
+        return row.?.balance;
+    }
+    return 0;
 }

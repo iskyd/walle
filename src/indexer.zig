@@ -94,6 +94,8 @@ pub fn main() !void {
     std.debug.print("Current blocks {?d}\n", .{currentblockcount});
     if (currentblockcount != null and blockcount == currentblockcount) {
         std.debug.print("Already indexed, do nothing", .{});
+        const balance = try db.getBalance(&database, currentblockcount.?);
+        std.debug.print("Current balance: {d}\n", .{balance});
         return;
     }
 
@@ -110,6 +112,7 @@ pub fn main() !void {
 
     for (start..blockcount + 1) |i| {
         var outputs = std.AutoHashMap([64]u8, Output).init(aa);
+        // [64]u8 is for txid, bool is for isCoinbase
         var relevanttransactions = std.AutoHashMap([64]u8, bool).init(aa);
         const blockhash = try rpc.getBlockHash(allocator, &client, res.args.location.?, auth, i);
 
@@ -135,7 +138,7 @@ pub fn main() !void {
                     break;
                 }
 
-                _ = try relevanttransactions.getOrPutValue(txid, true);
+                _ = try relevanttransactions.getOrPutValue(txid, transaction.isCoinbase());
 
                 for (0..txoutputs.items.len) |j| {
                     const txoutput = txoutputs.items[j];
@@ -170,10 +173,9 @@ pub fn main() !void {
         defer txinputs.deinit();
         for (0..txinputs.items.len) |k| {
             const txinput = txinputs.items[k];
-            _ = try relevanttransactions.getOrPutValue(txinput.txid, true);
+            _ = try relevanttransactions.getOrPutValue(txinput.txid, false); // false because if we are using inputs then the current tx is not coinbase
         }
 
-        try db.saveBlock(&database, blockhash, i);
         if (outputs.count() > 0) {
             try db.saveOutputs(aa, &database, outputs);
         }
@@ -183,6 +185,8 @@ pub fn main() !void {
         if (relevanttransactions.count() > 0) {
             try db.saveTransaction(&database, i, relevanttransactions, rawtransactionsmap);
         }
+        // Since db writes are not in a single transaction we commit block as lastest so that if we restart we dont't risk loosing informations, once block is persisted we are sure outputs, inputs and relevant transactions in that block are persisted too. Otherwise we can recover simply reindexing the block.
+        try db.saveBlock(&database, blockhash, i);
 
         progressbar.completeOne();
         _ = arena.reset(.free_all);
