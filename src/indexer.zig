@@ -7,6 +7,7 @@ const ExtendedPublicKey = @import("bip32.zig").ExtendedPublicKey;
 const PublicKey = @import("bip32.zig").PublicKey;
 const bip44 = @import("bip44.zig");
 const KeyPath = bip44.KeyPath;
+const Descriptor = bip44.Descriptor;
 const Network = @import("const.zig").Network;
 const script = @import("script.zig");
 const utils = @import("utils.zig");
@@ -15,7 +16,7 @@ const rpc = @import("rpc/rpc.zig");
 const db = @import("db/db.zig");
 const sqlite = @import("sqlite");
 
-const TOTAL_NEW_KEYS_GAP = 5; // 20
+const TOTAL_STARTING_KEYS = 5; // 20
 
 const P2WPKH_SCRIPT_PREFIX = "0014".*;
 
@@ -74,28 +75,6 @@ pub fn main() !void {
         return clap.usage(std.io.getStdErr().writer(), clap.Help, &params);
     }
 
-    const descriptors = try db.getDescriptors(allocator, &database);
-
-    defer {
-        for (descriptors) |d| {
-            allocator.free(d.extended_key);
-        }
-        allocator.free(descriptors);
-    }
-    for (descriptors) |descriptor| {
-        std.debug.print("Descriptor: extended key = {s}, path = {d}'/{d}'/{d}'\n", .{ descriptor.extended_key, descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2] });
-    }
-
-    // Get the public key of the user
-    // We start from the account public key so that we can derive both change and index from that following bip44
-    // A new index for both internal and external address should be generated everytime we find an output from the previous key
-    // We start with 20 keys (and try to always keep 20 new keys) and hopefully we never need to parse a transaction twice
-    const pkaddress = "tpubDCqjeTSmMEVcovTXiEJ8xNCZXobYFckihB9M6LsRMF9XNPX87ndZkLvGmY2z6PguGJDyUdzpF7tc1EtmqK1zJmPuJkfvutYGTz15JE7QW2Y".*;
-    const accountpublickey = try ExtendedPublicKey.fromAddress(pkaddress);
-    // use hashmap to store public key hash for fast check
-    var publickeys = std.AutoHashMap([40]u8, KeyPath(5)).init(allocator);
-    defer publickeys.deinit();
-
     const auth = try rpc.generateAuth(allocator, res.args.user.?, res.args.password.?);
     defer allocator.free(auth);
     var client = std.http.Client{ .allocator = allocator };
@@ -111,9 +90,42 @@ pub fn main() !void {
         return;
     }
 
+    // Load descriptors
+    const descriptors = try db.getDescriptors(allocator, &database);
+    defer allocator.free(descriptors);
+
+    for (descriptors) |descriptor| {
+        std.debug.print("Descriptor: extended key = {s}, path = {d}'/{d}'/{d}'\n", .{ descriptor.extended_key, descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2] });
+    }
+
     std.debug.print("init key generation", .{});
-    // Generate first 20 keys
-    var lastderivationindex: u32 = try generateAndAddKeys(&publickeys, accountpublickey, 0, TOTAL_NEW_KEYS_GAP);
+    // use hashmap to store public key hash for fast check
+    var publickeys = std.AutoHashMap([40]u8, KeyPath(5)).init(allocator);
+    defer publickeys.deinit();
+    var keypaths = std.AutoHashMap(KeyPath(5), Descriptor).init(allocator);
+    defer keypaths.deinit();
+
+    const accountpublickeys = try allocator.alloc(ExtendedPublicKey, descriptors.len);
+    defer allocator.free(accountpublickeys);
+    for (descriptors) |descriptor| {
+        const accountpublickey = try ExtendedPublicKey.fromAddress(descriptor.extended_key);
+        for (0..TOTAL_STARTING_KEYS) |i| {
+            const internal = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_INTERNAL_CHAIN, @as(u32, @intCast(i)));
+            const external = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_EXTERNAL_CHAIN, @as(u32, @intCast(i)));
+
+            const keypathinternal = KeyPath(5){ .path = [5]u32{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], bip44.CHANGE_INTERNAL_CHAIN, @as(u32, @intCast(i)) } };
+            const keypathexternal = KeyPath(5){ .path = [5]u32{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], bip44.CHANGE_EXTERNAL_CHAIN, @as(u32, @intCast(i)) } };
+
+            const internalhash = try internal.toHashHex();
+            const externalhash = try external.toHashHex();
+            try publickeys.put(internalhash, keypathinternal);
+            try publickeys.put(externalhash, keypathexternal);
+
+            try keypaths.put(keypathinternal, descriptor);
+            try keypaths.put(keypathexternal, descriptor);
+        }
+    }
+
     std.debug.print("keys generated\n", .{});
 
     var progress = std.Progress{};
@@ -137,48 +149,42 @@ pub fn main() !void {
             blocktransactions[j] = transaction;
         }
 
-        var maxindex: u32 = 0; // max public key index found with outputs
-        while (true) blk: {
-            for (blocktransactions, 0..) |transaction, k| {
-                const raw = rawtransactions[k];
-                const txid = try transaction.getTXID();
-                try rawtransactionsmap.put(txid, raw);
+        // Following BIP44 a wallet must not allow the derivation of a new address if the previous one is not used
+        // So we start by creating n keys (both internal and external)
+        // After we found outputs we loop through all the keypath used and derive the current index + n key
+        // This implementation will NOT work if there are more then n key used in the same block.
+        for (blocktransactions, 0..) |transaction, k| {
+            const raw = rawtransactions[k];
+            const txid = try transaction.getTXID();
+            try rawtransactionsmap.put(txid, raw);
 
-                const txoutputs = try getOutputsFor(aa, transaction, publickeys);
-                defer txoutputs.deinit();
-                if (txoutputs.items.len == 0) {
-                    break;
-                }
-
-                _ = try relevanttransactions.getOrPutValue(txid, transaction.isCoinbase());
-
-                for (0..txoutputs.items.len) |j| {
-                    const txoutput = txoutputs.items[j];
-                    if (txoutput.keypath.?.path[4] > maxindex) {
-                        maxindex = txoutput.keypath.?.path[4];
-                    }
-                }
-
-                // We need to parse all the transactions in the block again
-                // Because we might have loose some outputs
-                if (maxindex == lastderivationindex) {
-                    break :blk;
-                }
-
-                // Generate new keys so that we always have 20 unused keys
-                const newkeys = maxindex + TOTAL_NEW_KEYS_GAP - lastderivationindex;
-                if (newkeys > 0) {
-                    lastderivationindex = try generateAndAddKeys(&publickeys, accountpublickey, lastderivationindex + 1, lastderivationindex + 1 + newkeys);
-                }
-
-                for (0..txoutputs.items.len) |j| {
-                    const txoutput = txoutputs.items[j];
-                    const uniquehash = try outputToUniqueHash(txoutput.txid, txoutput.n);
-                    try outputs.put(uniquehash, txoutput);
-                }
+            const txoutputs = try getOutputsFor(aa, transaction, publickeys);
+            defer txoutputs.deinit();
+            if (txoutputs.items.len == 0) {
+                break;
             }
 
-            break;
+            _ = try relevanttransactions.getOrPutValue(txid, transaction.isCoinbase());
+
+            for (0..txoutputs.items.len) |j| {
+                const txoutput = txoutputs.items[j];
+                // We need to generate the key with idx + n if it doesnt already exists
+                const keypath = txoutput.keypath.?;
+                const next = keypath.getNext(TOTAL_STARTING_KEYS);
+                const existing = keypaths.get(next);
+                if (existing == null) {
+                    const descriptor = keypaths.get(keypath);
+                    // Generate the next key
+                    const accountpublickey = try ExtendedPublicKey.fromAddress(descriptor.?.extended_key);
+                    const key = try bip44.generatePublicFromAccountPublicKey(accountpublickey, next.path[3], next.path[4]);
+                    const keyhash = try key.toHashHex();
+                    try publickeys.put(keyhash, next);
+                    try keypaths.put(next, descriptor.?);
+                }
+
+                const uniquehash = try outputToUniqueHash(txoutput.txid, txoutput.n);
+                try outputs.put(uniquehash, txoutput);
+            }
         }
 
         const txinputs = try getInputsFor(aa, &database, blocktransactions);
@@ -197,12 +203,13 @@ pub fn main() !void {
         if (relevanttransactions.count() > 0) {
             try db.saveTransaction(&database, i, relevanttransactions, rawtransactionsmap);
         }
-        // Since db writes are not in a single transaction we commit block as lastest so that if we restart we dont't risk loosing informations, once block is persisted we are sure outputs, inputs and relevant transactions in that block are persisted too. Otherwise we can recover simply reindexing the block.
+        // Since db writes are not in a single transaction we commit block as lastest so that if we restart we dont't risk loosing informations, once block is persisted we are sure outputs, inputs and relevant transactions in that block are persisted too. We can recover from partial commit simply reindexing the block.
         try db.saveBlock(&database, blockhash, i);
 
         progressbar.completeOne();
         _ = arena.reset(.free_all);
     }
+
     std.debug.print("indexing completed\n", .{});
 }
 

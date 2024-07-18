@@ -40,7 +40,7 @@ pub fn initDB(db: *sqlite.Db) !void {
     var stmtInputs = try db.prepare(sqlInputs);
     defer stmtInputs.deinit();
 
-    const sqlDescriptors = "CREATE TABLE IF NOT EXISTS descriptors(extended_key TEXT PRIMARY KEY, path TEXT NOT NULL)";
+    const sqlDescriptors = "CREATE TABLE IF NOT EXISTS descriptors(extended_key VARCHAR(111) PRIMARY KEY, path TEXT NOT NULL)";
     var stmtDescriptors = try db.prepare(sqlDescriptors);
     defer stmtDescriptors.deinit();
 
@@ -191,7 +191,7 @@ pub fn getDescriptors(allocator: std.mem.Allocator, db: *sqlite.Db) ![]Descripto
     const sql = "SELECT extended_key, path FROM descriptors;";
     var stmt = try db.prepare(sql);
     defer stmt.deinit();
-    const rows = try stmt.all(struct { extended_key: []const u8, path: []const u8 }, allocator, .{}, .{});
+    const rows = try stmt.all(struct { extended_key: [111]u8, path: []const u8 }, allocator, .{}, .{});
     defer {
         for (rows) |row| {
             // We do not free row.extended_key since we are returning the memory location. Ownership to the caller.

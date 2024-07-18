@@ -87,11 +87,21 @@ pub fn KeyPath(comptime depth: u8) type {
 
             return Self{ .path = path };
         }
+
+        pub fn getNext(self: Self, v: u32) Self {
+            var path: [depth]u32 = undefined;
+            for (self.path, 0..) |p, i| {
+                path[i] = p;
+            }
+
+            path[depth - 1] = path[depth - 1] + v;
+            return Self{ .path = path };
+        }
     };
 }
 
 pub const Descriptor = struct {
-    extended_key: []const u8,
+    extended_key: [111]u8,
     keypath: KeyPath(3),
 };
 
