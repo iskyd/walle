@@ -21,7 +21,7 @@ pub const Output = struct {
     n: u32,
     amount: u64,
     unspent: ?bool = null,
-    keypath: ?KeyPath = null,
+    keypath: ?KeyPath(5) = null,
 };
 
 // Input of a transaction

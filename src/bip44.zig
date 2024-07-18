@@ -11,74 +11,88 @@ pub const CHANGE_INTERNAL_CHAIN = 1; // Not visible outside the wallet, return t
 pub const BITCOIN_COIN_TYPE = 0;
 pub const BITCOIN_TESTNET_COIN_TYPE = 1;
 
-pub const KeyPath = struct {
-    purpose: u32,
-    cointype: u32,
-    account: u32,
-    change: u32,
-    index: u32,
+pub fn KeyPath(comptime depth: u8) type {
+    comptime assert(depth <= 5);
+    return struct {
+        path: [depth]u32,
 
-    // Memory ownership to the caller
-    pub fn toStr(self: KeyPath, allocator: std.mem.Allocator) ![]u8 {
-        var cap: usize = 4; // 4 = number of /
-        const purposeCap = if (self.purpose != 0) std.math.log10(self.purpose) + 2 else 2; // We add +1 to save ' to indicate it's hardened derived
-        const cointypeCap = if (self.cointype != 0) std.math.log10(self.cointype) + 2 else 2; // We add +1 to save ' to indicate it's hardened derived
-        const accountCap = if (self.account != 0) std.math.log10(self.account) + 2 else 2; // We add +1 to save ' to indicate it's hardened derived
-        const changeCap = if (self.change != 0) std.math.log10(self.change) + 1 else 1;
-        const indexCap = if (self.index != 0) std.math.log10(self.index) + 1 else 1;
-        cap += purposeCap + cointypeCap + accountCap + changeCap + indexCap;
+        const Self = @This();
 
-        var buffer = try allocator.alloc(u8, cap);
-        var current: usize = 0;
-        _ = try std.fmt.bufPrint(buffer[current .. current + purposeCap + 1], "{d}'/", .{self.purpose});
-        current += purposeCap + 1;
-        _ = try std.fmt.bufPrint(buffer[current .. current + cointypeCap + 1], "{d}'/", .{self.cointype});
-        current += cointypeCap + 1;
-        _ = try std.fmt.bufPrint(buffer[current .. current + accountCap + 1], "{d}'/", .{self.account});
-        current += accountCap + 1;
-        _ = try std.fmt.bufPrint(buffer[current .. current + changeCap + 1], "{d}/", .{self.change});
-        current += changeCap + 1;
-        _ = try std.fmt.bufPrint(buffer[current .. current + indexCap], "{d}", .{self.index});
-        current += indexCap;
+        pub fn getStrCap(self: Self) usize {
+            var cap: usize = self.path.len - 1; // number of /
+            for (self.path, 0..) |d, i| {
+                cap += if (d != 0) std.math.log10(d) + 1 else 1;
 
-        return buffer;
-    }
+                // We need to add ' for the first 3 elements since they use hardened derivation
+                if (i <= 2) {
+                    cap += 1;
+                }
+            }
 
-    pub fn fromStr(str: []const u8) !KeyPath {
-        var current: usize = 0;
-        var delimiterIndex: ?usize = std.mem.indexOf(u8, str, "/");
-        if (delimiterIndex == null) {
-            return error.InvalidKeyPath;
+            return cap;
         }
-        const purpose = try std.fmt.parseInt(u32, str[current .. current + delimiterIndex.? - 1], 10); // -1 because we need to remove the hardened symbol '
-        current = delimiterIndex.? + 1;
-        delimiterIndex = std.mem.indexOf(u8, str[current..], "/");
-        if (delimiterIndex == null) {
-            return error.InvalidKeyPath;
+
+        pub fn toStr(self: Self, allocator: std.mem.Allocator) ![]u8 {
+            var buffer = try allocator.alloc(u8, self.getStrCap());
+            var current: usize = 0;
+            for (self.path, 0..) |d, i| {
+                const currentcap = if (d != 0) std.math.log10(d) + 1 else 1;
+                _ = try std.fmt.bufPrint(buffer[current .. current + currentcap], "{d}", .{d});
+                current += currentcap;
+                if (i <= 2) {
+                    buffer[current] = '\'';
+                    current += 1;
+                }
+                if (i < self.path.len - 1) {
+                    buffer[current] = '/';
+                }
+                current += 1;
+            }
+
+            return buffer;
         }
-        const cointype = try std.fmt.parseInt(u32, str[current .. current + delimiterIndex.? - 1], 10);
-        current = current + delimiterIndex.? + 1;
-        delimiterIndex = std.mem.indexOf(u8, str[current..], "/");
-        if (delimiterIndex == null) {
-            return error.InvalidKeyPath;
+
+        pub fn fromStr(str: []const u8) !Self {
+            var path: [depth]u32 = undefined;
+            var current: usize = 0;
+            for (0..depth) |i| {
+                const delimiterIndex: ?usize = std.mem.indexOf(u8, str[current..], "/");
+                if (delimiterIndex == null) {
+                    // We are at the last child or we have an invalid keypath
+                    if (i == depth - 1) {
+                        var end = str.len;
+                        if (i <= 2) {
+                            end -= 1;
+                        }
+                        const v = try std.fmt.parseInt(u32, str[current..end], 10);
+                        path[i] = v;
+                        break;
+                    }
+                    return error.InvalidKeyPath;
+                }
+                var end = current + delimiterIndex.?;
+                if (i <= 2) {
+                    assert(str[end - 1] == '\'');
+                    end -= 1; // -1 because we need to remove the hardened symbol '
+                }
+                const v = try std.fmt.parseInt(u32, str[current..end], 10);
+                path[i] = v;
+
+                if (i <= 2) {
+                    current = end + 2;
+                } else {
+                    current = end + 1;
+                }
+            }
+
+            return Self{ .path = path };
         }
-        const account = try std.fmt.parseInt(u32, str[current .. current + delimiterIndex.? - 1], 10);
-        current = current + delimiterIndex.? + 1;
-        delimiterIndex = std.mem.indexOf(u8, str[current..], "/");
-        if (delimiterIndex == null) {
-            return error.InvalidKeyPath;
-        }
-        const change = try std.fmt.parseInt(u32, str[current .. current + delimiterIndex.?], 10);
-        current = current + delimiterIndex.? + 1;
-        const index = try std.fmt.parseInt(u32, str[current..], 10);
-        return KeyPath{
-            .purpose = purpose,
-            .cointype = cointype,
-            .account = account,
-            .change = change,
-            .index = index,
-        };
-    }
+    };
+}
+
+pub const Descriptor = struct {
+    extended_key: []const u8,
+    keypath: KeyPath(3),
 };
 
 // Purpose, cointype, and account use hardened derivation
@@ -142,24 +156,27 @@ test "generatePrivateAccount" {
     try std.testing.expectEqualStrings(expected, &compressed);
 }
 
-test "keypathToStr" {
+test "keypathtest" {
     const allocator = std.testing.allocator;
-    const kp = KeyPath{ .purpose = 84, .cointype = BITCOIN_COIN_TYPE, .account = 0, .change = CHANGE_EXTERNAL_CHAIN, .index = 0 };
+    const k1 = try KeyPath(5).fromStr("84'/0'/0'/0/1");
+    try std.testing.expectEqual(k1.path[0], 84);
+    try std.testing.expectEqual(k1.path[1], 0);
+    try std.testing.expectEqual(k1.path[2], 0);
+    try std.testing.expectEqual(k1.path[3], 0);
+    try std.testing.expectEqual(k1.path[4], 1);
 
-    const kpstr = try kp.toStr(allocator);
-    defer allocator.free(kpstr);
+    const k1str = try k1.toStr(allocator);
+    defer allocator.free(k1str);
+    const e1 = "84'/0'/0'/0/1".*;
+    try std.testing.expectEqualStrings(&e1, k1str);
 
-    const expected = "84'/0'/0'/0/0".*;
-    try std.testing.expectEqualStrings(&expected, kpstr);
-}
+    const k2 = try KeyPath(3).fromStr("84'/0'/0'");
+    try std.testing.expectEqual(k2.path[0], 84);
+    try std.testing.expectEqual(k2.path[1], 0);
+    try std.testing.expectEqual(k2.path[2], 0);
 
-test "keypathFromStr" {
-    const str = "84'/0'/0'/0/0".*;
-    const kp = try KeyPath.fromStr(&str);
-
-    try std.testing.expectEqual(kp.purpose, 84);
-    try std.testing.expectEqual(kp.cointype, 0);
-    try std.testing.expectEqual(kp.account, 0);
-    try std.testing.expectEqual(kp.change, 0);
-    try std.testing.expectEqual(kp.index, 0);
+    const e2 = "84'/0'/0'".*;
+    const k2str = try k2.toStr(allocator);
+    defer allocator.free(k2str);
+    try std.testing.expectEqualStrings(&e2, k2str);
 }

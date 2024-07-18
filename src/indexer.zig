@@ -74,6 +74,18 @@ pub fn main() !void {
         return clap.usage(std.io.getStdErr().writer(), clap.Help, &params);
     }
 
+    const descriptors = try db.getDescriptors(allocator, &database);
+
+    defer {
+        for (descriptors) |d| {
+            allocator.free(d.extended_key);
+        }
+        allocator.free(descriptors);
+    }
+    for (descriptors) |descriptor| {
+        std.debug.print("Descriptor: extended key = {s}, path = {d}'/{d}'/{d}'\n", .{ descriptor.extended_key, descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2] });
+    }
+
     // Get the public key of the user
     // We start from the account public key so that we can derive both change and index from that following bip44
     // A new index for both internal and external address should be generated everytime we find an output from the previous key
@@ -81,7 +93,7 @@ pub fn main() !void {
     const pkaddress = "tpubDCqjeTSmMEVcovTXiEJ8xNCZXobYFckihB9M6LsRMF9XNPX87ndZkLvGmY2z6PguGJDyUdzpF7tc1EtmqK1zJmPuJkfvutYGTz15JE7QW2Y".*;
     const accountpublickey = try ExtendedPublicKey.fromAddress(pkaddress);
     // use hashmap to store public key hash for fast check
-    var publickeys = std.AutoHashMap([40]u8, KeyPath).init(allocator);
+    var publickeys = std.AutoHashMap([40]u8, KeyPath(5)).init(allocator);
     defer publickeys.deinit();
 
     const auth = try rpc.generateAuth(allocator, res.args.user.?, res.args.password.?);
@@ -142,8 +154,8 @@ pub fn main() !void {
 
                 for (0..txoutputs.items.len) |j| {
                     const txoutput = txoutputs.items[j];
-                    if (txoutput.keypath.?.index > maxindex) {
-                        maxindex = txoutput.keypath.?.index;
+                    if (txoutput.keypath.?.path[4] > maxindex) {
+                        maxindex = txoutput.keypath.?.path[4];
                     }
                 }
 
@@ -195,15 +207,15 @@ pub fn main() !void {
 }
 
 // Returns last derivation index used
-fn generateAndAddKeys(publickeys: *std.AutoHashMap([40]u8, KeyPath), accountpublickey: ExtendedPublicKey, start: usize, end: usize) !u32 {
+fn generateAndAddKeys(publickeys: *std.AutoHashMap([40]u8, KeyPath(5)), accountpublickey: ExtendedPublicKey, start: usize, end: usize) !u32 {
     std.debug.assert(start != end);
     var lastderivationindex: u32 = 0;
     for (start..end) |i| {
         const index = @as(u32, @intCast(i));
         const pkchange = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_INTERNAL_CHAIN, index);
         const pkexternal = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_EXTERNAL_CHAIN, index);
-        try publickeys.put(try pkchange.toHashHex(), KeyPath{ .purpose = 84, .cointype = bip44.BITCOIN_TESTNET_COIN_TYPE, .account = 0, .change = bip44.CHANGE_INTERNAL_CHAIN, .index = index });
-        try publickeys.put(try pkexternal.toHashHex(), KeyPath{ .purpose = 84, .cointype = bip44.BITCOIN_TESTNET_COIN_TYPE, .account = 0, .change = bip44.CHANGE_EXTERNAL_CHAIN, .index = index });
+        try publickeys.put(try pkchange.toHashHex(), KeyPath(5){ .path = [5]u32{ 84, bip44.BITCOIN_TESTNET_COIN_TYPE, 0, bip44.CHANGE_INTERNAL_CHAIN, index } });
+        try publickeys.put(try pkexternal.toHashHex(), KeyPath(5){ .path = [5]u32{ 84, bip44.BITCOIN_TESTNET_COIN_TYPE, 0, bip44.CHANGE_EXTERNAL_CHAIN, index } });
         lastderivationindex = index;
     }
 
@@ -218,7 +230,7 @@ fn outputToPublicKeyHash(output: tx.TxOutput) ![40]u8 {
     return error.UnsupportedScriptPubKey;
 }
 
-fn getOutputsFor(allocator: std.mem.Allocator, transaction: tx.Transaction, publickeys: std.AutoHashMap([40]u8, KeyPath)) !std.ArrayList(Output) {
+fn getOutputsFor(allocator: std.mem.Allocator, transaction: tx.Transaction, publickeys: std.AutoHashMap([40]u8, KeyPath(5))) !std.ArrayList(Output) {
     var outputs = std.ArrayList(Output).init(allocator);
     for (0..transaction.outputs.items.len) |i| {
         const txoutput = transaction.outputs.items[i];

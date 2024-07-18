@@ -2,6 +2,8 @@ const std = @import("std");
 const sqlite = @import("sqlite");
 const Output = @import("../tx.zig").Output;
 const Input = @import("../tx.zig").Input;
+const KeyPath = @import("../bip44.zig").KeyPath;
+const Descriptor = @import("../bip44.zig").Descriptor;
 const assert = std.debug.assert;
 
 pub fn openDB() !sqlite.Db {
@@ -38,6 +40,10 @@ pub fn initDB(db: *sqlite.Db) !void {
     var stmtInputs = try db.prepare(sqlInputs);
     defer stmtInputs.deinit();
 
+    const sqlDescriptors = "CREATE TABLE IF NOT EXISTS descriptors(extended_key TEXT PRIMARY KEY, path TEXT NOT NULL)";
+    var stmtDescriptors = try db.prepare(sqlDescriptors);
+    defer stmtDescriptors.deinit();
+
     const sqlBegin = "BEGIN TRANSACTION;";
     var stmtBegin = try db.prepare(sqlBegin);
     defer stmtBegin.deinit();
@@ -50,6 +56,7 @@ pub fn initDB(db: *sqlite.Db) !void {
     try stmtTxs.exec(.{}, .{});
     try stmtOutputs.exec(.{}, .{});
     try stmtInputs.exec(.{}, .{});
+    try stmtDescriptors.exec(.{}, .{});
     try stmtCommit.exec(.{}, .{});
 }
 
@@ -177,4 +184,26 @@ pub fn getBalance(db: *sqlite.Db, current_block: usize) !u64 {
         return row.?.balance;
     }
     return 0;
+}
+
+// Memory ownership to the caller
+pub fn getDescriptors(allocator: std.mem.Allocator, db: *sqlite.Db) ![]Descriptor {
+    const sql = "SELECT extended_key, path FROM descriptors;";
+    var stmt = try db.prepare(sql);
+    defer stmt.deinit();
+    const rows = try stmt.all(struct { extended_key: []const u8, path: []const u8 }, allocator, .{}, .{});
+    defer {
+        for (rows) |row| {
+            // We do not free row.extended_key since we are returning the memory location. Ownership to the caller.
+            allocator.free(row.path);
+        }
+        allocator.free(rows);
+    }
+
+    var descriptors = try allocator.alloc(Descriptor, rows.len);
+    for (rows, 0..) |row, i| {
+        descriptors[i] = Descriptor{ .extended_key = row.extended_key, .keypath = try KeyPath(3).fromStr(row.path) };
+    }
+
+    return descriptors;
 }
