@@ -105,6 +105,7 @@ pub fn main() !void {
     var keypaths = std.AutoHashMap(KeyPath(5), Descriptor).init(allocator);
     defer keypaths.deinit();
     var descriptorsmap = std.AutoHashMap(KeyPath(3), [111]u8).init(allocator);
+    defer descriptorsmap.deinit();
     for (descriptors) |descriptor| {
         try descriptorsmap.put(descriptor.keypath, descriptor.extended_key);
     }
