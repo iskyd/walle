@@ -194,7 +194,6 @@ pub fn getDescriptors(allocator: std.mem.Allocator, db: *sqlite.Db) ![]Descripto
     const rows = try stmt.all(struct { extended_key: [111]u8, path: []const u8 }, allocator, .{}, .{});
     defer {
         for (rows) |row| {
-            // We do not free row.extended_key since we are returning the memory location. Ownership to the caller.
             allocator.free(row.path);
         }
         allocator.free(rows);
@@ -206,4 +205,23 @@ pub fn getDescriptors(allocator: std.mem.Allocator, db: *sqlite.Db) ![]Descripto
     }
 
     return descriptors;
+}
+
+pub fn getUsedKeyPaths(allocator: std.mem.Allocator, db: *sqlite.Db) ![]KeyPath(5) {
+    const sql = "SELECT DISTINCT(path) AS path FROM outputs;";
+    var stmt = try db.prepare(sql);
+    defer stmt.deinit();
+    const rows = try stmt.all(struct { path: []const u8 }, allocator, .{}, .{});
+    defer {
+        for (rows) |row| {
+            allocator.free(row.path);
+        }
+        allocator.free(rows);
+    }
+
+    var keypaths = try allocator.alloc(KeyPath(5), rows.len);
+    for (rows, 0..) |row, i| {
+        keypaths[i] = try KeyPath(5).fromStr(row.path);
+    }
+    return keypaths;
 }

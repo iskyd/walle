@@ -84,7 +84,7 @@ pub fn main() !void {
     const currentblockcount = try db.getCurrentBlockHeigth(&database);
     std.debug.print("Current blocks {?d}\n", .{currentblockcount});
     if (currentblockcount != null and blockcount == currentblockcount) {
-        std.debug.print("Already indexed, do nothing", .{});
+        std.debug.print("Already indexed, do nothing\n", .{});
         const balance = try db.getBalance(&database, currentblockcount.?);
         std.debug.print("Current balance: {d}\n", .{balance});
         return;
@@ -98,31 +98,67 @@ pub fn main() !void {
         std.debug.print("Descriptor: extended key = {s}, path = {d}'/{d}'/{d}'\n", .{ descriptor.extended_key, descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2] });
     }
 
-    std.debug.print("init key generation", .{});
+    std.debug.print("init key generation\n", .{});
     // use hashmap to store public key hash for fast check
     var publickeys = std.AutoHashMap([40]u8, KeyPath(5)).init(allocator);
     defer publickeys.deinit();
     var keypaths = std.AutoHashMap(KeyPath(5), Descriptor).init(allocator);
     defer keypaths.deinit();
+    var descriptorsmap = std.AutoHashMap(KeyPath(3), [111]u8).init(allocator);
+    for (descriptors) |descriptor| {
+        try descriptorsmap.put(descriptor.keypath, descriptor.extended_key);
+    }
 
     const accountpublickeys = try allocator.alloc(ExtendedPublicKey, descriptors.len);
     defer allocator.free(accountpublickeys);
+    const usedkeypaths = try db.getUsedKeyPaths(allocator, &database);
+    defer allocator.free(usedkeypaths);
+
+    for (usedkeypaths) |keypath| {
+        const existing = keypaths.get(keypath);
+        if (existing != null) {
+            continue;
+        }
+
+        const d = KeyPath(3){ .path = [3]u32{ keypath.path[0], keypath.path[1], keypath.path[3] } };
+        const extendedaddr = descriptorsmap.get(d);
+        if (extendedaddr == null) {
+            std.debug.print("descriptor not found for path {d}'/{d}'/{d}'\n", .{ d.path[0], d.path[1], d.path[2] });
+            continue;
+        }
+
+        // Generate the current used keypath and public key
+        const extended = try ExtendedPublicKey.fromAddress(extendedaddr.?);
+        try keypaths.put(keypath, Descriptor{ .extended_key = extendedaddr.?, .keypath = d });
+        const public = try bip44.generatePublicFromAccountPublicKey(extended, keypath.path[3], keypath.path[4]);
+        const publichash = try public.toHashHex();
+        try publickeys.put(publichash, keypath);
+
+        // Generate the next one
+        const nextpublic = try bip44.generatePublicFromAccountPublicKey(extended, keypath.path[3], keypath.path[4] + 1);
+        const nextpublichash = try nextpublic.toHashHex();
+        try publickeys.put(nextpublichash, keypath.getNext(1));
+    }
+
     for (descriptors) |descriptor| {
         const accountpublickey = try ExtendedPublicKey.fromAddress(descriptor.extended_key);
-        for (0..TOTAL_STARTING_KEYS) |i| {
-            const internal = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_INTERNAL_CHAIN, @as(u32, @intCast(i)));
-            const external = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_EXTERNAL_CHAIN, @as(u32, @intCast(i)));
 
-            const keypathinternal = KeyPath(5){ .path = [5]u32{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], bip44.CHANGE_INTERNAL_CHAIN, @as(u32, @intCast(i)) } };
-            const keypathexternal = KeyPath(5){ .path = [5]u32{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], bip44.CHANGE_EXTERNAL_CHAIN, @as(u32, @intCast(i)) } };
-
+        const keypathinternal = KeyPath(5){ .path = [5]u32{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], bip44.CHANGE_INTERNAL_CHAIN, 0 } };
+        const existinginternal = keypaths.get(keypathinternal);
+        if (existinginternal == null) {
+            const internal = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_INTERNAL_CHAIN, 0);
             const internalhash = try internal.toHashHex();
-            const externalhash = try external.toHashHex();
-            try publickeys.put(internalhash, keypathinternal);
-            try publickeys.put(externalhash, keypathexternal);
-
             try keypaths.put(keypathinternal, descriptor);
+            try publickeys.put(internalhash, keypathinternal);
+        }
+
+        const keypathexternal = KeyPath(5){ .path = [5]u32{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], bip44.CHANGE_EXTERNAL_CHAIN, 0 } };
+        const existingexternal = keypaths.get(keypathexternal);
+        if (existingexternal == null) {
+            const external = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_EXTERNAL_CHAIN, 0);
+            const externalhash = try external.toHashHex();
             try keypaths.put(keypathexternal, descriptor);
+            try publickeys.put(externalhash, keypathexternal);
         }
     }
 
@@ -150,41 +186,50 @@ pub fn main() !void {
         }
 
         // Following BIP44 a wallet must not allow the derivation of a new address if the previous one is not used
-        // So we start by creating n keys (both internal and external)
-        // After we found outputs we loop through all the keypath used and derive the current index + n key
-        // This implementation will NOT work if there are more then n key used in the same block.
-        for (blocktransactions, 0..) |transaction, k| {
-            const raw = rawtransactions[k];
-            const txid = try transaction.getTXID();
-            try rawtransactionsmap.put(txid, raw);
+        // So we start by creating 1 new key (both internal and external)
+        // Everytime we found a new output we need to generate the next key and re-index the same block to be sure all outputs are included
+        while (true) blk: {
+            for (blocktransactions, 0..) |transaction, k| {
+                const raw = rawtransactions[k];
+                const txid = try transaction.getTXID();
+                try rawtransactionsmap.put(txid, raw);
 
-            const txoutputs = try getOutputsFor(aa, transaction, publickeys);
-            defer txoutputs.deinit();
-            if (txoutputs.items.len == 0) {
-                break;
-            }
-
-            _ = try relevanttransactions.getOrPutValue(txid, transaction.isCoinbase());
-
-            for (0..txoutputs.items.len) |j| {
-                const txoutput = txoutputs.items[j];
-                // We need to generate the key with idx + n if it doesnt already exists
-                const keypath = txoutput.keypath.?;
-                const next = keypath.getNext(TOTAL_STARTING_KEYS);
-                const existing = keypaths.get(next);
-                if (existing == null) {
-                    const descriptor = keypaths.get(keypath);
-                    // Generate the next key
-                    const accountpublickey = try ExtendedPublicKey.fromAddress(descriptor.?.extended_key);
-                    const key = try bip44.generatePublicFromAccountPublicKey(accountpublickey, next.path[3], next.path[4]);
-                    const keyhash = try key.toHashHex();
-                    try publickeys.put(keyhash, next);
-                    try keypaths.put(next, descriptor.?);
+                const txoutputs = try getOutputsFor(aa, transaction, publickeys);
+                if (txoutputs.items.len == 0) {
+                    break;
                 }
 
-                const uniquehash = try outputToUniqueHash(txoutput.txid, txoutput.n);
-                try outputs.put(uniquehash, txoutput);
+                _ = try relevanttransactions.getOrPutValue(txid, transaction.isCoinbase());
+
+                for (0..txoutputs.items.len) |j| {
+                    const txoutput = txoutputs.items[j];
+                    // We need to generate the key with idx + n if it doesnt already exists
+                    const keypath = txoutput.keypath.?;
+                    const next = keypath.getNext(1);
+                    const existing = keypaths.get(next);
+
+                    // If we are generating a new key and the output is new we start re-indexing the block
+                    // This ensure the fact that we collect all the outputs since the new key could have been used in previous tx in the same block
+                    const uniquehash = try outputToUniqueHash(txoutput.txid, txoutput.n);
+                    const o = try outputs.getOrPut(uniquehash);
+                    o.value_ptr.* = txoutput;
+                    if (existing == null) {
+                        const descriptor = keypaths.get(keypath);
+                        // Generate the next key
+                        const accountpublickey = try ExtendedPublicKey.fromAddress(descriptor.?.extended_key);
+                        const key = try bip44.generatePublicFromAccountPublicKey(accountpublickey, next.path[3], next.path[4]);
+                        const keyhash = try key.toHashHex();
+                        try publickeys.put(keyhash, next);
+                        try keypaths.put(next, descriptor.?);
+
+                        if (o.found_existing == false) {
+                            break :blk;
+                        }
+                    }
+                }
             }
+
+            break;
         }
 
         const txinputs = try getInputsFor(aa, &database, blocktransactions);
