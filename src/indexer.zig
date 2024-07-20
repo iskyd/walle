@@ -259,27 +259,12 @@ pub fn main() !void {
     std.debug.print("indexing completed\n", .{});
 }
 
-// Returns last derivation index used
-fn generateAndAddKeys(publickeys: *std.AutoHashMap([40]u8, KeyPath(5)), accountpublickey: ExtendedPublicKey, start: usize, end: usize) !u32 {
-    std.debug.assert(start != end);
-    var lastderivationindex: u32 = 0;
-    for (start..end) |i| {
-        const index = @as(u32, @intCast(i));
-        const pkchange = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_INTERNAL_CHAIN, index);
-        const pkexternal = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_EXTERNAL_CHAIN, index);
-        try publickeys.put(try pkchange.toHashHex(), KeyPath(5){ .path = [5]u32{ 84, bip44.BITCOIN_TESTNET_COIN_TYPE, 0, bip44.CHANGE_INTERNAL_CHAIN, index } });
-        try publickeys.put(try pkexternal.toHashHex(), KeyPath(5){ .path = [5]u32{ 84, bip44.BITCOIN_TESTNET_COIN_TYPE, 0, bip44.CHANGE_EXTERNAL_CHAIN, index } });
-        lastderivationindex = index;
-    }
-
-    return lastderivationindex;
-}
-
 // return hex value of pubkey hash
 fn outputToPublicKeyHash(output: tx.TxOutput) ![40]u8 {
     if (std.mem.eql(u8, output.script_pubkey[0..4], &P2WPKH_SCRIPT_PREFIX)) {
         return output.script_pubkey[4..44].*;
     }
+
     return error.UnsupportedScriptPubKey;
 }
 

@@ -118,6 +118,7 @@ pub const opcode = enum(u8) {
 
     // n <= 16
     pub fn fromNum(n: u8) opcode {
+        assert(n <= 16);
         return switch (n) {
             0 => opcode.OP_FALSE,
             1 => opcode.OP_TRUE,
@@ -218,6 +219,48 @@ pub const Script = struct {
         defer allocator.free(redeemscript);
         try self.toHex(redeemscript);
         _ = try std.fmt.hexToBytes(buffer, redeemscript);
+    }
+
+    pub fn decode(allocator: std.mem.Allocator, hex: []const u8) !Script {
+        var script = Script.init(allocator);
+        var current: usize = 0;
+        while (current < hex.len) {
+            const v = try std.fmt.parseInt(u32, hex[current .. current + 2], 16);
+            current += 2;
+            // It is a valid opcode
+            if (v == 0 or v >= 76) {
+                const op: opcode = @enumFromInt(v);
+                try script.push(ScriptOp{ .op = op });
+            } else { // it is a pushbytes
+                try script.push(ScriptOp{ .pushbytes = v });
+                const data = hex[current .. current + (v * 2)];
+                try script.push(ScriptOp{ .v = data });
+                current += v * 2;
+            }
+        }
+
+        return script;
+    }
+
+    pub fn format(self: Script, actual_fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = actual_fmt;
+        _ = options;
+
+        for (0..self.stack.items.len) |i| {
+            const scriptop = self.stack.items[i];
+            switch (scriptop) {
+                ScriptOp.op => |op| {
+                    try writer.print("{s} ", .{@tagName(op)});
+                },
+                ScriptOp.v => |v| {
+                    try writer.print("{s} ", .{v});
+                },
+                ScriptOp.pushbytes => |pb| {
+                    try writer.print("OP_PUSHBYTES_{d} ", .{pb});
+                },
+            }
+        }
+        //try writer.print("\n");
     }
 };
 
@@ -358,4 +401,27 @@ test "p2wpkh" {
     try script.toHex(buffer);
     const expectedhex: [44]u8 = "001464cb674c9fdcb5c033ccb5d860978974ff02f400".*;
     try std.testing.expectEqualStrings(&expectedhex, buffer);
+}
+
+test "decode" {
+    const allocator = std.testing.allocator;
+    const hex = "76a9143134047164cbf22f9f54fe738853de24a9f3cf1b88ac".*;
+    const script = try Script.decode(allocator, &hex);
+    defer script.deinit();
+
+    const e1 = "3134047164cbf22f9f54fe738853de24a9f3cf1b".*;
+    try std.testing.expectEqual(script.stack.items[0].op, opcode.OP_DUP);
+    try std.testing.expectEqual(script.stack.items[1].op, opcode.OP_HASH160);
+    try std.testing.expectEqual(script.stack.items[2].pushbytes, 20);
+    try std.testing.expectEqualStrings(script.stack.items[3].v, &e1);
+    try std.testing.expectEqual(script.stack.items[4].op, opcode.OP_EQUALVERIFY);
+    try std.testing.expectEqual(script.stack.items[5].op, opcode.OP_CHECKSIG);
+
+    const hex2 = "0014199b7da15e4b0da4e62b5c3a01dd41255b8c45d6".*;
+    const script2 = try Script.decode(allocator, &hex2);
+    defer script2.deinit();
+    const e2 = "199b7da15e4b0da4e62b5c3a01dd41255b8c45d6".*;
+    try std.testing.expectEqual(script2.stack.items[0].op, opcode.OP_FALSE);
+    try std.testing.expectEqual(script2.stack.items[1].pushbytes, 20);
+    try std.testing.expectEqualStrings(script2.stack.items[2].v, &e2);
 }
