@@ -242,6 +242,37 @@ pub const Script = struct {
         return script;
     }
 
+    pub fn getTotalValues(self: Script) usize {
+        var cap: usize = 0;
+        for (0..self.stack.items.len) |i| {
+            const item = self.stack.items[i];
+            switch (item) {
+                ScriptOp.v => cap += 1,
+                else => continue,
+            }
+        }
+
+        return cap;
+    }
+
+    // Memory ownership to the caller
+    pub fn getValues(self: Script, allocator: std.mem.Allocator) ![][40]u8 {
+        var values = try allocator.alloc([40]u8, self.getTotalValues());
+        var current: usize = 0;
+        for (0..self.stack.items.len) |i| {
+            const item = self.stack.items[i];
+            switch (item) {
+                ScriptOp.v => |v| {
+                    values[current] = v[0..40].*;
+                    current += 1;
+                },
+                else => continue,
+            }
+        }
+
+        return values;
+    }
+
     pub fn format(self: Script, actual_fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = actual_fmt;
         _ = options;

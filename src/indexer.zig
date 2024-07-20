@@ -260,28 +260,28 @@ pub fn main() !void {
 }
 
 // return hex value of pubkey hash
-fn outputToPublicKeyHash(output: tx.TxOutput) ![40]u8 {
-    if (std.mem.eql(u8, output.script_pubkey[0..4], &P2WPKH_SCRIPT_PREFIX)) {
-        return output.script_pubkey[4..44].*;
-    }
-
-    return error.UnsupportedScriptPubKey;
+// Memory ownership to the caller
+fn outputToPublicKeyHash(allocator: std.mem.Allocator, output: tx.TxOutput) ![][40]u8 {
+    const s = try script.Script.decode(allocator, output.script_pubkey);
+    const publickeyshash = try s.getValues(allocator);
+    return publickeyshash;
 }
 
 fn getOutputsFor(allocator: std.mem.Allocator, transaction: tx.Transaction, publickeys: std.AutoHashMap([40]u8, KeyPath(5))) !std.ArrayList(Output) {
     var outputs = std.ArrayList(Output).init(allocator);
     for (0..transaction.outputs.items.len) |i| {
         const txoutput = transaction.outputs.items[i];
-        const outputpubkeyhash = outputToPublicKeyHash(txoutput) catch continue; // TODO: is this the best we can do?
-        const pubkey = publickeys.get(outputpubkeyhash);
-        if (pubkey == null) {
-            break;
+        const outputpubkeyshash = outputToPublicKeyHash(allocator, txoutput) catch continue; // TODO: is this the best we can do?
+        for (outputpubkeyshash) |outputpubkeyhash| {
+            const pubkey = publickeys.get(outputpubkeyhash);
+            if (pubkey != null) {
+                const txid = try transaction.getTXID();
+                const n = @as(u32, @intCast(i));
+                const output = Output{ .txid = txid, .n = n, .keypath = pubkey.?, .amount = txoutput.amount, .unspent = true };
+                try outputs.append(output);
+                break;
+            }
         }
-
-        const txid = try transaction.getTXID();
-        const n = @as(u32, @intCast(i));
-        const output = Output{ .txid = txid, .n = n, .keypath = pubkey.?, .amount = txoutput.amount, .unspent = true };
-        try outputs.append(output);
     }
     return outputs;
 }
