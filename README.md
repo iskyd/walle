@@ -74,8 +74,8 @@ Join [WALL•E's Discord channel](https://discord.gg/9e9qnzQAH6) to chat with th
 - [ ] Wallet files
 - [x] ECDSA Signatures
 - [ ] Segwit
-- [ ] BTC Node integration
-- [ ] Wallet Sync
+- [x] BTC Node integration
+- [x] Wallet Sync
 - [ ] Transactions
 - [ ] CLI
 - [ ] Taproot
