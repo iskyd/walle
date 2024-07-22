@@ -15,6 +15,8 @@ pub fn main() !void {
     const Commands = enum {
         scriptdecode,
         txdecode,
+        epknew,
+        epktopublic,
     };
 
     const args = std.process.argsAlloc(allocator) catch {
@@ -46,6 +48,34 @@ pub fn main() !void {
             };
             defer transaction.deinit();
             std.debug.print("{}\n", .{transaction});
+        },
+        .seedtoec => {
+            const seed = args[2][0..args[2].len];
+            const bytes: []u8 = allocator.alloc(u8, seed.len / 2) catch {
+                std.debug.print("Error while allocating memory", .{});
+                return;
+            };
+            defer allocator.free(bytes);
+            _ = try std.fmt.hexToBytes(bytes, seed);
+            const epk = bip32.generateExtendedMasterPrivateKey(bytes);
+            const addr = epk.address(0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
+                std.debug.print("Error while generating address", .{});
+                return;
+            };
+            std.debug.print("Master private key: {s}\n", .{addr});
+        },
+        .epktopublic => {
+            const epk = bip32.ExtendedPrivateKey.fromAddress(args[2][0..111]) catch {
+                std.debug.print("Invalid extended private key address", .{});
+                return;
+            };
+
+            const public = bip32.generatePublicKey(epk.privatekey);
+            const compressed = public.toStrCompressed() catch {
+                std.debug.print("Error while compressing public key", .{});
+                return;
+            };
+            std.debug.print("Compressed public key {s}\n", .{compressed});
         },
     }
 }

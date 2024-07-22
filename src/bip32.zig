@@ -235,9 +235,9 @@ pub const WifPrivateKey = struct {
     }
 };
 
-pub fn generateExtendedMasterPrivateKey(seed: [64]u8) ExtendedPrivateKey {
+pub fn generateExtendedMasterPrivateKey(seed: []const u8) ExtendedPrivateKey {
     var I: [std.crypto.auth.hmac.sha2.HmacSha512.mac_length]u8 = undefined;
-    std.crypto.auth.hmac.sha2.HmacSha512.create(I[0..], &seed, "Bitcoin seed");
+    std.crypto.auth.hmac.sha2.HmacSha512.create(I[0..], seed, "Bitcoin seed");
 
     return ExtendedPrivateKey{
         .privatekey = I[0..32].*,
@@ -399,7 +399,7 @@ pub fn fromWif(wif: [52]u8) !WifPrivateKey {
 test "generateExtendedMasterPrivateKey" {
     const seed = [64]u8{ 0b10111000, 0b01110011, 0b00100001, 0b00101111, 0b10001000, 0b01011100, 0b11001111, 0b11111011, 0b11110100, 0b01101001, 0b00101010, 0b11111100, 0b10111000, 0b01001011, 0b11000010, 0b11100101, 0b01011000, 0b10000110, 0b11011110, 0b00101101, 0b11111010, 0b00000111, 0b11011001, 0b00001111, 0b01011100, 0b00111100, 0b00100011, 0b10011010, 0b10111100, 0b00110001, 0b11000000, 0b10100110, 0b11001110, 0b00000100, 0b01111110, 0b00110000, 0b11111101, 0b10001011, 0b11110110, 0b10100010, 0b10000001, 0b11100111, 0b00010011, 0b10001001, 0b10101010, 0b10000010, 0b11010111, 0b00111101, 0b11110111, 0b01001100, 0b01111011, 0b10111111, 0b10110011, 0b10110000, 0b01101011, 0b01000110, 0b00111001, 0b10100101, 0b11001110, 0b11100111, 0b01110101, 0b11001100, 0b11001101, 0b00111100 };
 
-    const epk: ExtendedPrivateKey = generateExtendedMasterPrivateKey(seed);
+    const epk: ExtendedPrivateKey = generateExtendedMasterPrivateKey(&seed);
     const str: [64]u8 = try epk.toStrPrivate();
     const str2: [64]u8 = try epk.toStrChainCode();
 
@@ -409,7 +409,7 @@ test "generateExtendedMasterPrivateKey" {
 //
 test "generatePublicKey" {
     const seed = [64]u8{ 0b10111000, 0b01110011, 0b00100001, 0b00101111, 0b10001000, 0b01011100, 0b11001111, 0b11111011, 0b11110100, 0b01101001, 0b00101010, 0b11111100, 0b10111000, 0b01001011, 0b11000010, 0b11100101, 0b01011000, 0b10000110, 0b11011110, 0b00101101, 0b11111010, 0b00000111, 0b11011001, 0b00001111, 0b01011100, 0b00111100, 0b00100011, 0b10011010, 0b10111100, 0b00110001, 0b11000000, 0b10100110, 0b11001110, 0b00000100, 0b01111110, 0b00110000, 0b11111101, 0b10001011, 0b11110110, 0b10100010, 0b10000001, 0b11100111, 0b00010011, 0b10001001, 0b10101010, 0b10000010, 0b11010111, 0b00111101, 0b11110111, 0b01001100, 0b01111011, 0b10111111, 0b10110011, 0b10110000, 0b01101011, 0b01000110, 0b00111001, 0b10100101, 0b11001110, 0b11100111, 0b01110101, 0b11001100, 0b11001101, 0b00111100 };
-    const epk: ExtendedPrivateKey = generateExtendedMasterPrivateKey(seed);
+    const epk: ExtendedPrivateKey = generateExtendedMasterPrivateKey(&seed);
     const pk = generatePublicKey(epk.privatekey);
 
     try std.testing.expectEqual(pk.point.x, 79027560793086286861659885563794118884743103107570705965389288630856279203871);
@@ -420,7 +420,7 @@ test "deriveChildFromExtendedPrivateKey" {
     const seedhex = "fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542".*;
     var seed: [64]u8 = undefined;
     _ = try std.fmt.hexToBytes(&seed, &seedhex);
-    const epk = generateExtendedMasterPrivateKey(seed);
+    const epk = generateExtendedMasterPrivateKey(&seed);
     const child = try deriveChildFromExtendedPrivateKey(epk, 0);
 
     const expectedprivatekeyaddr = "xprv9vHkqa6EV4sPZHYqZznhT2NPtPCjKuDKGY38FBWLvgaDx45zo9WQRUT3dKYnjwih2yJD9mkrocEZXo1ex8G81dwSM1fwqWpWkeS3v86pgKt".*;
@@ -432,7 +432,7 @@ test "deriveChildFromExtendedPrivateKeyIndex1" {
     const seedhex = "fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542".*;
     var seed: [64]u8 = undefined;
     _ = try std.fmt.hexToBytes(&seed, &seedhex);
-    const epk = generateExtendedMasterPrivateKey(seed);
+    const epk = generateExtendedMasterPrivateKey(&seed);
     const child = try deriveChildFromExtendedPrivateKey(epk, 1);
     var privatekey: [64]u8 = undefined;
     var chaincode: [64]u8 = undefined;
@@ -448,7 +448,7 @@ test "deriveChildFromExtendedPublicKey" {
     const seedhex = "81a79e3c7df2fc3376b087b5d5db952eb3c29eaf958b73aaad4ebc9eedb29e55abd8880457171d73ee4adeeaa3950812e6d1d935202f4ecc4aa62d8974665bcf".*;
     var seed: [64]u8 = undefined;
     _ = try std.fmt.hexToBytes(&seed, &seedhex);
-    const epk = generateExtendedMasterPrivateKey(seed);
+    const epk = generateExtendedMasterPrivateKey(&seed);
     const public = generatePublicKey(epk.privatekey);
     const extendedpublic = ExtendedPublicKey{ .key = public, .chaincode = epk.chaincode };
     const extendedchild = try deriveChildFromExtendedPublicKey(extendedpublic, 0);
@@ -477,7 +477,7 @@ test "deriveHardenedChild" {
     const seedhex = "fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542".*;
     var seed: [64]u8 = undefined;
     _ = try std.fmt.hexToBytes(&seed, &seedhex);
-    const epk = generateExtendedMasterPrivateKey(seed);
+    const epk = generateExtendedMasterPrivateKey(&seed);
     const child = try deriveHardenedChild(epk, 2147483648); // 0'
     const expectedprivatekeyaddr = "xprv9vHkqa6NpjQMiZJLz4sFbVqYk7EXEUrWBd8drQZCp4furXS13egriq1pr2ncv2UBok3GifpitiQfp9kxNitz2RXbwtAo8hiv4CieaLTHyRL".*;
     const expectedprivate = try ExtendedPrivateKey.fromAddress(expectedprivatekeyaddr);
@@ -487,7 +487,7 @@ test "deriveHardenedChild" {
 
 test "toWif" {
     const seed = [64]u8{ 0b10111000, 0b01110011, 0b00100001, 0b00101111, 0b10001000, 0b01011100, 0b11001111, 0b11111011, 0b11110100, 0b01101001, 0b00101010, 0b11111100, 0b10111000, 0b01001011, 0b11000010, 0b11100101, 0b01011000, 0b10000110, 0b11011110, 0b00101101, 0b11111010, 0b00000111, 0b11011001, 0b00001111, 0b01011100, 0b00111100, 0b00100011, 0b10011010, 0b10111100, 0b00110001, 0b11000000, 0b10100110, 0b11001110, 0b00000100, 0b01111110, 0b00110000, 0b11111101, 0b10001011, 0b11110110, 0b10100010, 0b10000001, 0b11100111, 0b00010011, 0b10001001, 0b10101010, 0b10000010, 0b11010111, 0b00111101, 0b11110111, 0b01001100, 0b01111011, 0b10111111, 0b10110011, 0b10110000, 0b01101011, 0b01000110, 0b00111001, 0b10100101, 0b11001110, 0b11100111, 0b01110101, 0b11001100, 0b11001101, 0b00111100 };
-    const epk: ExtendedPrivateKey = generateExtendedMasterPrivateKey(seed);
+    const epk: ExtendedPrivateKey = generateExtendedMasterPrivateKey(&seed);
     const wpk = WifPrivateKey.fromPrivateKey(epk.privatekey, Network.MAINNET, true);
     const wif = try toWif(wpk);
     try std.testing.expectEqualSlices(u8, "L3BxhCBNNLihRFeZVEa6846is2Qe5YHpvddiLb83aNyUDpGumiiq", &wif);
@@ -536,7 +536,7 @@ test "toStrUncompressed" {
 
 test "toHash" {
     const seed = [64]u8{ 0b10111000, 0b01110011, 0b00100001, 0b00101111, 0b10001000, 0b01011100, 0b11001111, 0b11111011, 0b11110100, 0b01101001, 0b00101010, 0b11111100, 0b10111000, 0b01001011, 0b11000010, 0b11100101, 0b01011000, 0b10000110, 0b11011110, 0b00101101, 0b11111010, 0b00000111, 0b11011001, 0b00001111, 0b01011100, 0b00111100, 0b00100011, 0b10011010, 0b10111100, 0b00110001, 0b11000000, 0b10100110, 0b11001110, 0b00000100, 0b01111110, 0b00110000, 0b11111101, 0b10001011, 0b11110110, 0b10100010, 0b10000001, 0b11100111, 0b00010011, 0b10001001, 0b10101010, 0b10000010, 0b11010111, 0b00111101, 0b11110111, 0b01001100, 0b01111011, 0b10111111, 0b10110011, 0b10110000, 0b01101011, 0b01000110, 0b00111001, 0b10100101, 0b11001110, 0b11100111, 0b01110101, 0b11001100, 0b11001101, 0b00111100 };
-    const epk: ExtendedPrivateKey = generateExtendedMasterPrivateKey(seed);
+    const epk: ExtendedPrivateKey = generateExtendedMasterPrivateKey(&seed);
     const pk = generatePublicKey(epk.privatekey);
     const address: [20]u8 = try pk.toHash();
     var str: [40]u8 = undefined;
@@ -672,7 +672,7 @@ test "bip44Dervivation" {
     const seedhex = "81a79e3c7df2fc3376b087b5d5db952eb3c29eaf958b73aaad4ebc9eedb29e55abd8880457171d73ee4adeeaa3950812e6d1d935202f4ecc4aa62d8974665bcf".*;
     var seed: [64]u8 = undefined;
     _ = try std.fmt.hexToBytes(&seed, &seedhex);
-    const epk = generateExtendedMasterPrivateKey(seed);
+    const epk = generateExtendedMasterPrivateKey(&seed);
     const child = try deriveHardenedChild(epk, 2147483648 + 44); // 44'
     const child2 = try deriveHardenedChild(child, 2147483648);
     const child3 = try deriveHardenedChild(child2, 2147483648);
@@ -695,4 +695,14 @@ test "toStrCompressedLessHexChars" {
     const pk = try PublicKey.fromStrCompressed(expected);
     const compressed = try pk.toStrCompressed();
     try std.testing.expectEqualStrings(&expected, &compressed);
+}
+
+test "extendedPrivateKeyAddress" {
+    const seed = "54f2ee3035cc4310d5ef260e821fb608a2c753369282a6932a13e583291a1662".*;
+    var bytes: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytes, &seed);
+    const epk = generateExtendedMasterPrivateKey(&bytes);
+    const expected = "xprv9s21ZrQH143K3HShLjMf6GB3sQPW6rxZ3sS8tkgsvE38tViJ1rC53ESrkPM5mZYoJxjsz9nnkrAJSLenjCW2QKBPccQ3mpukTDmxQ5d1Ahx".*;
+    const addr = try epk.address(0, [4]u8{ 0, 0, 0, 0 }, 0);
+    try std.testing.expectEqualStrings(&expected, &addr);
 }
