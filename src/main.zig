@@ -4,62 +4,48 @@ const bip39 = @import("bip39.zig");
 const bip32 = @import("bip32.zig");
 const utils = @import("utils.zig");
 const clap = @import("clap");
+const script = @import("script.zig");
+const tx = @import("tx.zig");
 
 pub fn main() !void {
     std.debug.print("WALL-E. Bitcoin Wallet written in Zig\n", .{});
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
 
-    const AvailableCommands = enum {
-        PvNew,
-    };
-    const params = comptime clap.parseParamsComptime(
-        \\-h, --help             Display this help and exit.
-        \\<CMD>...
-        \\
-    );
-
-    const parsers = comptime .{
-        .CMD = clap.parsers.enumeration(AvailableCommands),
+    const Commands = enum {
+        scriptdecode,
+        txdecode,
     };
 
-    var diag = clap.Diagnostic{};
-    var res = clap.parse(clap.Help, &params, parsers, .{
-        .diagnostic = &diag,
-    }) catch |err| {
-        // Report useful error and exit
-        diag.report(io.getStdErr().writer(), err) catch {};
-        return err;
+    const args = std.process.argsAlloc(allocator) catch {
+        std.debug.print("Error while allocating memory for args\n", .{});
+        return;
     };
-    defer res.deinit();
+    defer std.process.argsFree(allocator, args);
 
-    if (res.args.help != 0) {
-        return clap.usage(std.io.getStdErr().writer(), clap.Help, &params);
-    }
-
-    if (res.positionals.len != 1) {
-        std.debug.print("Expected 1 positional argument, got {}\n", .{res.positionals.len});
+    const cmd = std.meta.stringToEnum(Commands, args[1]);
+    if (cmd == null) {
+        std.debug.print("Invalid argument\n", .{});
         return;
     }
-    const command: AvailableCommands = res.positionals[0];
 
-    switch (command) {
-        .PvNew => {
-            var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-            const allocator = gpa.allocator();
-            const ent = 256;
-            var entropy: []u8 = try allocator.alloc(u8, ent / 8);
-            defer allocator.free(entropy);
-            const wordlist = try bip39.WordList.init(allocator, "wordlist/english.txt");
-            defer wordlist.deinit();
-            var mnemonic: [24][]u8 = undefined;
-            try bip39.generateMnemonic(allocator, entropy, wordlist, &mnemonic);
-            defer for (mnemonic) |word| allocator.free(word);
-            var seed: [64]u8 = undefined;
-            try bip39.mnemonicToSeed(allocator, &mnemonic, "", &seed);
-            var seed_str: [128]u8 = undefined;
-            _ = try std.fmt.bufPrint(&seed_str, "{x}", .{std.fmt.fmtSliceHexLower(&seed)});
+    switch (cmd.?) {
+        .scriptdecode => {
+            const s = script.Script.decode(allocator, args[2]) catch {
+                std.debug.print("Invalid script provided\n", .{});
+                return;
+            };
+            defer s.deinit();
 
-            std.debug.print("Seed: {s}\n", .{seed_str});
+            std.debug.print("{}\n", .{s});
         },
-        // else => std.debug.print("Invalid command provided\n"),
+        .txdecode => {
+            const transaction = tx.decodeRawTx(allocator, args[2]) catch {
+                std.debug.print("Invalid rawtx provided\n", .{});
+                return;
+            };
+            defer transaction.deinit();
+            std.debug.print("{}\n", .{transaction});
+        },
     }
 }

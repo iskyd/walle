@@ -99,6 +99,11 @@ pub const TxWitness = struct {
     }
 };
 
+pub const TxDestination = struct {
+    addr: []u8,
+    amount: u64,
+};
+
 // Transaction
 pub const Transaction = struct {
     allocator: std.mem.Allocator,
@@ -177,16 +182,64 @@ pub const Transaction = struct {
         _ = try std.fmt.bufPrint(&txidhex, "{x}", .{std.fmt.fmtSliceHexLower(&txid)});
         return txidhex;
     }
+
+    pub fn format(self: Transaction, actual_fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = actual_fmt;
+        _ = options;
+
+        try writer.print("version: {d}\n", .{self.version});
+        try writer.print("marker: {?d}\n", .{self.marker});
+        try writer.print("flag: {?d}\n", .{self.flag});
+        try writer.print("locktime: {?d}\n", .{self.locktime});
+        try writer.print("Inputs: \n", .{});
+        for (0..self.inputs.items.len) |i| {
+            const input = self.inputs.items[i];
+            try writer.print("    tx: {s}\n", .{input.prevout.?.txid});
+            try writer.print("    n: {d}\n\n", .{input.prevout.?.n});
+        }
+        try writer.print("Outputs: \n", .{});
+        for (0..self.outputs.items.len) |i| {
+            const output = self.outputs.items[i];
+            try writer.print("    script pubkey: {s}\n", .{output.script_pubkey});
+            try writer.print("    amount: {d}\n\n", .{output.amount});
+        }
+    }
 };
 
-pub fn createTx(inputs: []Output, amount: u32) TxError!void {
-    var total: u64 = 0;
+// Memory ownership to the caller
+pub fn createTx(allocator: std.mem.Allocator, inputs: []Output, destinations: []TxDestination) TxError!Transaction {
+    var totalAmountInputs: u64 = 0;
     for (inputs) |input| {
-        total += input.amount;
+        totalAmountInputs += input.amount;
     }
-    if (total <= amount) {
+
+    var totalAmountOutputs: u64 = 0;
+    for (destinations) |d| {
+        totalAmountOutputs += d.amount;
+    }
+
+    if (totalAmountInputs < totalAmountOutputs) {
         return TxError.AmountTooLowError;
     }
+
+    const miningFees = totalAmountOutputs - totalAmountInputs;
+    _ = miningFees;
+    const locktime = 0;
+    const marker = 0;
+    const flag = 0;
+    const version = 0;
+
+    const tx = Transaction.init(allocator, version, locktime, marker, flag);
+    for (inputs) |input| {
+        tx.addInput(input);
+    }
+    for (destinations) |d| {
+        const scriptpubkey = d.addr; // Derive script pubkey from address
+        const output = TxOutput.init(allocator, d.amount, scriptpubkey);
+        tx.addOutput(output);
+    }
+
+    return tx;
 }
 
 pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {

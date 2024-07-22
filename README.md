@@ -70,12 +70,12 @@ Join [WALL•E's Discord channel](https://discord.gg/9e9qnzQAH6) to chat with th
 - [x] Serialized Extendend Private/Public Key (https://learnmeabitcoin.com/technical/keys/hd-wallets/extended-keys/)
 - [x] BIP38 (Encrypting Bitcoin Private Key)
 - [x] BIP44
-- [x] P2PK and P2SH Address Generation
 - [ ] Wallet files
 - [x] ECDSA Signatures
 - [ ] Segwit
 - [x] BTC Node integration
 - [x] Wallet Sync
+- [ ] Script Hash (P2SH, P2WPKH)
 - [ ] Transactions
 - [ ] CLI
 - [ ] Taproot
