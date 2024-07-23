@@ -207,7 +207,7 @@ pub const Transaction = struct {
 };
 
 // Memory ownership to the caller
-pub fn createTx(allocator: std.mem.Allocator, inputs: []Output, destinations: []TxDestination) TxError!Transaction {
+pub fn createTx(allocator: std.mem.Allocator, inputs: []Output, destinations: []TxDestination) !Transaction {
     var totalAmountInputs: u64 = 0;
     for (inputs) |input| {
         totalAmountInputs += input.amount;
@@ -229,14 +229,15 @@ pub fn createTx(allocator: std.mem.Allocator, inputs: []Output, destinations: []
     const flag = 0;
     const version = 0;
 
-    const tx = Transaction.init(allocator, version, locktime, marker, flag);
-    for (inputs) |input| {
-        tx.addInput(input);
+    var tx = Transaction.init(allocator, version, locktime, marker, flag);
+    for (inputs) |_| {
+        // CREATE TX INPUT AND ADD
+        //tx.addInput(input);
     }
     for (destinations) |d| {
         const scriptpubkey = d.addr; // Derive script pubkey from address
-        const output = TxOutput.init(allocator, d.amount, scriptpubkey);
-        tx.addOutput(output);
+        const output = try TxOutput.init(allocator, d.amount, scriptpubkey);
+        try tx.addOutput(output);
     }
 
     return tx;
@@ -518,11 +519,16 @@ test "getOutputValue" {
 }
 
 test "createTx" {
+    const allocator = std.testing.allocator;
     const o1 = Output{ .txid = "95cff5f34612b16e73ee2db28ddb08884136d005fb5d8ba8405bec30368f49e2".*, .n = 0, .amount = 10000 };
     const o2 = Output{ .txid = "cabfe93aaa1d0ddb1c9faf1da80d902a693a9c84b9673f5524abf1fa3ce46349".*, .n = 1, .amount = 20000 };
+    //const addr1 = "".*;
+    const d1 = TxDestination{ .addr = "", .amount = 29000 };
+    const d2 = TxDestination{ .addr = "", .amount = 3000 };
 
     var outputs: [2]Output = [2]Output{ o1, o2 };
-    try std.testing.expectError(TxError.AmountTooLowError, createTx(&outputs, 31000));
+    var destinations: [2]TxDestination = [2]TxDestination{ d1, d2 };
+    try std.testing.expectError(TxError.AmountTooLowError, createTx(allocator, &outputs, &destinations));
 }
 
 test "decodeRawTxCoinbase" {

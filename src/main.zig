@@ -49,7 +49,7 @@ pub fn main() !void {
             defer transaction.deinit();
             std.debug.print("{}\n", .{transaction});
         },
-        .seedtoec => {
+        .epknew => {
             const seed = args[2][0..args[2].len];
             const bytes: []u8 = allocator.alloc(u8, seed.len / 2) catch {
                 std.debug.print("Error while allocating memory", .{});
