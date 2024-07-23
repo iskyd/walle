@@ -17,6 +17,7 @@ pub fn main() !void {
         txdecode,
         epknew,
         epktopublic,
+        hdderivation,
     };
 
     const args = std.process.argsAlloc(allocator) catch {
@@ -65,7 +66,7 @@ pub fn main() !void {
             std.debug.print("Master private key: {s}\n", .{addr});
         },
         .epktopublic => {
-            const epk = bip32.ExtendedPrivateKey.fromAddress(args[2][0..111]) catch {
+            const epk = bip32.ExtendedPrivateKey.fromAddress(args[2][0..111].*) catch {
                 std.debug.print("Invalid extended private key address", .{});
                 return;
             };
@@ -76,6 +77,63 @@ pub fn main() !void {
                 return;
             };
             std.debug.print("Compressed public key {s}\n", .{compressed});
+        },
+        .hdderivation => {
+            const epk = bip32.ExtendedPrivateKey.fromAddress(args[2][0..111].*) catch {
+                std.debug.print("Invalid extended private key address", .{});
+                return;
+            };
+            const path = args[3];
+            var it = std.mem.split(u8, path, "/");
+
+            var current = epk;
+            var depth: u8 = 0;
+            var lastindex: u32 = 0;
+            while (it.next()) |v| {
+                if (v[v.len - 1] == '\'') {
+                    // hardened derivation
+                    const index = std.fmt.parseInt(u32, v[0 .. v.len - 1], 10) catch {
+                        std.debug.print("Invalid path provided", .{});
+                        return;
+                    };
+                    current = bip32.deriveHardenedChild(current, index + 2147483648) catch {
+                        std.debug.print("Error while hardening derive child", .{});
+                        return;
+                    };
+                    lastindex = index + 2147483648;
+                } else {
+                    const index = std.fmt.parseInt(u32, v, 10) catch {
+                        std.debug.print("Invalid path provided", .{});
+                        return;
+                    };
+                    current = bip32.deriveChildFromExtendedPrivateKey(current, index) catch {
+                        std.debug.print("Error while derive child", .{});
+                        return;
+                    };
+                    lastindex = index;
+                }
+
+                depth += 1;
+            }
+
+            const strprivate = current.toStrPrivate() catch {
+                return;
+            };
+            const public = bip32.generatePublicKey(epk.privatekey);
+            const compressedpublic = public.toStrCompressed() catch {
+                std.debug.print("Error while generating parent public key\n", .{});
+                return;
+            };
+
+            var bytes: [33]u8 = undefined;
+            _ = try std.fmt.hexToBytes(&bytes, &compressedpublic);
+            const fingerprint = utils.hash160(&bytes)[0..4].*;
+            const addr = current.address(depth, fingerprint, lastindex) catch {
+                std.debug.print("Error while converting to address\n", .{});
+                return;
+            };
+            std.debug.print("private key: {s}\n", .{strprivate});
+            std.debug.print("addr: {s}\n", .{addr});
         },
     }
 }
