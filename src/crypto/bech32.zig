@@ -2,7 +2,6 @@
 
 const std = @import("std");
 const assert = std.debug.assert;
-const testing = std.testing;
 
 /// Supported encodings
 pub const Encoding = enum(u30) {
@@ -271,7 +270,6 @@ pub fn Bech32Decoder(comptime set: [32]u8) type {
             const version = source[sep + 1];
             const data = source[sep + 2 .. source.len - 6];
             const checksum = source[source.len - 6 ..];
-            std.debug.print("hrp: {s}, data = {s}, version = {d}, checksum = {s}\n", .{ hrp, data, version, checksum });
 
             var pmod_buf: [max_hrp_size]u8 = undefined;
             var res = Result{ .hrp = hrp, .data = &[0]u8{}, .encoding = undefined, .version = 0 };
@@ -335,12 +333,10 @@ pub fn Bech32Decoder(comptime set: [32]u8) type {
 }
 
 test "bech32Encode" {
-    const bip32 = @import("bip32.zig");
-
     var encoded_buf: [max_string_size]u8 = undefined;
-    const str = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798".*;
-    const public = try bip32.PublicKey.fromStrCompressed(str);
-    const h = try public.toHash();
+    const hashhex = "751e76e8199196d454941c45d1b3a323f1433bd6".*;
+    var h: [20]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&h, &hashhex);
 
     var data: [21]u8 = undefined;
     data[0] = 0;

@@ -20,7 +20,7 @@ pub fn build(b: *std.Build) void {
         .name = "walle",
         // In this case the main source file is merely a path, however, in more
         // complicated build scripts, this could be a generated file.
-        .root_source_file = .{ .path = "src/indexer.zig" },
+        .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
     });
@@ -105,13 +105,13 @@ pub fn build(b: *std.Build) void {
 
     // add tests for crypto module
     if (b.args == null) {
-        const unit_tests = b.addTest(.{
+        const crypto_unit_tests = b.addTest(.{
             .root_source_file = b.path("unit_test_crypto.zig"),
             .target = target,
             .optimize = optimize,
         });
-        const run_unit_tests = b.addRunArtifact(unit_tests);
-        run_unit_tests.has_side_effects = false;
-        test_step.dependOn(&run_unit_tests.step);
+        const run_crypto_unit_tests = b.addRunArtifact(crypto_unit_tests);
+        run_crypto_unit_tests.has_side_effects = false;
+        test_step.dependOn(&run_crypto_unit_tests.step);
     }
 }
