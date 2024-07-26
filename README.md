@@ -73,9 +73,10 @@ Join [WALL•E's Discord channel](https://discord.gg/9e9qnzQAH6) to chat with th
 - [ ] Wallet files
 - [x] ECDSA Signatures
 - [ ] Segwit
+- [x] Bech32
 - [x] BTC Node integration
 - [x] Wallet Sync
-- [ ] Script Hash (P2SH, P2WPKH)
+- [ ] Script Hash (P2SH, P2WSH)
 - [ ] Transactions
 - [ ] CLI
 - [ ] Taproot
