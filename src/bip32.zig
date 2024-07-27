@@ -8,6 +8,20 @@ const utils = @import("utils.zig");
 const Network = @import("const.zig").Network;
 const script = @import("script.zig");
 
+pub const SerializedPrivateKeyVersion = enum(u32) {
+    MAINNET = 0x0488aDe4,
+    TESTNET = 0x04358394,
+    SEGWIT_MAINNET = 0x04b2430c,
+    SEGWIT_TESTNET = 0x045f18bc,
+};
+
+pub const SerializedPublicKeyVersion = enum(u32) {
+    MAINNET = 0x0488b21e,
+    TESTNET = 0x043587cf,
+    SEGWIT_MAINNET = 0x04b24746,
+    SEGWIT_TESTNET = 0x045f1cf6,
+};
+
 const PRIVATE_KEY_ADDRESS_VERSION = [4]u8{ 0b00000100, 0b10001000, 0b10101101, 0b11100100 };
 const PUBLIC_KEY_ADDRESS_VERSION = [4]u8{ 0b00000100, 0b10001000, 0b10110010, 0b00011110 };
 
@@ -28,10 +42,11 @@ pub const ExtendedPrivateKey = struct {
     }
 
     // Fingerprint bytes
-    pub fn serialize(self: ExtendedPrivateKey, depth: u8, fingerprint: [4]u8, index: u32) [82]u8 {
+    pub fn serialize(self: ExtendedPrivateKey, version: SerializedPrivateKeyVersion, depth: u8, fingerprint: [4]u8, index: u32) [82]u8 {
         var indexBytes: [4]u8 = @bitCast(@byteSwap(index));
         var res: [82]u8 = undefined;
-        @memcpy(res[0..4], &PRIVATE_KEY_ADDRESS_VERSION);
+        var versionBytes: [4]u8 = @bitCast(@byteSwap(@intFromEnum(version)));
+        @memcpy(res[0..4], &versionBytes);
         res[4] = depth;
         @memcpy(res[5..9], &fingerprint);
         @memcpy(res[9..13], &indexBytes);
@@ -44,8 +59,8 @@ pub const ExtendedPrivateKey = struct {
         return res;
     }
 
-    pub fn address(self: ExtendedPrivateKey, depth: u8, fingerprint: [4]u8, index: u32) ![111]u8 {
-        const serialized = self.serialize(depth, fingerprint, index);
+    pub fn address(self: ExtendedPrivateKey, version: SerializedPrivateKeyVersion, depth: u8, fingerprint: [4]u8, index: u32) ![111]u8 {
+        const serialized = self.serialize(version, depth, fingerprint, index);
         var buffer: [111]u8 = undefined;
         try utils.toBase58(&buffer, &serialized);
         return buffer;
@@ -171,10 +186,11 @@ pub const ExtendedPublicKey = struct {
     key: PublicKey,
     chaincode: [32]u8,
 
-    pub fn serialize(self: ExtendedPublicKey, depth: u8, fingerprint: [4]u8, index: u32) ![82]u8 {
+    pub fn serialize(self: ExtendedPublicKey, version: SerializedPublicKeyVersion, depth: u8, fingerprint: [4]u8, index: u32) ![82]u8 {
         var indexBytes: [4]u8 = @bitCast(@byteSwap(index));
         var res: [82]u8 = undefined;
-        @memcpy(res[0..4], &PUBLIC_KEY_ADDRESS_VERSION);
+        var versionBytes: [4]u8 = @bitCast(@byteSwap(@intFromEnum(version)));
+        @memcpy(res[0..4], &versionBytes);
         res[4] = depth;
         @memcpy(res[5..9], &fingerprint);
         @memcpy(res[9..13], &indexBytes);
@@ -187,8 +203,8 @@ pub const ExtendedPublicKey = struct {
         return res;
     }
 
-    pub fn address(self: ExtendedPublicKey, depth: u8, fingerprint: [4]u8, index: u32) ![111]u8 {
-        const serialized = try self.serialize(depth, fingerprint, index);
+    pub fn address(self: ExtendedPublicKey, version: SerializedPublicKeyVersion, depth: u8, fingerprint: [4]u8, index: u32) ![111]u8 {
+        const serialized = try self.serialize(version, depth, fingerprint, index);
         var buffer: [111]u8 = undefined;
         try utils.toBase58(&buffer, &serialized);
         return buffer;
@@ -576,12 +592,17 @@ test "serializePrivateKey" {
     var fingerprintstr = "59b172d8".*;
     var fingerprint: [4]u8 = undefined;
     _ = try std.fmt.hexToBytes(&fingerprint, &fingerprintstr);
-    const serialized = epk.serialize(5, fingerprint, 14);
+    const serialized = epk.serialize(.MAINNET, 5, fingerprint, 14);
+    const serialized_testnet = epk.serialize(.TESTNET, 5, fingerprint, 14);
     var str: [164]u8 = undefined;
     _ = try std.fmt.bufPrint(&str, "{x}", .{std.fmt.fmtSliceHexLower(&serialized)});
+    var str_testnet: [164]u8 = undefined;
+    _ = try std.fmt.bufPrint(&str_testnet, "{x}", .{std.fmt.fmtSliceHexLower(&serialized_testnet)});
 
-    var expected = "0488ade40559b172d80000000e7d44cde0cdd0423cfa61fc4ac0e371fa6eba38e6fe5081eca5fcf4ae934a26d3001205ace2508d2b0376a6826c6b2a0f4573fb926a432d4ae3f9e6976fc566afd53ed3f8fe".*;
-    try std.testing.expectEqualStrings(&expected, &str);
+    const expected = "0488ade40559b172d80000000e7d44cde0cdd0423cfa61fc4ac0e371fa6eba38e6fe5081eca5fcf4ae934a26d3001205ace2508d2b0376a6826c6b2a0f4573fb926a432d4ae3f9e6976fc566afd53ed3f8fe";
+    const expected_testnet = "043583940559b172d80000000e7d44cde0cdd0423cfa61fc4ac0e371fa6eba38e6fe5081eca5fcf4ae934a26d3001205ace2508d2b0376a6826c6b2a0f4573fb926a432d4ae3f9e6976fc566afd5550312a1";
+    try std.testing.expectEqualStrings(expected, &str);
+    try std.testing.expectEqualStrings(expected_testnet, &str_testnet);
 }
 
 test "privateKeyAddress" {
@@ -596,10 +617,14 @@ test "privateKeyAddress" {
     var fingerprintstr = "59b172d8".*;
     var fingerprint: [4]u8 = undefined;
     _ = try std.fmt.hexToBytes(&fingerprint, &fingerprintstr);
-    const base58 = try epk.address(5, fingerprint, 14);
+    const base58 = try epk.address(.MAINNET, 5, fingerprint, 14);
+    const base58_bip84 = try epk.address(.SEGWIT_MAINNET, 5, fingerprint, 14);
 
-    var expected = "xprvA35vcVznDBo4f5dPwVtqdFoqxXrADVyad5xb6Hk37pcExHa8z8xK9761jiWDkyAudCPVCbdqko4k2EUjSVcVz1xxkggfkULjGzWdnzG7zKf".*;
-    try std.testing.expectEqualStrings(&expected, &base58);
+    const expected = "xprvA35vcVznDBo4f5dPwVtqdFoqxXrADVyad5xb6Hk37pcExHa8z8xK9761jiWDkyAudCPVCbdqko4k2EUjSVcVz1xxkggfkULjGzWdnzG7zKf";
+    const expected_bip84 = "zprvAgkTDqLcWYt2Mg1dcDU63RzrJU946jxaTK12f5XosqN14VCbVTHSPEQHn8RPknUkSUd6hYpxg7mqnohrstSXaVLAVN5WvHyhpSdvaAWpc3c";
+
+    try std.testing.expectEqualStrings(expected, &base58);
+    try std.testing.expectEqualStrings(expected_bip84, &base58_bip84);
 }
 
 test "extendedPrivateKeyFromAddress" {
@@ -631,12 +656,19 @@ test "serializePublicKey" {
     var fingerprintstr = "024bd5de".*;
     var fingerprint: [4]u8 = undefined;
     _ = try std.fmt.hexToBytes(&fingerprint, &fingerprintstr);
-    const serialized = try epk.serialize(3, fingerprint, 18);
+    const serialized = try epk.serialize(.MAINNET, 3, fingerprint, 18);
     var str: [164]u8 = undefined;
     _ = try std.fmt.bufPrint(&str, "{x}", .{std.fmt.fmtSliceHexLower(&serialized)});
 
-    var expected = "0488b21e03024bd5de00000012d1ca94c25198ce7cd330f8b8c2c1cc2a56a042837711a4143bef371934aa3bdf0262e67fa65a016bd71defb6a161b3a0068a1e4582948654b30a77e1624ced3302c431f6fc".*;
-    try std.testing.expectEqualStrings(&expected, &str);
+    const serialized_testnet = try epk.serialize(.TESTNET, 3, fingerprint, 18);
+    var str_testnet: [164]u8 = undefined;
+    _ = try std.fmt.bufPrint(&str_testnet, "{x}", .{std.fmt.fmtSliceHexLower(&serialized_testnet)});
+
+    const expected = "0488b21e03024bd5de00000012d1ca94c25198ce7cd330f8b8c2c1cc2a56a042837711a4143bef371934aa3bdf0262e67fa65a016bd71defb6a161b3a0068a1e4582948654b30a77e1624ced3302c431f6fc";
+    const expected_testnet = "043587cf03024bd5de00000012d1ca94c25198ce7cd330f8b8c2c1cc2a56a042837711a4143bef371934aa3bdf0262e67fa65a016bd71defb6a161b3a0068a1e4582948654b30a77e1624ced330227f05bf3";
+
+    try std.testing.expectEqualStrings(expected, &str);
+    try std.testing.expectEqualStrings(expected_testnet, &str_testnet);
 }
 
 test "extendedPublicKeyAddress" {
@@ -654,10 +686,13 @@ test "extendedPublicKeyAddress" {
     var fingerprintstr = "024bd5de".*;
     var fingerprint: [4]u8 = undefined;
     _ = try std.fmt.hexToBytes(&fingerprint, &fingerprintstr);
-    const base58 = try epk.address(3, fingerprint, 18);
+    const base58 = try epk.address(.MAINNET, 3, fingerprint, 18);
+    const base58_bip84 = try epk.address(.SEGWIT_MAINNET, 3, fingerprint, 18);
 
-    const expected = "xpub6BfkKmAArYaLxNUQE8d87QuhPwipqTykFJLMND7NgihE9GSo317PjazsLo2Ex2JmDmwXGyiB5K5nyx6n3rpW5oJc8TXXvEex6ipo9rrCUWw".*;
-    try std.testing.expectEqualStrings(&expected, &base58);
+    const expected = "xpub6BfkKmAArYaLxNUQE8d87QuhPwipqTykFJLMND7NgihE9GSo317PjazsLo2Ex2JmDmwXGyiB5K5nyx6n3rpW5oJc8TXXvEex6ipo9rrCUWw";
+    const expected_testnet = "zpub6qLGw6W19ufJexrdtrCNXb6hjt1iihxk5XNnvzu9SjSzFU5FYKSWyiK9PCwQwqcc34B8mvuHzdntkXKuVFeXgGfos8vP64HveAx5w2KMgRn";
+    try std.testing.expectEqualStrings(expected, &base58);
+    try std.testing.expectEqualStrings(expected_testnet, &base58_bip84);
 }
 
 test "extendedPublicKeyFromAddress" {
@@ -703,6 +738,6 @@ test "extendedPrivateKeyAddress" {
     _ = try std.fmt.hexToBytes(&bytes, &seed);
     const epk = generateExtendedMasterPrivateKey(&bytes);
     const expected = "xprv9s21ZrQH143K3HShLjMf6GB3sQPW6rxZ3sS8tkgsvE38tViJ1rC53ESrkPM5mZYoJxjsz9nnkrAJSLenjCW2QKBPccQ3mpukTDmxQ5d1Ahx".*;
-    const addr = try epk.address(0, [4]u8{ 0, 0, 0, 0 }, 0);
+    const addr = try epk.address(.MAINNET, 0, [4]u8{ 0, 0, 0, 0 }, 0);
     try std.testing.expectEqualStrings(&expected, &addr);
 }
