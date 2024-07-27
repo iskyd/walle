@@ -75,7 +75,7 @@ pub fn deriveP2SHAddress(allocator: std.mem.Allocator, s: script.Script, n: Netw
     };
 }
 
-pub fn deriveP2WPKH(allocator: std.mem.Allocator, s: script.Script, n: Network) !Address {
+pub fn deriveP2WPKHAddress(allocator: std.mem.Allocator, s: script.Script, n: Network) !Address {
     const publickeyhash = s.stack.items[2].v;
     assert(publickeyhash.len == 40);
 
@@ -155,14 +155,14 @@ test "deriveP2WPKH" {
     const hash: [40]u8 = "64cb674c9fdcb5c033ccb5d860978974ff02f400".*;
     const s = try script.p2wpkh(allocator, &hash);
     defer s.deinit();
-    const addr = try deriveP2WPKH(
+    const addr = try deriveP2WPKHAddress(
         allocator,
         s,
         .MAINNET,
     );
     defer addr.deinit();
 
-    const addr_testnet = try deriveP2WPKH(
+    const addr_testnet = try deriveP2WPKHAddress(
         allocator,
         s,
         .TESTNET,

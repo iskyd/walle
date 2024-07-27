@@ -6,6 +6,7 @@ const utils = @import("utils.zig");
 const clap = @import("clap");
 const script = @import("script.zig");
 const tx = @import("tx.zig");
+const deriveP2WPKHAddress = @import("address.zig").deriveP2WPKHAddress;
 
 pub fn main() !void {
     std.debug.print("WALL-E. Bitcoin Wallet written in Zig\n", .{});
@@ -18,6 +19,7 @@ pub fn main() !void {
         epknew,
         epktopublic,
         hdderivation,
+        addr,
     };
 
     const args = std.process.argsAlloc(allocator) catch {
@@ -51,19 +53,45 @@ pub fn main() !void {
             std.debug.print("{}\n", .{transaction});
         },
         .epknew => {
-            const seed = args[2][0..args[2].len];
-            const bytes: []u8 = allocator.alloc(u8, seed.len / 2) catch {
-                std.debug.print("Error while allocating memory", .{});
-                return;
-            };
-            defer allocator.free(bytes);
-            _ = try std.fmt.hexToBytes(bytes, seed);
-            const epk = bip32.generateExtendedMasterPrivateKey(bytes);
-            const addr = epk.address(0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
-                std.debug.print("Error while generating address", .{});
-                return;
-            };
-            std.debug.print("Master private key: {s}\n", .{addr});
+            if (args.len > 2) {
+                const seed = args[2][0..args[2].len];
+                const bytes: []u8 = allocator.alloc(u8, seed.len / 2) catch {
+                    std.debug.print("Error while allocating memory", .{});
+                    return;
+                };
+                defer allocator.free(bytes);
+                _ = try std.fmt.hexToBytes(bytes, seed);
+                const epk = bip32.generateExtendedMasterPrivateKey(bytes);
+                const addr = epk.address(0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
+                    std.debug.print("Error while generating address", .{});
+                    return;
+                };
+                std.debug.print("Master private key: {s}\n", .{addr});
+            } else {
+                const ent: u16 = 256;
+                const entropy = try allocator.alloc(u8, ent / 8);
+                defer allocator.free(entropy);
+                bip39.generateEntropy(entropy, ent);
+                var mnemonic: [24][]u8 = undefined;
+                const wordlist = try bip39.WordList.init(allocator, "wordlist/english.txt");
+                defer wordlist.deinit();
+                try bip39.generateMnemonic(allocator, entropy, wordlist, &mnemonic);
+                std.debug.print("Mnemonic: ", .{});
+                for (mnemonic) |w| {
+                    std.debug.print("{s} ", .{w});
+                }
+                std.debug.print("\n", .{});
+
+                var seed: [64]u8 = undefined;
+                try bip39.mnemonicToSeed(allocator, &mnemonic, "", &seed);
+
+                const epk = bip32.generateExtendedMasterPrivateKey(&seed);
+                const addr = epk.address(0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
+                    std.debug.print("Error while generating address", .{});
+                    return;
+                };
+                std.debug.print("Master private key: {s}\n", .{addr});
+            }
         },
         .epktopublic => {
             const epk = bip32.ExtendedPrivateKey.fromAddress(args[2][0..111].*) catch {
@@ -128,12 +156,37 @@ pub fn main() !void {
             var bytes: [33]u8 = undefined;
             _ = try std.fmt.hexToBytes(&bytes, &compressedpublic);
             const fingerprint = utils.hash160(&bytes)[0..4].*;
-            const addr = current.address(depth, fingerprint, lastindex) catch {
+            const addr = current.address(.SEGWIT_MAINNET, depth, fingerprint, lastindex) catch {
                 std.debug.print("Error while converting to address\n", .{});
                 return;
             };
             std.debug.print("private key: {s}\n", .{strprivate});
             std.debug.print("addr: {s}\n", .{addr});
+        },
+        .addr => {
+            const compressed = args[2][0..66].*;
+            const public = bip32.PublicKey.fromStrCompressed(compressed) catch {
+                std.debug.print("Invalid compressed public key\n", .{});
+                return;
+            };
+            const hash = public.toHashHex() catch {
+                std.debug.print("Error while hashing public key\n", .{});
+                return;
+            };
+
+            const s = script.p2wpkh(allocator, &hash) catch {
+                std.debug.print("Error while generating script\n", .{});
+                return;
+            };
+            defer s.deinit();
+
+            const addr = deriveP2WPKHAddress(allocator, s, .MAINNET) catch {
+                std.debug.print("Error while generating address\n", .{});
+                return;
+            };
+            defer addr.deinit();
+
+            std.debug.print("Address {s}\n", .{addr.val});
         },
     }
 }

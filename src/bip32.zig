@@ -22,9 +22,6 @@ pub const SerializedPublicKeyVersion = enum(u32) {
     SEGWIT_TESTNET = 0x045f1cf6,
 };
 
-const PRIVATE_KEY_ADDRESS_VERSION = [4]u8{ 0b00000100, 0b10001000, 0b10101101, 0b11100100 };
-const PUBLIC_KEY_ADDRESS_VERSION = [4]u8{ 0b00000100, 0b10001000, 0b10110010, 0b00011110 };
-
 pub const ExtendedPrivateKey = struct {
     privatekey: [32]u8, // Private Key
     chaincode: [32]u8, // Chain Code
