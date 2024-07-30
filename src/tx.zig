@@ -243,7 +243,7 @@ pub fn createTx(allocator: std.mem.Allocator, inputs: []Output, destinations: []
     return tx;
 }
 
-pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
+pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []const u8) !Transaction {
     var bytes: []u8 = try allocator.alloc(u8, raw.len / 2);
     _ = try std.fmt.hexToBytes(bytes, raw);
     defer allocator.free(bytes);
@@ -294,7 +294,8 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
     }
 
     // Compat size output
-    const outputsize = utils.decodeCompactSize(bytes[currentByte .. currentByte + 9]);
+    const endoutputsize = if (currentByte + 9 >= bytes.len) bytes.len - 1 else currentByte + 9;
+    const outputsize = utils.decodeCompactSize(bytes[currentByte..endoutputsize]);
     currentByte += outputsize.totalBytes;
     for (0..outputsize.n) |_| {
         const a = bytes[currentByte .. currentByte + 8][0..8].*;
@@ -314,15 +315,21 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []u8) !Transaction {
             // Compat size, same as ic and oc
             var witness = TxWitness.init(allocator);
             // compact size stack items
-            const stackitemssize = utils.decodeCompactSize(bytes[currentByte .. currentByte + 9]);
+            const end = if (currentByte + 9 >= bytes.len) bytes.len - 1 else currentByte + 9;
+            const stackitemssize = utils.decodeCompactSize(bytes[currentByte..end]);
             currentByte += stackitemssize.totalBytes;
             for (0..stackitemssize.n) |_| {
                 // compact size item
-                const s = utils.decodeCompactSize(bytes[currentByte .. currentByte + 9]);
+                const ends = if (currentByte + 9 >= bytes.len) bytes.len - 1 else currentByte + 9;
+                const s = utils.decodeCompactSize(bytes[currentByte..ends]);
                 currentByte += s.totalBytes;
-                const item = bytes[currentByte .. currentByte + s.n];
-                currentByte += s.n;
-                try witness.addItem(item);
+                if (s.n == 0) {
+                    try witness.addItem("");
+                } else {
+                    const item = bytes[currentByte .. currentByte + s.n];
+                    currentByte += s.n;
+                    try witness.addItem(item);
+                }
             }
             try transaction.addWitness(witness);
         }
@@ -603,6 +610,50 @@ test "decodeRawTxSimple" {
     const expectedWitness3Item2 = "029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4".*;
     try std.testing.expectEqualStrings(&expectedWitness3Item1, tx.witness.items[2].stackitems.items[0].item);
     try std.testing.expectEqualStrings(&expectedWitness3Item2, tx.witness.items[2].stackitems.items[1].item);
+}
+
+test "decodeRawTxEmptyWitnessItem" {
+    const allocator = std.testing.allocator;
+    const raw = "010000000001037790b18693b2c4b6344577dc8d973e51388670a2b60ef1156b69f141f66b837e0400000000fdffffff4429cda513e5258a16f5be9fe6bf9d8f18aa7d8ca6e5147b10961955db88ac740100000000fdffffff396b7f0fcac84f700b471fc72874f56795433b7cb7657fe3ff9e9d0e573960a70100000000fdffffff0206a50a00000000001976a9149e6b8bfbbf4cc975fdcbfddbd06c70925d4c8f9f88ac4bfc02000000000017a91485ec27a75202121fe50d284a1798d66b097e033d8702000002000002000000000000".*;
+    const tx = try decodeRawTx(allocator, &raw);
+    defer tx.deinit();
+
+    try std.testing.expectEqual(tx.version, 1);
+    try std.testing.expectEqual(tx.marker, 0);
+    try std.testing.expectEqual(tx.flag, 1);
+    try std.testing.expectEqual(tx.locktime, 0);
+    try std.testing.expectEqual(tx.inputs.items.len, 3);
+    try std.testing.expectEqual(tx.outputs.items.len, 2);
+    try std.testing.expectEqual(tx.witness.items.len, 3);
+
+    const expectedTxIn1 = "7790b18693b2c4b6344577dc8d973e51388670a2b60ef1156b69f141f66b837e".*;
+    try std.testing.expectEqualStrings(&expectedTxIn1, &tx.inputs.items[0].prevout.?.txid);
+    try std.testing.expectEqual(tx.inputs.items[0].prevout.?.n, 4);
+
+    const expectedTxIn2 = "4429cda513e5258a16f5be9fe6bf9d8f18aa7d8ca6e5147b10961955db88ac74".*;
+    try std.testing.expectEqualStrings(&expectedTxIn2, &tx.inputs.items[1].prevout.?.txid);
+    try std.testing.expectEqual(tx.inputs.items[1].prevout.?.n, 1);
+
+    const expectedTxIn3 = "396b7f0fcac84f700b471fc72874f56795433b7cb7657fe3ff9e9d0e573960a7".*;
+    try std.testing.expectEqualStrings(&expectedTxIn3, &tx.inputs.items[2].prevout.?.txid);
+    try std.testing.expectEqual(tx.inputs.items[2].prevout.?.n, 1);
+
+    try std.testing.expectEqual(tx.outputs.items[0].amount, 697606);
+    const expectedScriptPubkey1 = "76a9149e6b8bfbbf4cc975fdcbfddbd06c70925d4c8f9f88ac".*;
+    try std.testing.expectEqualStrings(&expectedScriptPubkey1, tx.outputs.items[0].script_pubkey);
+
+    try std.testing.expectEqual(tx.outputs.items[1].amount, 195659);
+    const expectedScriptPubkey2 = "a91485ec27a75202121fe50d284a1798d66b097e033d87".*;
+    try std.testing.expectEqualStrings(&expectedScriptPubkey2, tx.outputs.items[1].script_pubkey);
+
+    try std.testing.expectEqualStrings("", tx.witness.items[0].stackitems.items[0].item);
+    try std.testing.expectEqualStrings("", tx.witness.items[0].stackitems.items[1].item);
+
+    try std.testing.expectEqualStrings("", tx.witness.items[1].stackitems.items[0].item);
+    try std.testing.expectEqualStrings("", tx.witness.items[1].stackitems.items[1].item);
+
+    try std.testing.expectEqualStrings("", tx.witness.items[2].stackitems.items[0].item);
+    try std.testing.expectEqualStrings("", tx.witness.items[2].stackitems.items[1].item);
 }
 
 test "encodeTx" {
