@@ -62,7 +62,7 @@ pub fn main() !void {
                 defer allocator.free(bytes);
                 _ = try std.fmt.hexToBytes(bytes, seed);
                 const epk = bip32.generateExtendedMasterPrivateKey(bytes);
-                const addr = epk.address(0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
+                const addr = epk.address(.SEGWIT_MAINNET, 0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
                     std.debug.print("Error while generating address", .{});
                     return;
                 };
@@ -86,7 +86,7 @@ pub fn main() !void {
                 try bip39.mnemonicToSeed(allocator, &mnemonic, "", &seed);
 
                 const epk = bip32.generateExtendedMasterPrivateKey(&seed);
-                const addr = epk.address(0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
+                const addr = epk.address(.SEGWIT_MAINNET, 0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
                     std.debug.print("Error while generating address", .{});
                     return;
                 };
