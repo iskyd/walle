@@ -116,6 +116,22 @@ pub fn encodeCompactSize(n: u64) EncodedCompactSize {
     };
 }
 
+pub fn reverseByteOrderFromHex(comptime size: usize, hex: [size]u8) ![size]u8 {
+    var bytes: [size / 2]u8 = undefined;
+    const bytes_size = size / 2;
+    _ = try std.fmt.hexToBytes(&bytes, &hex);
+
+    for (0..bytes_size / 2) |i| { // size / 4 = bytes.len / 2
+        bytes[i] = bytes[bytes_size - 1 - i] ^ bytes[i];
+        bytes[bytes_size - 1 - i] = bytes[i] ^ bytes[bytes_size - 1 - i];
+        bytes[i] = bytes[bytes_size - 1 - i] ^ bytes[i];
+    }
+
+    var result: [size]u8 = undefined;
+    _ = try std.fmt.bufPrint(&result, "{x}", .{std.fmt.fmtSliceHexLower(&bytes)});
+    return result;
+}
+
 test "intToHexStr" {
     var buffer: [8]u8 = undefined;
     try intToHexStr(u8, 150, &buffer);
@@ -145,4 +161,22 @@ test "hash160" {
     var rstr: [40]u8 = undefined;
     _ = try std.fmt.bufPrint(&rstr, "{x}", .{std.fmt.fmtSliceHexLower(&r)});
     try std.testing.expectEqualStrings("286fd267876fb1a24b8fe798edbc6dc6d5e2ea5b", &rstr);
+}
+
+test "reverseByteOrderFromHex" {
+    const hex1 = "7790b18693b2c4b6344577dc8d973e51388670a2b60ef1156b69f141f66b837e".*;
+    const expected1 = "7e836bf641f1696b15f10eb6a2708638513e978ddc774534b6c4b29386b19077".*;
+    const res1 = try reverseByteOrderFromHex(64, hex1);
+
+    const hex2 = "4429cda513e5258a16f5be9fe6bf9d8f18aa7d8ca6e5147b10961955db88ac74".*;
+    const expected2 = "74ac88db551996107b14e5a68c7daa188f9dbfe69fbef5168a25e513a5cd2944".*;
+    const res2 = try reverseByteOrderFromHex(64, hex2);
+
+    const hex3 = "396b7f0fcac84f700b471fc72874f56795433b7cb7657fe3ff9e9d0e573960a7".*;
+    const expected3 = "a76039570e9d9effe37f65b77c3b439567f57428c71f470b704fc8ca0f7f6b39".*;
+    const res3 = try reverseByteOrderFromHex(64, hex3);
+
+    try std.testing.expectEqualStrings(&expected1, &res1);
+    try std.testing.expectEqualStrings(&expected2, &res2);
+    try std.testing.expectEqualStrings(&expected3, &res3);
 }
