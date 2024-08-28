@@ -20,19 +20,19 @@ pub fn build(b: *std.Build) void {
         .name = "walle",
         // In this case the main source file is merely a path, however, in more
         // complicated build scripts, this could be a generated file.
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     const base58 = b.addModule("base58", .{
-        .root_source_file = .{ .path = "lib/base58/src/lib.zig" },
+        .root_source_file = b.path("lib/base58/src/lib.zig"),
     });
     const clap = b.addModule("clap", .{
-        .root_source_file = .{ .path = "lib/clap/clap.zig" },
+        .root_source_file = b.path("lib/clap/clap.zig"),
     });
     const crypto = b.addModule("crypto", .{
-        .root_source_file = .{ .path = "src/crypto/crypto.zig" },
+        .root_source_file = b.path("src/crypto/crypto.zig"),
     });
 
     exe.root_module.addImport("base58", base58);
@@ -40,7 +40,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("crypto", crypto);
 
     const sqlite = b.addModule("sqlite", .{
-        .root_source_file = .{ .path = "lib/zig-sqlite/sqlite.zig" },
+        .root_source_file = b.path("lib/zig-sqlite/sqlite.zig"),
     });
     sqlite.addCSourceFiles(.{
         .files = &[_][]const u8{
@@ -57,6 +57,26 @@ pub fn build(b: *std.Build) void {
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(exe);
+
+    // Check step, used for zls
+    const exe_check = b.addExecutable(.{
+        .name = "walle",
+        // In this case the main source file is merely a path, however, in more
+        // complicated build scripts, this could be a generated file.
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    exe_check.root_module.addImport("base58", base58);
+    exe_check.root_module.addImport("clap", clap);
+    exe_check.root_module.addImport("crypto", crypto);
+    exe_check.linkLibC();
+    exe_check.linkSystemLibrary("sqlite3");
+    exe_check.root_module.addImport("sqlite", sqlite);
+
+    const check = b.step("check", "Check if main compiles");
+    check.dependOn(&exe_check.step);
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
