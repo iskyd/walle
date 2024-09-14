@@ -182,108 +182,108 @@ pub fn sendRawTx(allocator: std.mem.Allocator, client: *std.http.Client, locatio
     defer allocator.free(response);
 }
 
-// test "generateAuth" {
-//     const user = "walle".*;
-//     const pass = "password".*;
-//     const expected = "Basic d2FsbGU6cGFzc3dvcmQ=".*;
-//     const allocator = std.testing.allocator;
-//     const auth = try generateAuth(allocator, &user, &pass);
-//     defer allocator.free(auth);
-//     try std.testing.expectEqualStrings(&expected, auth);
-// }
+test "generateAuth" {
+    const user = "walle".*;
+    const pass = "password".*;
+    const expected = "Basic d2FsbGU6cGFzc3dvcmQ=".*;
+    const allocator = std.testing.allocator;
+    const auth = try generateAuth(allocator, &user, &pass);
+    defer allocator.free(auth);
+    try std.testing.expectEqualStrings(&expected, auth);
+}
 
-// test "generateBodyNoParams" {
-//     const allocator = std.testing.allocator;
-//     const rpcId = "walle".*;
-//     const method = "getblockcount".*;
-//     const body = try generateBody(allocator, &rpcId, &method, null);
-//     defer allocator.free(body);
-//     const expectedString = "{\"jsonrpc\":\"1.0\",\"id\":\"walle\",\"method\":\"getblockcount\",\"params\":[]}".*;
-//     try std.testing.expectEqualStrings(&expectedString, body);
-// }
+test "generateBodyNoParams" {
+    const allocator = std.testing.allocator;
+    const rpcId = "walle".*;
+    const method = "getblockcount".*;
+    const body = try generateBody(allocator, &rpcId, &method, null);
+    defer allocator.free(body);
+    const expectedString = "{\"jsonrpc\":\"1.0\",\"id\":\"walle\",\"method\":\"getblockcount\",\"params\":[]}".*;
+    try std.testing.expectEqualStrings(&expectedString, body);
+}
 
-// test "generateBodyParams" {
-//     const allocator = std.testing.allocator;
-//     const rpcId = "walle".*;
-//     const method = "getblockcount".*;
-//     var params = std.ArrayList(RpcParams).init(allocator);
-//     defer params.deinit();
-//     const p = RpcParams{ .num = 300 };
-//     try params.append(p);
-//     const body = try generateBody(allocator, &rpcId, &method, params);
-//     defer allocator.free(body);
-//     const expectedString = "{\"jsonrpc\":\"1.0\",\"id\":\"walle\",\"method\":\"getblockcount\",\"params\":[300]}".*;
-//     try std.testing.expectEqualStrings(&expectedString, body);
-// }
+test "generateBodyParams" {
+    const allocator = std.testing.allocator;
+    const rpcId = "walle".*;
+    const method = "getblockcount".*;
+    var params = std.ArrayList(RpcParams).init(allocator);
+    defer params.deinit();
+    const p = RpcParams{ .num = 300 };
+    try params.append(p);
+    const body = try generateBody(allocator, &rpcId, &method, params);
+    defer allocator.free(body);
+    const expectedString = "{\"jsonrpc\":\"1.0\",\"id\":\"walle\",\"method\":\"getblockcount\",\"params\":[300]}".*;
+    try std.testing.expectEqualStrings(&expectedString, body);
+}
 
-// test "generateBodyMultipleParams" {
-//     const allocator = std.testing.allocator;
-//     const rpcId = "walle".*;
-//     const method = "test".*;
-//     var params = std.ArrayList(RpcParams).init(allocator);
-//     defer params.deinit();
-//     var p3str = "2031c78ac5e8aaafd25f6697eb23564238cce4b24116b2750e96808bc0311384".*;
-//     const p1 = RpcParams{ .num = 300 };
-//     const p2 = RpcParams{ .num = 500 };
-//     const p3 = RpcParams{ .str = &p3str };
-//     try params.append(p1);
-//     try params.append(p2);
-//     try params.append(p3);
-//     const body = try generateBody(allocator, &rpcId, &method, params);
-//     defer allocator.free(body);
-//     const expectedString = "{\"jsonrpc\":\"1.0\",\"id\":\"walle\",\"method\":\"test\",\"params\":[300,500,\"2031c78ac5e8aaafd25f6697eb23564238cce4b24116b2750e96808bc0311384\"]}".*;
-//     try std.testing.expectEqualStrings(&expectedString, body);
-// }
+test "generateBodyMultipleParams" {
+    const allocator = std.testing.allocator;
+    const rpcId = "walle".*;
+    const method = "test".*;
+    var params = std.ArrayList(RpcParams).init(allocator);
+    defer params.deinit();
+    var p3str = "2031c78ac5e8aaafd25f6697eb23564238cce4b24116b2750e96808bc0311384".*;
+    const p1 = RpcParams{ .num = 300 };
+    const p2 = RpcParams{ .num = 500 };
+    const p3 = RpcParams{ .str = &p3str };
+    try params.append(p1);
+    try params.append(p2);
+    try params.append(p3);
+    const body = try generateBody(allocator, &rpcId, &method, params);
+    defer allocator.free(body);
+    const expectedString = "{\"jsonrpc\":\"1.0\",\"id\":\"walle\",\"method\":\"test\",\"params\":[300,500,\"2031c78ac5e8aaafd25f6697eb23564238cce4b24116b2750e96808bc0311384\"]}".*;
+    try std.testing.expectEqualStrings(&expectedString, body);
+}
 
-// test "getBlockCount" {
-//     const allocator = std.testing.allocator;
-//     var client = std.http.Client{ .allocator = allocator };
-//     defer client.deinit();
-//     const location = "http://0.0.0.0:18444".*;
-//     const user = "walle".*;
-//     const pass = "password".*;
-//     const auth = try generateAuth(allocator, &user, &pass);
-//     defer allocator.free(auth);
-//     const blockcount = try getBlockCount(allocator, &client, &location, auth);
-//     std.debug.print("blockcount = {d}\n", .{blockcount});
-//     try std.testing.expect(blockcount >= 0);
-// }
+test "getBlockCount" {
+    const allocator = std.testing.allocator;
+    var client = std.http.Client{ .allocator = allocator };
+    defer client.deinit();
+    const location = "http://0.0.0.0:18444".*;
+    const user = "walle".*;
+    const pass = "password".*;
+    const auth = try generateAuth(allocator, &user, &pass);
+    defer allocator.free(auth);
+    const blockcount = try getBlockCount(allocator, &client, &location, auth);
+    std.debug.print("blockcount = {d}\n", .{blockcount});
+    try std.testing.expect(blockcount >= 0);
+}
 
-// test "getBlockHash" {
-//     const allocator = std.testing.allocator;
-//     var client = std.http.Client{ .allocator = allocator };
-//     defer client.deinit();
-//     const location = "http://0.0.0.0:18444".*;
-//     const user = "walle".*;
-//     const pass = "password".*;
-//     const auth = try generateAuth(allocator, &user, &pass);
-//     defer allocator.free(auth);
-//     const blockhash = try getBlockHash(allocator, &client, &location, auth, 300);
-//     std.debug.print("blockhash: {s}\n", .{blockhash});
-// }
+test "getBlockHash" {
+    const allocator = std.testing.allocator;
+    var client = std.http.Client{ .allocator = allocator };
+    defer client.deinit();
+    const location = "http://0.0.0.0:18444".*;
+    const user = "walle".*;
+    const pass = "password".*;
+    const auth = try generateAuth(allocator, &user, &pass);
+    defer allocator.free(auth);
+    const blockhash = try getBlockHash(allocator, &client, &location, auth, 300);
+    std.debug.print("blockhash: {s}\n", .{blockhash});
+}
 
-// test "getBlockRawTx" {
-//     const allocator = std.testing.allocator;
-//     var client = std.http.Client{ .allocator = allocator };
-//     defer client.deinit();
-//     const location = "http://0.0.0.0:18444".*;
-//     const user = "walle".*;
-//     const pass = "password".*;
-//     const auth = try generateAuth(allocator, &user, &pass);
-//     defer allocator.free(auth);
-//     const blockhash = "2031c78ac5e8aaafd25f6697eb23564238cce4b24116b2750e96808bc0311384".*;
-//     const rawtxs = try getBlockRawTx(allocator, &client, &location, auth, blockhash);
-//     defer {
-//         for (0..rawtxs.len) |i| {
-//             allocator.free(rawtxs[i]);
-//         }
-//         allocator.free(rawtxs);
-//     }
-//     for (0..rawtxs.len) |i| {
-//         const raw = rawtxs[i];
-//         std.debug.print("raw tx {s}\n", .{raw});
-//     }
-// }
+test "getBlockRawTx" {
+    const allocator = std.testing.allocator;
+    var client = std.http.Client{ .allocator = allocator };
+    defer client.deinit();
+    const location = "http://0.0.0.0:18444".*;
+    const user = "walle".*;
+    const pass = "password".*;
+    const auth = try generateAuth(allocator, &user, &pass);
+    defer allocator.free(auth);
+    const blockhash = "2031c78ac5e8aaafd25f6697eb23564238cce4b24116b2750e96808bc0311384".*;
+    const rawtxs = try getBlockRawTx(allocator, &client, &location, auth, blockhash);
+    defer {
+        for (0..rawtxs.len) |i| {
+            allocator.free(rawtxs[i]);
+        }
+        allocator.free(rawtxs);
+    }
+    for (0..rawtxs.len) |i| {
+        const raw = rawtxs[i];
+        std.debug.print("raw tx {s}\n", .{raw});
+    }
+}
 
 test "sendRawTx" {
     const allocator = std.testing.allocator;
@@ -294,7 +294,7 @@ test "sendRawTx" {
     const pass = "password".*;
     const auth = try generateAuth(allocator, &user, &pass);
     defer allocator.free(auth);
-    // signedTxHex will come from createRawTransaction -> signRawTransaction. 
+    // signedTxHex will come from createRawTransaction -> signRawTransaction.
     var signedTxHex = "02000000000101c9da25a9134de631ee967523754c40703c88c86ebbbc94a7a94e4ad662f342610000000000fdffffff0200e1f50500000000160014c1923b56142275220f6958bcd5a16c2ae168a7e9c0ce0024010000001600142ca650dd0c82613aecf8ebf919e939f6d02d022c024730440220265e553a43b74bf963318bb0ac37ab330fffe54febd5c7ec970a51732420bac502204abcc9ee828b80b6eeccb253be7bfa6a40f1dcaaded7d29893c2d071f00889630121034413af7dca04880769b28def55063935e85cf01a0fb329154961fb6264eca70300000000".*;
     try sendRawTx(allocator, &client, &location, auth, &signedTxHex);
 }
