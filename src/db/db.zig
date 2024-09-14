@@ -8,7 +8,7 @@ const assert = std.debug.assert;
 
 pub fn openDB() !sqlite.Db {
     const db = try sqlite.Db.init(.{
-        .mode = sqlite.Db.Mode{ .File = "/home/mattia/dev/walle/test.db" },
+        .mode = sqlite.Db.Mode{ .File = "./test.db" },
         .open_flags = .{
             .write = true,
             .create = true,
@@ -40,7 +40,7 @@ pub fn initDB(db: *sqlite.Db) !void {
     var stmtInputs = try db.prepare(sqlInputs);
     defer stmtInputs.deinit();
 
-    const sqlDescriptors = "CREATE TABLE IF NOT EXISTS descriptors(extended_key VARCHAR(111) PRIMARY KEY, path TEXT NOT NULL)";
+    const sqlDescriptors = "CREATE TABLE IF NOT EXISTS descriptors(extended_key VARCHAR(111) PRIMARY KEY, path TEXT NOT NULL, private INTEGER NOT NULL)";
     var stmtDescriptors = try db.prepare(sqlDescriptors);
     defer stmtDescriptors.deinit();
 
@@ -141,6 +141,19 @@ pub fn getOutput(db: *sqlite.Db, txid: [64]u8, n: u32) !?Output {
     return null;
 }
 
+pub fn getOutputDescriptorPath(allocator: std.mem.Allocator, db: *sqlite.Db, txid: [64]u8, n: u32) !KeyPath(5) {
+    const sqlOutput = "SELECT path AS c FROM outputs WHERE txid = ? AND n = ?";
+    var stmt = try db.prepare(sqlOutput);
+    defer stmt.deinit();
+    const row = try stmt.one(struct { path: []u8 }, .{}, .{ .txid = txid, .n = n }, allocator);
+    if (row != null) {
+        defer allocator.free(row.path);
+        return KeyPath(5).fromStr(row.path);
+    }
+
+    return null;
+}
+
 pub fn saveTransaction(db: *sqlite.Db, block_heigth: usize, transactions: std.AutoHashMap([64]u8, bool), rawtransactionsmap: std.AutoHashMap([64]u8, []u8)) !void {
     const sqlBegin = "BEGIN TRANSACTION;";
     var stmtBegin = try db.prepare(sqlBegin);
@@ -188,10 +201,10 @@ pub fn getBalance(db: *sqlite.Db, current_block: usize) !u64 {
 
 // Memory ownership to the caller
 pub fn getDescriptors(allocator: std.mem.Allocator, db: *sqlite.Db) ![]Descriptor {
-    const sql = "SELECT extended_key, path FROM descriptors;";
+    const sql = "SELECT extended_key, path, private FROM descriptors;";
     var stmt = try db.prepare(sql);
     defer stmt.deinit();
-    const rows = try stmt.all(struct { extended_key: [111]u8, path: []const u8 }, allocator, .{}, .{});
+    const rows = try stmt.all(struct { extended_key: [111]u8, path: []const u8, private: bool }, allocator, .{}, .{});
     defer {
         for (rows) |row| {
             allocator.free(row.path);
@@ -201,10 +214,23 @@ pub fn getDescriptors(allocator: std.mem.Allocator, db: *sqlite.Db) ![]Descripto
 
     var descriptors = try allocator.alloc(Descriptor, rows.len);
     for (rows, 0..) |row, i| {
-        descriptors[i] = Descriptor{ .extended_key = row.extended_key, .keypath = try KeyPath(3).fromStr(row.path) };
+        descriptors[i] = Descriptor{ .extended_key = row.extended_key, .keypath = try KeyPath(3).fromStr(row.path), .private = row.private };
     }
 
     return descriptors;
+}
+
+pub fn getDescriptor(allocator: std.mem.Allocator, db: *sqlite.Db, path: []u8) !?Descriptor {
+    const sql = "SELECT extended_key, path, private FROM descriptor WHERE path=? LIMIT 1;";
+    var stmt = try db.prepare(sql);
+    defer stmt.deinit();
+    const row = try stmt.one(struct { extended_key: [111]u8, path: []const u8, private: bool }, allocator, .{}, .{ .path = path });
+    if (row != null) {
+        defer allocator.free(row.path);
+        return Descriptor{ .extended_key = row.extended_key, .keypath = try KeyPath(3).fromStr(row.path), .private = row.private };
+    }
+
+    return null;
 }
 
 pub fn getUsedKeyPaths(allocator: std.mem.Allocator, db: *sqlite.Db) ![]KeyPath(5) {

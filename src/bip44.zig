@@ -18,7 +18,12 @@ pub fn KeyPath(comptime depth: u8) type {
 
         const Self = @This();
 
-        pub fn getStrCap(self: Self) usize {
+        pub fn getStrCap(self: Self, comptime maxDepth: ?u8) usize {
+            comptime {
+                if (maxDepth != null) {
+                    assert(depth >= maxDepth.?);
+                }
+            }
             var cap: usize = self.path.len - 1; // number of /
             for (self.path, 0..) |d, i| {
                 cap += if (d != 0) std.math.log10(d) + 1 else 1;
@@ -27,13 +32,23 @@ pub fn KeyPath(comptime depth: u8) type {
                 if (i <= 2) {
                     cap += 1;
                 }
+                if (comptime maxDepth != null) {
+                    if (maxDepth.? <= i + 2) {
+                        break;
+                    }
+                }
             }
 
             return cap;
         }
 
-        pub fn toStr(self: Self, allocator: std.mem.Allocator) ![]u8 {
-            var buffer = try allocator.alloc(u8, self.getStrCap());
+        pub fn toStr(self: Self, allocator: std.mem.Allocator, comptime maxDepth: ?u8) ![]u8 {
+            comptime {
+                if (maxDepth != null) {
+                    assert(depth >= maxDepth.?);
+                }
+            }
+            var buffer = try allocator.alloc(u8, self.getStrCap(maxDepth));
             var current: usize = 0;
             for (self.path, 0..) |d, i| {
                 const currentcap = if (d != 0) std.math.log10(d) + 1 else 1;
@@ -43,6 +58,13 @@ pub fn KeyPath(comptime depth: u8) type {
                     buffer[current] = '\'';
                     current += 1;
                 }
+
+                if (comptime maxDepth != null) {
+                    if (maxDepth.? <= i + 1) {
+                        break;
+                    }
+                }
+
                 if (i < self.path.len - 1) {
                     buffer[current] = '/';
                 }
@@ -103,6 +125,7 @@ pub fn KeyPath(comptime depth: u8) type {
 pub const Descriptor = struct {
     extended_key: [111]u8,
     keypath: KeyPath(3),
+    private: bool,
 };
 
 // Purpose, cointype, and account use hardened derivation
@@ -175,7 +198,7 @@ test "keypathtest" {
     try std.testing.expectEqual(k1.path[3], 0);
     try std.testing.expectEqual(k1.path[4], 1);
 
-    const k1str = try k1.toStr(allocator);
+    const k1str = try k1.toStr(allocator, null);
     defer allocator.free(k1str);
     const e1 = "84'/0'/0'/0/1".*;
     try std.testing.expectEqualStrings(&e1, k1str);
@@ -186,7 +209,21 @@ test "keypathtest" {
     try std.testing.expectEqual(k2.path[2], 0);
 
     const e2 = "84'/0'/0'".*;
-    const k2str = try k2.toStr(allocator);
+    const k2str = try k2.toStr(allocator, null);
     defer allocator.free(k2str);
     try std.testing.expectEqualStrings(&e2, k2str);
+}
+
+test "keypathToStrCapMaxDepth" {
+    const k1 = try KeyPath(5).fromStr("84'/0'/0'/0/1");
+    const res = k1.getStrCap(3);
+    try std.testing.expectEqual(9, res);
+}
+
+test "keypathToStrMaxDepth" {
+    const allocator = std.testing.allocator;
+    const k1 = try KeyPath(5).fromStr("84'/0'/0'/0/1");
+    const res = try k1.toStr(allocator, 3);
+    try std.testing.expectEqualStrings("84'/0'/0'", res);
+    defer allocator.free(res);
 }
