@@ -2,6 +2,10 @@ const std = @import("std");
 const script = @import("script.zig");
 const utils = @import("utils.zig");
 const KeyPath = @import("bip44.zig").KeyPath;
+const assert = @import("std").debug.assert;
+const signEcdsa = @import("crypto").signEcdsa;
+const db = @import("db/db.zig");
+const sqlite = @import("sqlite");
 
 const COINBASE_TX_ID: [64]u8 = "0000000000000000000000000000000000000000000000000000000000000000".*;
 
@@ -99,11 +103,6 @@ pub const TxWitness = struct {
     }
 };
 
-pub const TxDestination = struct {
-    addr: []u8,
-    amount: u64,
-};
-
 // Transaction
 pub const Transaction = struct {
     allocator: std.mem.Allocator,
@@ -162,10 +161,10 @@ pub const Transaction = struct {
     }
 
     pub fn getTXID(self: Transaction) ![64]u8 {
-        const totalBytes: usize = encodeTxCap(self, true);
+        const totalBytes: usize = encodeTxCap(self, false);
         const encoded = try self.allocator.alloc(u8, totalBytes);
         defer self.allocator.free(encoded);
-        try encodeTx(self.allocator, encoded, self, true);
+        try encodeTx(self.allocator, encoded, self, false);
         const txid = utils.doubleSha256(encoded);
         var txidhex: [64]u8 = undefined;
         _ = try std.fmt.bufPrint(&txidhex, "{x}", .{std.fmt.fmtSliceHexLower(&txid)});
@@ -173,10 +172,10 @@ pub const Transaction = struct {
     }
 
     pub fn getWTXID(self: Transaction) ![64]u8 {
-        const totalBytes: usize = encodeTxCap(self, false);
+        const totalBytes: usize = encodeTxCap(self, true);
         const encoded = try self.allocator.alloc(u8, totalBytes);
         defer self.allocator.free(encoded);
-        try encodeTx(self.allocator, encoded, self, false);
+        try encodeTx(self.allocator, encoded, self, true);
         const txid = utils.doubleSha256(encoded);
         var txidhex: [64]u8 = undefined;
         _ = try std.fmt.bufPrint(&txidhex, "{x}", .{std.fmt.fmtSliceHexLower(&txid)});
@@ -207,39 +206,73 @@ pub const Transaction = struct {
     }
 };
 
+//fn getPrivateKeyForOutput(allocator: std.mem.Allocator, output: Output, conn: sqlite.Db) ![32]u8 {
+//    assert(output.keypath != null);
+//}
+//
+//fn getPublicKeyForOutput(allocator: std.mem.Allocator, output: Output, conn: sqlite.Db) ![32]u8 {
+//    const keypath = try db.getOutputDescriptorPath(allocator, conn, output.txid, output.n);
+//    const descriptor = db.getDescriptor(allocator, conn, keypath.toStr(3));
+//
+//}
+
 // Memory ownership to the caller
-pub fn createTx(allocator: std.mem.Allocator, inputs: []Output, destinations: []TxDestination) !Transaction {
+pub fn createTx(allocator: std.mem.Allocator, inputs: []Output, outputs: []TxOutput) !Transaction {
+    for (inputs) |input| {
+        assert(input.keypath != null);
+    }
+
     var totalAmountInputs: u64 = 0;
     for (inputs) |input| {
         totalAmountInputs += input.amount;
     }
 
     var totalAmountOutputs: u64 = 0;
-    for (destinations) |d| {
-        totalAmountOutputs += d.amount;
+    for (outputs) |output| {
+        totalAmountOutputs += output.amount;
     }
 
     if (totalAmountInputs < totalAmountOutputs) {
         return TxError.AmountTooLowError;
     }
 
-    const miningFees = totalAmountOutputs - totalAmountInputs;
-    _ = miningFees;
+    //const miningFees = totalAmountOutputs - totalAmountInputs;
+    //_ = miningFees;
     const locktime = 0;
     const marker = 0;
     const flag = 0;
     const version = 0;
 
     var tx = Transaction.init(allocator, version, locktime, marker, flag);
-    for (inputs) |_| {
-        // CREATE TX INPUT AND ADD
-        //tx.addInput(input);
+    for (inputs) |input| {
+        // We do not sign this input because we're going to use segwit
+        // This sequence will enable locktime, rbf and relative locktime
+        const txinput = try TxInput.init(allocator, input, "", 4294967294);
+        try tx.addInput(txinput);
     }
-    for (destinations) |d| {
-        const scriptpubkey = d.addr; // Derive script pubkey from address
-        const output = try TxOutput.init(allocator, d.amount, scriptpubkey);
+    for (outputs) |output| {
         try tx.addOutput(output);
     }
+
+    const cap = encodeTxCap(tx, false);
+    const encodedTx = try allocator.alloc(u8, cap);
+    defer allocator.free(encodedTx);
+    try encodeTx(allocator, encodedTx, tx, false);
+    var hashTx: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(encodedTx, &hashTx, .{});
+
+    // Add witness, support only p2wpkh atm
+    //for (inputs) |input| {
+    //    const k = getPrivateKeyForOutput(allocator, input);
+    //    const pubkey = getPublicKeyForOutput(input);
+    //    const signature = signEcdsa(k, hashTx);
+    //    const item1 = WitnessItem.init(allocator, signature);
+    //    const item2 = WitnessItem.init(allocator, pubkey);
+    //    const witness = TxWitness.init(allocator);
+    //    witness.addItem(item1);
+    //    witness.addItem(item2);
+    //    tx.addWitness(witness);
+    //}
 
     return tx;
 }
@@ -339,10 +372,10 @@ pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []const u8) !Transaction {
     return transaction;
 }
 
-pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction, txid: bool) !void {
+pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction, includeWitness: bool) !void {
     @memcpy(buffer[0..4], std.mem.asBytes(&tx.version));
     var currentByte: u64 = 4;
-    if (txid == false and tx.marker != null and tx.flag != null) {
+    if (includeWitness == true and tx.marker != null and tx.flag != null) {
         std.debug.assert(tx.marker != null and tx.flag != null); // Marker and flag are required for tx version 2 as describe in bip144
         buffer[4] = std.mem.asBytes(&tx.marker.?)[0];
         buffer[5] = std.mem.asBytes(&tx.flag.?)[0];
@@ -409,7 +442,7 @@ pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction, txi
         currentByte += output.script_pubkey.len / 2;
     }
 
-    if (txid == false) {
+    if (includeWitness == true) {
         // 1 witness for every input
         for (0..tx.inputs.items.len) |i| {
             const witness = tx.witness.items[i];
@@ -441,9 +474,9 @@ pub fn encodeTx(allocator: std.mem.Allocator, buffer: []u8, tx: Transaction, txi
     @memcpy(buffer[currentByte .. currentByte + 4], std.mem.asBytes(&tx.locktime));
 }
 
-pub fn encodeTxCap(tx: Transaction, txid: bool) usize {
+pub fn encodeTxCap(tx: Transaction, includeWitness: bool) usize {
     var currentByte: usize = 4; // version
-    if (txid == false) {
+    if (includeWitness == true) {
         currentByte += 2; // marker + flag
     }
 
@@ -485,7 +518,7 @@ pub fn encodeTxCap(tx: Transaction, txid: bool) usize {
         currentByte += output.script_pubkey.len / 2; // script pubkey
     }
 
-    if (txid == false) {
+    if (includeWitness == true) {
         // 1 witness for every input
         for (0..tx.inputs.items.len) |i| {
             const witness = tx.witness.items[i];
@@ -528,15 +561,23 @@ test "getOutputValue" {
 
 test "createTx" {
     const allocator = std.testing.allocator;
-    const o1 = Output{ .txid = "95cff5f34612b16e73ee2db28ddb08884136d005fb5d8ba8405bec30368f49e2".*, .n = 0, .amount = 10000 };
-    const o2 = Output{ .txid = "cabfe93aaa1d0ddb1c9faf1da80d902a693a9c84b9673f5524abf1fa3ce46349".*, .n = 1, .amount = 20000 };
-    //const addr1 = "".*;
-    const d1 = TxDestination{ .addr = "", .amount = 29000 };
-    const d2 = TxDestination{ .addr = "", .amount = 3000 };
+    const o1 = Output{ .txid = "95cff5f34612b16e73ee2db28ddb08884136d005fb5d8ba8405bec30368f49e2".*, .n = 0, .amount = 10000, .keypath = try KeyPath(5).fromStr("84'/1'/0'/0/0") };
+    const o2 = Output{ .txid = "cabfe93aaa1d0ddb1c9faf1da80d902a693a9c84b9673f5524abf1fa3ce46349".*, .n = 1, .amount = 20000, .keypath = try KeyPath(5).fromStr("84'/1'/0'/0/0") };
+    const o3 = Output{ .txid = "c0483c7c93aaefd5ee008cbec6f114d45d7502ffd8c427e9aac13eec32748673".*, .n = 1, .amount = 30000, .keypath = try KeyPath(5).fromStr("84'/1'/0'/0/0") };
+    const d1 = try TxOutput.init(allocator, 29000, "");
+    defer d1.deinit();
+    const d2 = try TxOutput.init(allocator, 3000, "");
+    defer d2.deinit();
 
-    var outputs: [2]Output = [2]Output{ o1, o2 };
-    var destinations: [2]TxDestination = [2]TxDestination{ d1, d2 };
-    try std.testing.expectError(TxError.AmountTooLowError, createTx(allocator, &outputs, &destinations));
+    var outputs1: [2]Output = [2]Output{ o1, o2 };
+    var destinations: [2]TxOutput = [2]TxOutput{ d1, d2 };
+    try std.testing.expectError(TxError.AmountTooLowError, createTx(allocator, &outputs1, &destinations));
+
+    var outputs2: [3]Output = [3]Output{ o1, o2, o3 };
+    const tx = try createTx(allocator, &outputs2, &destinations);
+    defer tx.deinit();
+    try std.testing.expectEqual(tx.inputs.items.len, 3);
+    try std.testing.expectEqual(tx.outputs.items.len, 2);
 }
 
 test "decodeRawTxCoinbase" {
@@ -663,7 +704,7 @@ test "encodeTx" {
     const tx = try decodeRawTx(allocator, &raw);
     defer tx.deinit();
     var buffer: [518]u8 = undefined;
-    try encodeTx(allocator, &buffer, tx, false);
+    try encodeTx(allocator, &buffer, tx, true);
     var encodedhex: [1036]u8 = undefined;
     _ = try std.fmt.bufPrint(&encodedhex, "{x}", .{std.fmt.fmtSliceHexLower(&buffer)});
 
@@ -718,7 +759,7 @@ test "encodeTxCap" {
     var raw: [1036]u8 = "02000000000103c0483c7c93aaefd5ee008cbec6f114d45d7502ffd8c427e9aac13eec327486730000000000fdffffffdaf971319fa0477b53ea4890c647c755c9a0021265f9fc3661ef0c4b7db6ef330000000000fdffffff01bb0ca2b5819c7b6a173cd36b8807d0809cc8bd3f9d5189a354e51b9f9337b00000000000fdffffff0200e40b54020000001600147218978afd7fd9270bae7595399b6bc1986e7a4eecf0052a01000000160014009724e4053330c337bb803eca1007146282124602473044022034141a0bc3da3adfa9162a8ab8f64eed52c94e7cdbc1aa49b0c1bf699c807b2c022015ff3eed0047ab1a202edd89d49cc9a144abeb20a89ff594b7fc50ca723e28870121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4024730440220571285fdbac00b8828883744503ae30bf846fdab3fa197f843f74ec8b6c8627602206a9aa3a646f5a67f62c04f8a181a63f5d4db37ae4e69af5e7f6912b60170bd9b0121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a40247304402206d542feca659eed9a470867e1d820b372f434d2a72688143fe68c4c66671a5e50220782b0bd5884d220a537bf86b438cd40eee0a58d08151eb1757e33286658a86110121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4c8000000".*;
     const tx = try decodeRawTx(allocator, &raw);
     defer tx.deinit();
-    try std.testing.expectEqual(encodeTxCap(tx, false), 518);
+    try std.testing.expectEqual(encodeTxCap(tx, true), 518);
 }
 
 test "encodeTxCapTxID" {
@@ -726,7 +767,7 @@ test "encodeTxCapTxID" {
     var raw: [1036]u8 = "02000000000103c0483c7c93aaefd5ee008cbec6f114d45d7502ffd8c427e9aac13eec327486730000000000fdffffffdaf971319fa0477b53ea4890c647c755c9a0021265f9fc3661ef0c4b7db6ef330000000000fdffffff01bb0ca2b5819c7b6a173cd36b8807d0809cc8bd3f9d5189a354e51b9f9337b00000000000fdffffff0200e40b54020000001600147218978afd7fd9270bae7595399b6bc1986e7a4eecf0052a01000000160014009724e4053330c337bb803eca1007146282124602473044022034141a0bc3da3adfa9162a8ab8f64eed52c94e7cdbc1aa49b0c1bf699c807b2c022015ff3eed0047ab1a202edd89d49cc9a144abeb20a89ff594b7fc50ca723e28870121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4024730440220571285fdbac00b8828883744503ae30bf846fdab3fa197f843f74ec8b6c8627602206a9aa3a646f5a67f62c04f8a181a63f5d4db37ae4e69af5e7f6912b60170bd9b0121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a40247304402206d542feca659eed9a470867e1d820b372f434d2a72688143fe68c4c66671a5e50220782b0bd5884d220a537bf86b438cd40eee0a58d08151eb1757e33286658a86110121029e9c928d39269fb6adf718c34e1754983a4d939ea7012f8fbbe51c6711a4a0a4c8000000".*;
     const tx = try decodeRawTx(allocator, &raw);
     defer tx.deinit();
-    try std.testing.expectEqual(encodeTxCap(tx, true), 195);
+    try std.testing.expectEqual(encodeTxCap(tx, false), 195);
 }
 
 test "decodeandtxidbigtx" {

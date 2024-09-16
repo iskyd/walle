@@ -3,7 +3,6 @@ const io = std.io;
 const bip39 = @import("bip39.zig");
 const bip32 = @import("bip32.zig");
 const utils = @import("utils.zig");
-const clap = @import("clap");
 const script = @import("script.zig");
 const tx = @import("tx.zig");
 const deriveP2WPKHAddress = @import("address.zig").deriveP2WPKHAddress;
