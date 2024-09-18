@@ -118,6 +118,7 @@ pub fn build(b: *std.Build) void {
         });
         unit_tests.root_module.addImport("base58", base58);
         unit_tests.root_module.addImport("crypto", crypto);
+        unit_tests.root_module.addImport("sqlite", sqlite);
         const run_unit_tests = b.addRunArtifact(unit_tests);
         run_unit_tests.has_side_effects = true; // Always execute test, do not cache
         test_step.dependOn(&run_unit_tests.step);

@@ -145,13 +145,13 @@ pub fn getOutputDescriptorPath(allocator: std.mem.Allocator, db: *sqlite.Db, txi
     const sqlOutput = "SELECT path AS c FROM outputs WHERE txid = ? AND n = ?";
     var stmt = try db.prepare(sqlOutput);
     defer stmt.deinit();
-    const row = try stmt.one(struct { path: []u8 }, .{}, .{ .txid = txid, .n = n }, allocator);
+    const row = try stmt.oneAlloc(struct { path: []u8 }, allocator, .{}, .{ .txid = txid, .n = n });
     if (row != null) {
-        defer allocator.free(row.path);
-        return KeyPath(5).fromStr(row.path);
+        defer allocator.free(row.?.path);
+        return KeyPath(5).fromStr(row.?.path);
     }
 
-    return null;
+    return error.DescriptorNotFound;
 }
 
 pub fn saveTransaction(db: *sqlite.Db, block_heigth: usize, transactions: std.AutoHashMap([64]u8, bool), rawtransactionsmap: std.AutoHashMap([64]u8, []u8)) !void {
@@ -220,14 +220,14 @@ pub fn getDescriptors(allocator: std.mem.Allocator, db: *sqlite.Db) ![]Descripto
     return descriptors;
 }
 
-pub fn getDescriptor(allocator: std.mem.Allocator, db: *sqlite.Db, path: []u8) !?Descriptor {
-    const sql = "SELECT extended_key, path, private FROM descriptor WHERE path=? LIMIT 1;";
+pub fn getDescriptor(allocator: std.mem.Allocator, db: *sqlite.Db, path: []u8, private: bool) !?Descriptor {
+    const sql = "SELECT extended_key, path, private FROM descriptor WHERE path=? AND private=? LIMIT 1;";
     var stmt = try db.prepare(sql);
     defer stmt.deinit();
-    const row = try stmt.one(struct { extended_key: [111]u8, path: []const u8, private: bool }, allocator, .{}, .{ .path = path });
+    const row = try stmt.oneAlloc(struct { extended_key: [111]u8, path: []const u8, private: bool }, allocator, .{}, .{ .path = path, .private = private });
     if (row != null) {
-        defer allocator.free(row.path);
-        return Descriptor{ .extended_key = row.extended_key, .keypath = try KeyPath(3).fromStr(row.path), .private = row.private };
+        defer allocator.free(row.?.path);
+        return Descriptor{ .extended_key = row.?.extended_key, .keypath = try KeyPath(3).fromStr(row.?.path), .private = row.?.private };
     }
 
     return null;
