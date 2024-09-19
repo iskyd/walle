@@ -300,6 +300,33 @@ fn getPublicKeyForOutput(allocator: std.mem.Allocator, conn: *sqlite.Db, output:
 //    return tx;
 //}
 
+//test "createTx" {
+//    var database = try db.openDB();
+//    defer db.closeDB(database);
+//    try db.initDB(&database);
+//
+//    const allocator = std.testing.allocator;
+//    const o1 = Output{ .txid = "95cff5f34612b16e73ee2db28ddb08884136d005fb5d8ba8405bec30368f49e2".*, .n = 0, .amount = 10000, .keypath = try KeyPath(5).fromStr("84'/1'/0'/0/0") };
+//    const o2 = Output{ .txid = "cabfe93aaa1d0ddb1c9faf1da80d902a693a9c84b9673f5524abf1fa3ce46349".*, .n = 1, .amount = 20000, .keypath = try KeyPath(5).fromStr("84'/1'/0'/0/0") };
+//    const o3 = Output{ .txid = "c0483c7c93aaefd5ee008cbec6f114d45d7502ffd8c427e9aac13eec32748673".*, .n = 1, .amount = 30000, .keypath = try KeyPath(5).fromStr("84'/1'/0'/0/0") };
+//    const d1 = try TxOutput.init(allocator, 29000, "");
+//    defer d1.deinit();
+//    const d2 = try TxOutput.init(allocator, 3000, "");
+//    defer d2.deinit();
+//
+//    var outputs1: [2]Output = [2]Output{ o1, o2 };
+//    var destinations: [2]TxOutput = [2]TxOutput{ d1, d2 };
+//    try std.testing.expectError(TxError.AmountTooLowError, createTx(allocator, &database, &outputs1, &destinations));
+//
+//    var outputs2: [3]Output = [3]Output{ o1, o2, o3 };
+//    const tx = try createTx(allocator, &database, &outputs2, &destinations);
+//    defer tx.deinit();
+//    try std.testing.expectEqual(tx.inputs.items.len, 3);
+//    try std.testing.expectEqual(tx.outputs.items.len, 2);
+//    try std.testing.expectEqual(tx.witness.items.len, 3);
+//    try std.testing.expectEqual(tx.witness.items[0].stackitems.items.len, 2);
+//}
+
 pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []const u8) !Transaction {
     var bytes: []u8 = try allocator.alloc(u8, raw.len / 2);
     _ = try std.fmt.hexToBytes(bytes, raw);
@@ -674,7 +701,7 @@ test "getTxOutputsPreImageHash" {
 }
 
 // get the pre image for the current input
-pub fn getPreImageHash(version: u32, inputsPreImageHash: [32]u8, inputsSequencesPreImageHash: [32]u8, outputsPreImageHash: [32]u8, locktime: u32, input: TxInput, inputPubKeyHashHex: [40]u8, sighashtype: u32) ![32]u8 {
+pub fn getPreImageHash(version: u32, inputsPreImageHash: [32]u8, inputsSequencesPreImageHash: [32]u8, outputsPreImageHash: [32]u8, locktime: u32, input: TxInput, pubkey: bip32.PublicKey, sighashtype: u32) ![32]u8 {
     assert(input.prevout != null);
     var vouthex: [8]u8 = undefined;
     try utils.intToHexStr(u32, @byteSwap(input.prevout.?.n), &vouthex);
@@ -683,7 +710,8 @@ pub fn getPreImageHash(version: u32, inputsPreImageHash: [32]u8, inputsSequences
     @memcpy(inputSerialization[64..72], &vouthex);
 
     var scriptcodehex: [52]u8 = undefined; // scriptcode is 1976a914{publickeyhash}88ac
-    _ = try std.fmt.bufPrint(&scriptcodehex, "1976a914{s}88ac", .{inputPubKeyHashHex});
+    const pubkeyhash = try pubkey.toHashHex();
+    _ = try std.fmt.bufPrint(&scriptcodehex, "1976a914{s}88ac", .{pubkeyhash});
 
     var amounthex: [16]u8 = undefined;
     try utils.intToHexStr(u64, @byteSwap(input.prevout.?.amount), &amounthex);
@@ -726,13 +754,56 @@ test "getPreImageHash" {
 
     const prevout = Output{ .txid = "ac4994014aa36b7f53375658ef595b3cb2891e1735fe5b441686f5e53338e76a".*, .n = 1, .amount = 30000 };
     const input = try TxInput.init(allocator, prevout, "", 4294967295);
-    const pubkey = "aa966f56de599b4094b61aa68a2b3df9e97e9c48".*;
-
+    const privkeyhex: [64]u8 = "7306f5092467981e66eff98b6b03bfe925922c5ecfaf14c4257ef18e81becf1f".*;
+    var privkey: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&privkey, &privkeyhex);
+    const pubkey = bip32.generatePublicKey(privkey);
     const expected = "d7b60220e1b9b2c1ab40845118baf515203f7b6f0ad83cbb68d3c89b5b3098a6";
     var expectedBytes: [32]u8 = undefined;
     _ = try std.fmt.hexToBytes(&expectedBytes, expected);
     const hash = try getPreImageHash(version, inputsPreImage, inputsSequencesPreImage, outputsPreImage, locktime, input, pubkey, sighashtype);
     try std.testing.expectEqualStrings(&expectedBytes, &hash);
+}
+
+pub fn createWitness(allocator: std.mem.Allocator, preimagehash: [32]u8, privkey: [32]u8, pubkey: bip32.PublicKey, sighashtype: u8, comptime nonce: ?u256) !TxWitness {
+    const signature = signEcdsa(privkey, preimagehash, nonce);
+    const serialized = try signature.derEncode(allocator);
+    defer allocator.free(serialized);
+    var sighashtypehex: [2]u8 = undefined;
+    try utils.intToHexStr(u8, @byteSwap(sighashtype), &sighashtypehex);
+    const completeserialized = try allocator.alloc(u8, serialized.len + 2);
+    defer allocator.free(completeserialized);
+    _ = try std.fmt.bufPrint(completeserialized, "{s}{s}", .{ serialized, sighashtypehex });
+    const bytes = try allocator.alloc(u8, completeserialized.len / 2);
+    defer allocator.free(bytes);
+    _ = try std.fmt.hexToBytes(bytes, completeserialized);
+    const compressedpubkey = try pubkey.compress();
+    var witness = TxWitness.init(allocator);
+    try witness.addItem(bytes);
+    try witness.addItem(&compressedpubkey);
+
+    return witness;
+}
+
+test "createWitness" {
+    const allocator = std.testing.allocator;
+    const preimagehashhex = "d7b60220e1b9b2c1ab40845118baf515203f7b6f0ad83cbb68d3c89b5b3098a6";
+    var preimagehash: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&preimagehash, preimagehashhex);
+    const privkeyhex: [64]u8 = "7306f5092467981e66eff98b6b03bfe925922c5ecfaf14c4257ef18e81becf1f".*;
+    var privkey: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&privkey, &privkeyhex);
+    const pubkey = bip32.generatePublicKey(privkey);
+
+    const witness = try createWitness(allocator, preimagehash, privkey, pubkey, 1, 123456789);
+    defer witness.deinit();
+
+    const expectedsignaturehex = "3044022008f4f37e2d8f74e18c1b8fde2374d5f28402fb8ab7fd1cc5b786aa40851a70cb022032b1374d1a0f125eae4f69d1bc0b7f896c964cfdba329f38a952426cf427484c01";
+    const expectedpubkey = "03eed0d937090cae6ffde917de8a80dc6156e30b13edd5e51e2e50d52428da1c87";
+
+    try std.testing.expectEqual(witness.stackitems.items.len, 2);
+    try std.testing.expectEqualStrings(expectedsignaturehex, witness.stackitems.items[0].item);
+    try std.testing.expectEqualStrings(expectedpubkey, witness.stackitems.items[1].item);
 }
 
 test "getOutputValue" {
@@ -751,33 +822,6 @@ test "getOutputValue" {
     const outputv = tx.getOutputValue();
     try std.testing.expectEqual(outputv, 167000);
 }
-
-//test "createTx" {
-//    var database = try db.openDB();
-//    defer db.closeDB(database);
-//    try db.initDB(&database);
-//
-//    const allocator = std.testing.allocator;
-//    const o1 = Output{ .txid = "95cff5f34612b16e73ee2db28ddb08884136d005fb5d8ba8405bec30368f49e2".*, .n = 0, .amount = 10000, .keypath = try KeyPath(5).fromStr("84'/1'/0'/0/0") };
-//    const o2 = Output{ .txid = "cabfe93aaa1d0ddb1c9faf1da80d902a693a9c84b9673f5524abf1fa3ce46349".*, .n = 1, .amount = 20000, .keypath = try KeyPath(5).fromStr("84'/1'/0'/0/0") };
-//    const o3 = Output{ .txid = "c0483c7c93aaefd5ee008cbec6f114d45d7502ffd8c427e9aac13eec32748673".*, .n = 1, .amount = 30000, .keypath = try KeyPath(5).fromStr("84'/1'/0'/0/0") };
-//    const d1 = try TxOutput.init(allocator, 29000, "");
-//    defer d1.deinit();
-//    const d2 = try TxOutput.init(allocator, 3000, "");
-//    defer d2.deinit();
-//
-//    var outputs1: [2]Output = [2]Output{ o1, o2 };
-//    var destinations: [2]TxOutput = [2]TxOutput{ d1, d2 };
-//    try std.testing.expectError(TxError.AmountTooLowError, createTx(allocator, &database, &outputs1, &destinations));
-//
-//    var outputs2: [3]Output = [3]Output{ o1, o2, o3 };
-//    const tx = try createTx(allocator, &database, &outputs2, &destinations);
-//    defer tx.deinit();
-//    try std.testing.expectEqual(tx.inputs.items.len, 3);
-//    try std.testing.expectEqual(tx.outputs.items.len, 2);
-//    try std.testing.expectEqual(tx.witness.items.len, 3);
-//    try std.testing.expectEqual(tx.witness.items[0].stackitems.items.len, 2);
-//}
 
 test "decodeRawTxCoinbase" {
     const allocator = std.testing.allocator;
