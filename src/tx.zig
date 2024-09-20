@@ -240,92 +240,130 @@ fn getPublicKeyForOutput(allocator: std.mem.Allocator, conn: *sqlite.Db, output:
 }
 
 // Memory ownership to the caller
-//pub fn createTx(allocator: std.mem.Allocator, conn: *sqlite.Db, inputs: []Output, outputs: []TxOutput) !Transaction {
-//    for (inputs) |input| {
-//        assert(input.keypath != null);
-//    }
-//
-//    var totalAmountInputs: u64 = 0;
-//    for (inputs) |input| {
-//        totalAmountInputs += input.amount;
-//    }
-//
-//    var totalAmountOutputs: u64 = 0;
-//    for (outputs) |output| {
-//        totalAmountOutputs += output.amount;
-//    }
-//
-//    if (totalAmountInputs < totalAmountOutputs) {
-//        return TxError.AmountTooLowError;
-//    }
-//
-//    //const miningFees = totalAmountOutputs - totalAmountInputs;
-//    //_ = miningFees;
-//    const locktime = 0;
-//    const marker = 0;
-//    const flag = 0;
-//    const version = 0;
-//
-//    var tx = Transaction.init(allocator, version, locktime, marker, flag);
-//    for (inputs) |input| {
-//        // We do not sign this input because we're going to use segwit
-//        // This sequence will enable locktime, rbf and relative locktime
-//        const txinput = try TxInput.init(allocator, input, "", 4294967294);
-//        try tx.addInput(txinput);
-//    }
-//    for (outputs) |output| {
-//        try tx.addOutput(output);
-//    }
-//
-//    const cap = encodeTxCap(tx, false);
-//    const encodedTx = try allocator.alloc(u8, cap);
-//    defer allocator.free(encodedTx);
-//    try encodeTx(allocator, encodedTx, tx, false);
-//    var hashTx: [32]u8 = undefined;
-//    std.crypto.hash.sha2.Sha256.hash(encodedTx, &hashTx, .{});
-//
-//    // Add witness, support only p2wpkh atm
-//    for (inputs) |input| {
-//        const k = try getPrivateKeyForOutput(allocator, conn, input);
-//        const pubkey = try getPublicKeyForOutput(allocator, conn, input);
-//        const signature = signEcdsa(k, hashTx);
-//        const item1 = WitnessItem.init(allocator, signature);
-//        const item2 = WitnessItem.init(allocator, pubkey);
-//        const witness = TxWitness.init(allocator);
-//        witness.addItem(item1);
-//        witness.addItem(item2);
-//        tx.addWitness(witness);
-//    }
-//
-//    return tx;
-//}
+pub fn createTx(allocator: std.mem.Allocator, inputs: []TxInput, outputs: []TxOutput) !Transaction {
+    for (inputs) |input| {
+        assert(input.prevout != null);
+    }
 
-//test "createTx" {
-//    var database = try db.openDB();
-//    defer db.closeDB(database);
-//    try db.initDB(&database);
-//
-//    const allocator = std.testing.allocator;
-//    const o1 = Output{ .txid = "95cff5f34612b16e73ee2db28ddb08884136d005fb5d8ba8405bec30368f49e2".*, .n = 0, .amount = 10000, .keypath = try KeyPath(5).fromStr("84'/1'/0'/0/0") };
-//    const o2 = Output{ .txid = "cabfe93aaa1d0ddb1c9faf1da80d902a693a9c84b9673f5524abf1fa3ce46349".*, .n = 1, .amount = 20000, .keypath = try KeyPath(5).fromStr("84'/1'/0'/0/0") };
-//    const o3 = Output{ .txid = "c0483c7c93aaefd5ee008cbec6f114d45d7502ffd8c427e9aac13eec32748673".*, .n = 1, .amount = 30000, .keypath = try KeyPath(5).fromStr("84'/1'/0'/0/0") };
-//    const d1 = try TxOutput.init(allocator, 29000, "");
-//    defer d1.deinit();
-//    const d2 = try TxOutput.init(allocator, 3000, "");
-//    defer d2.deinit();
-//
-//    var outputs1: [2]Output = [2]Output{ o1, o2 };
-//    var destinations: [2]TxOutput = [2]TxOutput{ d1, d2 };
-//    try std.testing.expectError(TxError.AmountTooLowError, createTx(allocator, &database, &outputs1, &destinations));
-//
-//    var outputs2: [3]Output = [3]Output{ o1, o2, o3 };
-//    const tx = try createTx(allocator, &database, &outputs2, &destinations);
-//    defer tx.deinit();
-//    try std.testing.expectEqual(tx.inputs.items.len, 3);
-//    try std.testing.expectEqual(tx.outputs.items.len, 2);
-//    try std.testing.expectEqual(tx.witness.items.len, 3);
-//    try std.testing.expectEqual(tx.witness.items[0].stackitems.items.len, 2);
-//}
+    var totalAmountInputs: u64 = 0;
+    for (inputs) |input| {
+        totalAmountInputs += input.prevout.?.amount;
+    }
+
+    var totalAmountOutputs: u64 = 0;
+    for (outputs) |output| {
+        totalAmountOutputs += output.amount;
+    }
+
+    if (totalAmountInputs < totalAmountOutputs) {
+        return TxError.AmountTooLowError;
+    }
+
+    const locktime = 0;
+    const marker = 0;
+    const flag = 1;
+    const version = 2;
+
+    var tx = Transaction.init(allocator, version, locktime, marker, flag);
+    for (inputs) |input| {
+        // We do not sign this input because we're going to use segwit
+        // This sequence will enable locktime, rbf and relative locktime
+        try tx.addInput(input);
+    }
+    for (outputs) |output| {
+        try tx.addOutput(output);
+    }
+
+    return tx;
+}
+
+test "createTx" {
+    const allocator = std.testing.allocator;
+    const prevout = Output{ .txid = "ac4994014aa36b7f53375658ef595b3cb2891e1735fe5b441686f5e53338e76a".*, .n = 1, .amount = 30000 };
+    const input = try TxInput.init(allocator, prevout, "", 4294967295);
+    var inputs = [1]TxInput{input};
+    const scriptubkeyhex = "76a914ce72abfd0e6d9354a660c18f2825eb392f060fdc88ac";
+
+    var scriptBytes: [25]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&scriptBytes, scriptubkeyhex);
+    const output = try TxOutput.init(allocator, 20000, &scriptBytes);
+    var outputs = [1]TxOutput{output};
+
+    const privkeyhex: [64]u8 = "7306f5092467981e66eff98b6b03bfe925922c5ecfaf14c4257ef18e81becf1f".*;
+    var privkey: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&privkey, &privkeyhex);
+    const pubkey = bip32.generatePublicKey(privkey);
+    var pubkeys = std.AutoHashMap([72]u8, bip32.PublicKey).init(allocator);
+    const key: [72]u8 = "ac4994014aa36b7f53375658ef595b3cb2891e1735fe5b441686f5e53338e76a01000000".*;
+    try pubkeys.put(key, pubkey);
+    defer pubkeys.deinit();
+
+    var tx = try createTx(allocator, &inputs, &outputs);
+    defer tx.deinit();
+
+    const expectedTxId = "4ed74b96ff867d0469b3e56e64a2c2ccf0a95f4428e662977970fe9602bcf704";
+    const txid = try tx.getTXID();
+    try std.testing.expectEqualStrings(expectedTxId, &txid);
+}
+
+// [72]u8 = 64 txid + 8 vout
+pub fn signTx(allocator: std.mem.Allocator, tx: *Transaction, privkey: [32]u8, pubkeys: std.AutoHashMap([72]u8, bip32.PublicKey), comptime nonce: ?u256) !void {
+    const inputspreimagehash = try getTxInputsPreImageHash(allocator, tx.inputs.items);
+    const inputssequencespreimagehash = try getTxInputsSequencesPreImageHash(allocator, tx.inputs.items);
+    const outputspreimagehash = try getTxOutputsPreImageHash(allocator, tx.outputs.items);
+    const sighashtype: u256 = 1;
+
+    // Add witness, support only p2wpkh atm
+    for (0..tx.inputs.items.len) |i| {
+        const input = tx.inputs.items[i];
+        var key: [72]u8 = undefined;
+        var vouthex: [8]u8 = undefined;
+        try utils.intToHexStr(u32, @byteSwap(input.prevout.?.n), &vouthex);
+        _ = try std.fmt.bufPrint(&key, "{s}{s}", .{ input.prevout.?.txid, vouthex });
+        const pubkey = pubkeys.get(key).?;
+        const preimagehash = try getPreImageHash(tx.version, inputspreimagehash, inputssequencespreimagehash, outputspreimagehash, tx.locktime, input, pubkey, sighashtype);
+        const sighashtype8: u8 = 1;
+        const witness = try createWitness(allocator, preimagehash, privkey, pubkey, sighashtype8, nonce);
+        try tx.addWitness(witness);
+    }
+}
+
+test "signTx" {
+    const allocator = std.testing.allocator;
+    const prevout = Output{ .txid = "ac4994014aa36b7f53375658ef595b3cb2891e1735fe5b441686f5e53338e76a".*, .n = 1, .amount = 30000 };
+    const input = try TxInput.init(allocator, prevout, "", 4294967295);
+    var inputs = [1]TxInput{input};
+    const scriptubkeyhex = "76a914ce72abfd0e6d9354a660c18f2825eb392f060fdc88ac";
+
+    var scriptBytes: [25]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&scriptBytes, scriptubkeyhex);
+    const output = try TxOutput.init(allocator, 20000, &scriptBytes);
+    var outputs = [1]TxOutput{output};
+
+    const privkeyhex: [64]u8 = "7306f5092467981e66eff98b6b03bfe925922c5ecfaf14c4257ef18e81becf1f".*;
+    var privkey: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&privkey, &privkeyhex);
+    const pubkey = bip32.generatePublicKey(privkey);
+    var pubkeys = std.AutoHashMap([72]u8, bip32.PublicKey).init(allocator);
+    const key: [72]u8 = "ac4994014aa36b7f53375658ef595b3cb2891e1735fe5b441686f5e53338e76a01000000".*;
+    try pubkeys.put(key, pubkey);
+    defer pubkeys.deinit();
+
+    var tx = try createTx(allocator, &inputs, &outputs);
+    defer tx.deinit();
+
+    try signTx(allocator, &tx, privkey, pubkeys, 123456789);
+    var rawtx: [194]u8 = undefined;
+    try encodeTx(allocator, &rawtx, tx, true);
+    const expectedRawTxHex = "02000000000101ac4994014aa36b7f53375658ef595b3cb2891e1735fe5b441686f5e53338e76a0100000000ffffffff01204e0000000000001976a914ce72abfd0e6d9354a660c18f2825eb392f060fdc88ac02473044022008f4f37e2d8f74e18c1b8fde2374d5f28402fb8ab7fd1cc5b786aa40851a70cb022032b1374d1a0f125eae4f69d1bc0b7f896c964cfdba329f38a952426cf427484c012103eed0d937090cae6ffde917de8a80dc6156e30b13edd5e51e2e50d52428da1c8700000000";
+    var expectedRawTx: [194]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&expectedRawTx, expectedRawTxHex);
+    const expecteditem1 = "3044022008f4f37e2d8f74e18c1b8fde2374d5f28402fb8ab7fd1cc5b786aa40851a70cb022032b1374d1a0f125eae4f69d1bc0b7f896c964cfdba329f38a952426cf427484c01";
+    const expecteditem2 = "03eed0d937090cae6ffde917de8a80dc6156e30b13edd5e51e2e50d52428da1c87";
+    try std.testing.expectEqualStrings(expecteditem1, tx.witness.items[0].stackitems.items[0].item);
+    try std.testing.expectEqualStrings(expecteditem2, tx.witness.items[0].stackitems.items[1].item);
+    try std.testing.expectEqualSlices(u8, &expectedRawTx, &rawtx);
+}
 
 pub fn decodeRawTx(allocator: std.mem.Allocator, raw: []const u8) !Transaction {
     var bytes: []u8 = try allocator.alloc(u8, raw.len / 2);
