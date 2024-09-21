@@ -4,6 +4,7 @@ const modinv = @import("math.zig").modinv;
 const math = std.math;
 const Secp256k1NumberOfPoints = @import("secp256k1.zig").NUMBER_OF_POINTS;
 const Secp256k1Point = @import("secp256k1.zig").Point;
+const is_test = @import("builtin").is_test;
 
 fn intToHexStr(comptime T: type, data: T, buffer: []u8) !void {
     // Number of characters to represent data in hex
@@ -50,6 +51,9 @@ pub const Signature = struct {
 // nonce is used in tests to recreate deterministic signature.
 // I don't like this parameter, using the same nonce can expose the private key, but I havent found any better solution
 pub fn sign(pk: [32]u8, z: [32]u8, comptime nonce: ?u256) Signature {
+    comptime if (nonce == null and is_test == false) {
+        unreachable;
+    };
     const n = Secp256k1NumberOfPoints;
     while (true) {
         const k: u256 = if (comptime nonce != null) nonce.? else rand.intRangeAtMost(u256, 0, n - 1);
