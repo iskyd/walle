@@ -3,9 +3,9 @@ const powmod = @import("math.zig").powmod;
 const modinv = @import("math.zig").modinv;
 const math = @import("std").math;
 
-const PRIME_MODULUS: u256 = @intCast(math.pow(u512, 2, 256) - math.pow(u256, 2, 32) - math.pow(u256, 2, 9) - math.pow(u256, 2, 8) - math.pow(u256, 2, 7) - math.pow(u256, 2, 6) - math.pow(u256, 2, 4) - 1);
-pub const NUMBER_OF_POINTS = 115792089237316195423570985008687907852837564279074904382605163141518161494337;
-const BASE_POINT = Point{ .x = 55066263022277343669578718895168534326250603453777594175500187360389116729240, .y = 32670510020758816978083085130507043184471273380659243275938904335757337482424 };
+const prime_modulus: u256 = @intCast(math.pow(u512, 2, 256) - math.pow(u256, 2, 32) - math.pow(u256, 2, 9) - math.pow(u256, 2, 8) - math.pow(u256, 2, 7) - math.pow(u256, 2, 6) - math.pow(u256, 2, 4) - 1);
+pub const number_of_points = 115792089237316195423570985008687907852837564279074904382605163141518161494337;
+pub const base_point = Point{ .x = 55066263022277343669578718895168534326250603453777594175500187360389116729240, .y = 32670510020758816978083085130507043184471273380659243275938904335757337482424 };
 
 pub const Point = struct {
     x: u256,
@@ -17,10 +17,10 @@ pub const Point = struct {
 
     pub fn double(self: *Point) void {
         // slope = (3x^2 + a) / 2y
-        const slope = @mod(((3 * math.pow(i1024, self.x, 2)) * modinv(i1024, 2 * @as(u512, self.y), PRIME_MODULUS)), PRIME_MODULUS);
+        const slope = @mod(((3 * math.pow(i1024, self.x, 2)) * modinv(i1024, 2 * @as(u512, self.y), prime_modulus)), prime_modulus);
 
-        const x: u256 = @intCast(@mod(math.pow(i1024, slope, 2) - (2 * @as(u512, self.x)), PRIME_MODULUS));
-        const y: u256 = @intCast(@mod(slope * (@as(i512, self.x) - x) - self.y, PRIME_MODULUS));
+        const x: u256 = @intCast(@mod(math.pow(i1024, slope, 2) - (2 * @as(u512, self.x)), prime_modulus));
+        const y: u256 = @intCast(@mod(slope * (@as(i512, self.x) - x) - self.y, prime_modulus));
 
         self.x = x;
         self.y = y;
@@ -30,9 +30,9 @@ pub const Point = struct {
         if (self.isEqual(other)) {
             self.double();
         } else {
-            const slope = @mod(((@as(i512, self.y) - other.y) * modinv(i1024, @as(i512, self.x) - other.x, PRIME_MODULUS)), PRIME_MODULUS);
-            const x: u256 = @intCast(@mod(math.pow(i1024, slope, 2) - self.x - other.x, PRIME_MODULUS));
-            const y: u256 = @intCast(@mod((slope * (@as(i512, self.x) - x)) - self.y, PRIME_MODULUS));
+            const slope = @mod(((@as(i512, self.y) - other.y) * modinv(i1024, @as(i512, self.x) - other.x, prime_modulus)), prime_modulus);
+            const x: u256 = @intCast(@mod(math.pow(i1024, slope, 2) - self.x - other.x, prime_modulus));
+            const y: u256 = @intCast(@mod((slope * (@as(i512, self.x) - x)) - self.y, prime_modulus));
 
             self.x = x;
             self.y = y;
@@ -61,16 +61,12 @@ pub const Point = struct {
     pub fn fromCompressed(compressed: [33]u8) !Point {
         const parity = std.mem.readInt(u8, compressed[0..1], .big);
         const x = std.mem.readInt(u256, compressed[1..], .big);
-        const y_sq = @mod(powmod(x, 3, PRIME_MODULUS) + 7, NUMBER_OF_POINTS);
-        var y = powmod(y_sq, (PRIME_MODULUS + 1) / 4, PRIME_MODULUS);
+        const y_sq = @mod(powmod(x, 3, prime_modulus) + 7, number_of_points);
+        var y = powmod(y_sq, (prime_modulus + 1) / 4, prime_modulus);
         if (@mod(y, 2) != @mod(parity, 2)) {
-            y = @intCast(PRIME_MODULUS - y);
+            y = @intCast(prime_modulus - y);
         }
         return Point{ .x = x, .y = y };
-    }
-
-    pub fn getBasePoint() Point {
-        return Point{ .x = BASE_POINT.x, .y = BASE_POINT.y };
     }
 };
 

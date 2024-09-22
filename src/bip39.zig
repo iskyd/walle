@@ -3,7 +3,7 @@ const assert = std.debug.assert;
 const utils = @import("utils.zig");
 const builtin = @import("builtin");
 
-const wordseparator = if (builtin.os.tag == .windows) "\r\n" else "\n";
+const word_separator = if (builtin.os.tag == .windows) "\r\n" else "\n";
 
 pub const WordList = struct {
     allocator: std.mem.Allocator,
@@ -20,7 +20,7 @@ pub const WordList = struct {
     }
 
     pub fn getWords(self: WordList) [2048][]const u8 {
-        var lines = std.mem.split(u8, self.data, wordseparator);
+        var lines = std.mem.split(u8, self.data, word_separator);
         var words: [2048][]const u8 = undefined;
         var index: u16 = 0;
 
@@ -51,14 +51,14 @@ pub fn generateMnemonic(allocator: std.mem.Allocator, entropy: []u8, wordlist: W
     @memcpy(concatenated[0..entropy.len], entropy);
     @memcpy(concatenated[entropy.len..], checksum[0..checksum_bits]);
 
-    const u_entropy: u264 = @byteSwap(@as(*align(1) u264, @ptrCast(concatenated.ptr)).*);
+    const entropy_num: u264 = @byteSwap(@as(*align(1) u264, @ptrCast(concatenated.ptr)).*);
     const mask: u64 = (1 << 11) - 1;
     const words = wordlist.getWords();
 
     for (0..buffer.len) |i| {
         // u_entropy is 264 bits
         const s = 264 - ((@as(u8, @intCast(i)) + 1) * @as(u9, @intCast(11)));
-        const bits = u_entropy >> s & mask;
+        const bits = entropy_num >> s & mask;
         buffer[i] = try allocator.dupe(u8, words[@intCast(bits)]);
     }
 }

@@ -1,15 +1,14 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const bip32 = @import("bip32.zig");
-const Network = @import("const.zig").Network;
 const utils = @import("utils.zig");
 
-pub const BIP_44_PURPOSE = 44;
-pub const BIP_84_PURPOSE = 84; // Segwit
-pub const CHANGE_EXTERNAL_CHAIN = 0; // Address visible outside the wallet
-pub const CHANGE_INTERNAL_CHAIN = 1; // Not visible outside the wallet, return transaction change
-pub const BITCOIN_COIN_TYPE = 0;
-pub const BITCOIN_TESTNET_COIN_TYPE = 1;
+pub const bip_44_purpose = 44;
+pub const bip_84_purpose = 84; // Segwit
+pub const change_external_chain = 0; // Address visible outside the wallet
+pub const change_internal_chain = 1; // Not visible outside the wallet, return transaction change
+pub const bitcoin_coin_type = 0;
+pub const bitcoin_testnet_coin_type = 1;
 
 pub fn KeyPath(comptime depth: u8) type {
     comptime assert(depth <= 5);
@@ -18,10 +17,10 @@ pub fn KeyPath(comptime depth: u8) type {
 
         const Self = @This();
 
-        pub fn getStrCap(self: Self, comptime maxDepth: ?u8) usize {
+        pub fn getStrCap(self: Self, comptime max_depth: ?u8) usize {
             comptime {
-                if (maxDepth != null) {
-                    assert(depth >= maxDepth.?);
+                if (max_depth != null) {
+                    assert(depth >= max_depth.?);
                 }
             }
             var cap: usize = self.path.len - 1; // number of /
@@ -32,8 +31,8 @@ pub fn KeyPath(comptime depth: u8) type {
                 if (i <= 2) {
                     cap += 1;
                 }
-                if (comptime maxDepth != null) {
-                    if (maxDepth.? <= i + 2) {
+                if (comptime max_depth != null) {
+                    if (max_depth.? <= i + 2) {
                         break;
                     }
                 }
@@ -42,13 +41,13 @@ pub fn KeyPath(comptime depth: u8) type {
             return cap;
         }
 
-        pub fn toStr(self: Self, allocator: std.mem.Allocator, comptime maxDepth: ?u8) ![]u8 {
+        pub fn toStr(self: Self, allocator: std.mem.Allocator, comptime max_depth: ?u8) ![]u8 {
             comptime {
-                if (maxDepth != null) {
-                    assert(depth >= maxDepth.?);
+                if (max_depth != null) {
+                    assert(depth >= max_depth.?);
                 }
             }
-            var buffer = try allocator.alloc(u8, self.getStrCap(maxDepth));
+            var buffer = try allocator.alloc(u8, self.getStrCap(max_depth));
             var current: usize = 0;
             for (self.path, 0..) |d, i| {
                 const currentcap = if (d != 0) std.math.log10(d) + 1 else 1;
@@ -59,8 +58,8 @@ pub fn KeyPath(comptime depth: u8) type {
                     current += 1;
                 }
 
-                if (comptime maxDepth != null) {
-                    if (maxDepth.? <= i + 1) {
+                if (comptime max_depth != null) {
+                    if (max_depth.? <= i + 1) {
                         break;
                     }
                 }
@@ -78,8 +77,8 @@ pub fn KeyPath(comptime depth: u8) type {
             var path: [depth]u32 = undefined;
             var current: usize = 0;
             for (0..depth) |i| {
-                const delimiterIndex: ?usize = std.mem.indexOf(u8, str[current..], "/");
-                if (delimiterIndex == null) {
+                const delimiter_index: ?usize = std.mem.indexOf(u8, str[current..], "/");
+                if (delimiter_index == null) {
                     // We are at the last child or we have an invalid keypath
                     if (i == depth - 1) {
                         var end = str.len;
@@ -92,7 +91,7 @@ pub fn KeyPath(comptime depth: u8) type {
                     }
                     return error.InvalidKeyPath;
                 }
-                var end = current + delimiterIndex.?;
+                var end = current + delimiter_index.?;
                 if (i <= 2) {
                     assert(str[end - 1] == '\'');
                     end -= 1; // -1 because we need to remove the hardened symbol '
@@ -130,66 +129,66 @@ pub const Descriptor = struct {
 
 // Purpose, cointype, and account use hardened derivation
 // 2147483648 is added to the passed values for this fields.
-pub fn generateAccount(epk: bip32.ExtendedPrivateKey, purpose: u32, cointype: u32, account: u32, change: u32, index: u32) !bip32.ExtendedPublicKey {
-    const purposeepk = try bip32.deriveHardenedChild(epk, purpose + 2147483648);
-    const cointypeepk = try bip32.deriveHardenedChild(purposeepk, cointype + 2147483648);
+pub fn generateAccount(extended_privkey: bip32.ExtendedPrivateKey, purpose: u32, cointype: u32, account: u32, change: u32, index: u32) !bip32.ExtendedPublicKey {
+    const purpose_extended_privkey = try bip32.deriveHardenedChild(extended_privkey, purpose + 2147483648);
+    const cointype_extended_privkey = try bip32.deriveHardenedChild(purpose_extended_privkey, cointype + 2147483648);
 
     // Add check that avoid creation of this account if previous account has no transaction associated
     // as specified in bip44 https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki#account
-    const accountepk = try bip32.deriveHardenedChild(cointypeepk, account + 2147483648);
+    const account_extended_privkey = try bip32.deriveHardenedChild(cointype_extended_privkey, account + 2147483648);
 
-    const public = bip32.generatePublicKey(accountepk.privatekey);
-    const accountextendedpublic = bip32.ExtendedPublicKey{ .key = public, .chaincode = accountepk.chaincode };
+    const pubkey = bip32.generatePublicKey(account_extended_privkey.privatekey);
+    const account_extended_pubkey = bip32.ExtendedPublicKey{ .key = pubkey, .chaincode = account_extended_privkey.chaincode };
 
-    const changepk = try bip32.deriveChildFromExtendedPublicKey(accountextendedpublic, change);
-    const indexepk = try bip32.deriveChildFromExtendedPublicKey(changepk, index);
+    const change_extended_pubkey = try bip32.deriveChildFromExtendedPublicKey(account_extended_pubkey, change);
+    const index_extended_pubkey = try bip32.deriveChildFromExtendedPublicKey(change_extended_pubkey, index);
 
-    return indexepk;
+    return index_extended_pubkey;
 }
 
 // Purpose, cointype, and account use hardened derivation
 // 2147483648 is added to the passed values for this fields.
-pub fn generateAccountPrivate(epk: bip32.ExtendedPrivateKey, purpose: u32, cointype: u32, account: u32, change: u32, index: u32) !bip32.ExtendedPrivateKey {
-    const purposeepk = try bip32.deriveHardenedChild(epk, purpose + 2147483648);
-    const cointypeepk = try bip32.deriveHardenedChild(purposeepk, cointype + 2147483648);
+pub fn generateAccountPrivate(extended_privkey: bip32.ExtendedPrivateKey, purpose: u32, cointype: u32, account: u32, change: u32, index: u32) !bip32.ExtendedPrivateKey {
+    const purpose_extended_privkey = try bip32.deriveHardenedChild(extended_privkey, purpose + 2147483648);
+    const cointype_extended_privkey = try bip32.deriveHardenedChild(purpose_extended_privkey, cointype + 2147483648);
 
     // Add check that avoid creation of this account if previous account has no transaction associated
     // as specified in bip44 https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki#account
-    const accountepk = try bip32.deriveHardenedChild(cointypeepk, account + 2147483648);
+    const account_extended_privkey = try bip32.deriveHardenedChild(cointype_extended_privkey, account + 2147483648);
 
-    const changepk = try bip32.deriveChildFromExtendedPrivateKey(accountepk, change);
-    const indexepk = try bip32.deriveChildFromExtendedPrivateKey(changepk, index);
+    const change_extended_privkey = try bip32.deriveChildFromExtendedPrivateKey(account_extended_privkey, change);
+    const index_extended_privkey = try bip32.deriveChildFromExtendedPrivateKey(change_extended_privkey, index);
 
-    return indexepk;
+    return index_extended_privkey;
 }
 
-pub fn generatePublicFromAccountPublicKey(pk: bip32.ExtendedPublicKey, change: u32, index: u32) !bip32.PublicKey {
-    const changepk = try bip32.deriveChildFromExtendedPublicKey(pk, change);
-    const indexepk = try bip32.deriveChildFromExtendedPublicKey(changepk, index);
+pub fn generatePublicFromAccountPublicKey(extended_pubkey: bip32.ExtendedPublicKey, change: u32, index: u32) !bip32.PublicKey {
+    const change_extended_pubkey = try bip32.deriveChildFromExtendedPublicKey(extended_pubkey, change);
+    const index_extended_pubkey = try bip32.deriveChildFromExtendedPublicKey(change_extended_pubkey, index);
 
-    return indexepk.key;
+    return index_extended_pubkey.key;
 }
 
 test "generateAccount" {
-    const serializedAddr = "tprv8ZgxMBicQKsPefj8cBDzcXJYcnvWBLQwG9sAvKyAYRPiLtdZXvdAmqtjzeHbX7ZX2LY8Sfb7SaLSJbGCFBPMFZdnmv4D7UebvyLTC974BA4".*;
-    const masterExtendedPrivate = try bip32.ExtendedPrivateKey.fromAddress(serializedAddr);
-    const public = try generateAccount(masterExtendedPrivate, BIP_84_PURPOSE, 1, 0, 0, 0);
-    const compressed = try public.key.toStrCompressed();
+    const addr_serialized = "tprv8ZgxMBicQKsPefj8cBDzcXJYcnvWBLQwG9sAvKyAYRPiLtdZXvdAmqtjzeHbX7ZX2LY8Sfb7SaLSJbGCFBPMFZdnmv4D7UebvyLTC974BA4".*;
+    const master_extended_privkey = try bip32.ExtendedPrivateKey.fromAddress(addr_serialized);
+    const extended_pubkey = try generateAccount(master_extended_privkey, bip_84_purpose, 1, 0, 0, 0);
+    const compressed = try extended_pubkey.key.toStrCompressed();
     const expected = "03c260ee3c4975bf34ae63854c0f9309302d27cf588984ec943c2b1139aa7984ed";
     try std.testing.expectEqualStrings(expected, &compressed);
 }
 
 test "generatePrivateAccount" {
-    const serializedAddr = "tprv8ZgxMBicQKsPefj8cBDzcXJYcnvWBLQwG9sAvKyAYRPiLtdZXvdAmqtjzeHbX7ZX2LY8Sfb7SaLSJbGCFBPMFZdnmv4D7UebvyLTC974BA4".*;
-    const masterExtendedPrivate = try bip32.ExtendedPrivateKey.fromAddress(serializedAddr);
-    const private = try generateAccountPrivate(masterExtendedPrivate, BIP_84_PURPOSE, 1, 0, 0, 0);
-    const public = bip32.generatePublicKey(private.privatekey);
+    const addr_serialized = "tprv8ZgxMBicQKsPefj8cBDzcXJYcnvWBLQwG9sAvKyAYRPiLtdZXvdAmqtjzeHbX7ZX2LY8Sfb7SaLSJbGCFBPMFZdnmv4D7UebvyLTC974BA4".*;
+    const master_extended_privkey = try bip32.ExtendedPrivateKey.fromAddress(addr_serialized);
+    const extended_privkey = try generateAccountPrivate(master_extended_privkey, bip_84_purpose, 1, 0, 0, 0);
+    const public = bip32.generatePublicKey(extended_privkey.privatekey);
     const compressed = try public.toStrCompressed();
     const expected = "03c260ee3c4975bf34ae63854c0f9309302d27cf588984ec943c2b1139aa7984ed";
     try std.testing.expectEqualStrings(expected, &compressed);
 }
 
-test "keypathtest" {
+test "keypath" {
     const allocator = std.testing.allocator;
     const k1 = try KeyPath(5).fromStr("84'/0'/0'/0/1");
     try std.testing.expectEqual(k1.path[0], 84);

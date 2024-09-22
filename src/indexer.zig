@@ -16,25 +16,6 @@ const rpc = @import("rpc/rpc.zig");
 const db = @import("db/db.zig");
 const sqlite = @import("sqlite");
 
-const TOTAL_STARTING_KEYS = 5; // 20
-
-const P2WPKH_SCRIPT_PREFIX = "0014".*;
-
-pub fn outputToUniqueHash(txid: [64]u8, n: u32) ![64]u8 {
-    var h1: [32]u8 = undefined;
-    std.crypto.hash.sha2.Sha256.hash(&txid, &h1, .{});
-    var h2: [32]u8 = undefined;
-    var nhex: [8]u8 = undefined;
-    try utils.intToHexStr(u32, n, &nhex);
-    std.crypto.hash.sha2.Sha256.hash(&nhex, &h2, .{});
-    const nh1 = std.mem.readInt(u256, &h1, .big);
-    const nh2 = std.mem.readInt(u256, &h2, .big);
-    const res: u256 = nh1 ^ (nh2 << 1);
-    var hex: [64]u8 = undefined;
-    try utils.intToHexStr(u256, res, &hex);
-    return hex;
-}
-
 pub fn main() !void {
     std.debug.print("WALL-E. Bitcoin Wallet written in Zig.\nIndexer...\n", .{});
     var database = try db.openDB();
@@ -79,13 +60,13 @@ pub fn main() !void {
     defer allocator.free(auth);
     var client = std.http.Client{ .allocator = allocator };
     defer client.deinit();
-    const blockcount = try rpc.getBlockCount(allocator, &client, res.args.location.?, auth);
-    std.debug.print("Total blocks {d}\n", .{blockcount});
-    const currentblockcount = try db.getCurrentBlockHeigth(&database);
-    std.debug.print("Current blocks {?d}\n", .{currentblockcount});
-    if (currentblockcount != null and blockcount == currentblockcount) {
+    const block_count = try rpc.getBlockCount(allocator, &client, res.args.location.?, auth);
+    std.debug.print("Total blocks {d}\n", .{block_count});
+    const current_block_count = try db.getCurrentBlockHeigth(&database);
+    std.debug.print("Current blocks {?d}\n", .{current_block_count});
+    if (current_block_count != null and block_count == current_block_count) {
         std.debug.print("Already indexed, do nothing\n", .{});
-        const balance = try db.getBalance(&database, currentblockcount.?);
+        const balance = try db.getBalance(&database, current_block_count.?);
         std.debug.print("Current balance: {d}\n", .{balance});
         return;
     }
@@ -100,107 +81,106 @@ pub fn main() !void {
 
     std.debug.print("init key generation\n", .{});
     // use hashmap to store public key hash for fast check
-    var publickeys = std.AutoHashMap([40]u8, KeyPath(5)).init(allocator);
-    defer publickeys.deinit();
+    var pubkeys = std.AutoHashMap([40]u8, KeyPath(5)).init(allocator);
+    defer pubkeys.deinit();
     var keypaths = std.AutoHashMap(KeyPath(5), Descriptor).init(allocator);
     defer keypaths.deinit();
-    var descriptorsmap = std.AutoHashMap(KeyPath(3), [111]u8).init(allocator);
-    defer descriptorsmap.deinit();
+    var descriptors_map = std.AutoHashMap(KeyPath(3), [111]u8).init(allocator);
+    defer descriptors_map.deinit();
     for (descriptors) |descriptor| {
-        try descriptorsmap.put(descriptor.keypath, descriptor.extended_key);
+        try descriptors_map.put(descriptor.keypath, descriptor.extended_key);
     }
 
-    const accountpublickeys = try allocator.alloc(ExtendedPublicKey, descriptors.len);
-    defer allocator.free(accountpublickeys);
-    const usedkeypaths = try db.getUsedKeyPaths(allocator, &database);
-    defer allocator.free(usedkeypaths);
+    const account_pubkeys = try allocator.alloc(ExtendedPublicKey, descriptors.len);
+    defer allocator.free(account_pubkeys);
+    const keypaths_used = try db.getUsedKeyPaths(allocator, &database);
+    defer allocator.free(keypaths_used);
 
-    for (usedkeypaths) |keypath| {
+    for (keypaths_used) |keypath| {
         const existing = keypaths.get(keypath);
         if (existing != null) {
             continue;
         }
 
         const d = KeyPath(3){ .path = [3]u32{ keypath.path[0], keypath.path[1], keypath.path[3] } };
-        const extendedaddr = descriptorsmap.get(d);
-        if (extendedaddr == null) {
+        const pubkey_addr = descriptors_map.get(d);
+        if (pubkey_addr == null) {
             std.debug.print("descriptor not found for path {d}'/{d}'/{d}'\n", .{ d.path[0], d.path[1], d.path[2] });
             continue;
         }
 
         // Generate the current used keypath and public key
-        const extended = try ExtendedPublicKey.fromAddress(extendedaddr.?);
-        try keypaths.put(keypath, Descriptor{ .extended_key = extendedaddr.?, .keypath = d });
-        const public = try bip44.generatePublicFromAccountPublicKey(extended, keypath.path[3], keypath.path[4]);
-        const publichash = try public.toHashHex();
-        try publickeys.put(publichash, keypath);
+        const extended_pubkey = try ExtendedPublicKey.fromAddress(pubkey_addr.?);
+        try keypaths.put(keypath, Descriptor{ .extended_key = pubkey_addr.?, .keypath = d, .private = false });
+        const pubkey = try bip44.generatePublicFromAccountPublicKey(extended_pubkey, keypath.path[3], keypath.path[4]);
+        const pubkey_hash = try pubkey.toHashHex();
+        try pubkeys.put(pubkey_hash, keypath);
 
         // Generate the next one
-        const nextpublic = try bip44.generatePublicFromAccountPublicKey(extended, keypath.path[3], keypath.path[4] + 1);
-        const nextpublichash = try nextpublic.toHashHex();
-        try publickeys.put(nextpublichash, keypath.getNext(1));
+        const next_pubkey = try bip44.generatePublicFromAccountPublicKey(extended_pubkey, keypath.path[3], keypath.path[4] + 1);
+        const next_pubkey_hash = try next_pubkey.toHashHex();
+        try pubkeys.put(next_pubkey_hash, keypath.getNext(1));
     }
 
     for (descriptors) |descriptor| {
-        const accountpublickey = try ExtendedPublicKey.fromAddress(descriptor.extended_key);
+        const account_pubkey = try ExtendedPublicKey.fromAddress(descriptor.extended_key);
 
-        const keypathinternal = KeyPath(5){ .path = [5]u32{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], bip44.CHANGE_INTERNAL_CHAIN, 0 } };
-        const existinginternal = keypaths.get(keypathinternal);
-        if (existinginternal == null) {
-            const internal = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_INTERNAL_CHAIN, 0);
-            const internalhash = try internal.toHashHex();
-            try keypaths.put(keypathinternal, descriptor);
-            try publickeys.put(internalhash, keypathinternal);
+        const keypath_internal = KeyPath(5){ .path = [5]u32{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], bip44.change_internal_chain, 0 } };
+        if (keypaths.get(keypath_internal) == null) {
+            const internal_pubkey = try bip44.generatePublicFromAccountPublicKey(account_pubkey, bip44.change_internal_chain, 0);
+            const internal_pubkey_hash = try internal_pubkey.toHashHex();
+            try keypaths.put(keypath_internal, descriptor);
+            try pubkeys.put(internal_pubkey_hash, keypath_internal);
         }
 
-        const keypathexternal = KeyPath(5){ .path = [5]u32{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], bip44.CHANGE_EXTERNAL_CHAIN, 0 } };
-        const existingexternal = keypaths.get(keypathexternal);
-        if (existingexternal == null) {
-            const external = try bip44.generatePublicFromAccountPublicKey(accountpublickey, bip44.CHANGE_EXTERNAL_CHAIN, 0);
-            const externalhash = try external.toHashHex();
-            try keypaths.put(keypathexternal, descriptor);
-            try publickeys.put(externalhash, keypathexternal);
+        const keypath_external = KeyPath(5){ .path = [5]u32{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], bip44.change_external_chain, 0 } };
+        if (keypaths.get(keypath_external) == null) {
+            const external_pubkey = try bip44.generatePublicFromAccountPublicKey(account_pubkey, bip44.change_external_chain, 0);
+            const external_pubkey_hash = try external_pubkey.toHashHex();
+            try keypaths.put(keypath_external, descriptor);
+            try pubkeys.put(external_pubkey_hash, keypath_external);
         }
     }
 
     std.debug.print("keys generated\n", .{});
 
-    var progress = std.Progress{};
-    const progressbar = progress.start("indexing", blockcount);
+    var progress = std.Progress.start(.{});
+    const progressbar = progress.start("indexing", block_count);
     defer progressbar.end();
 
-    const start: usize = if (currentblockcount == null) 0 else currentblockcount.?;
+    const start: usize = if (current_block_count == null) 0 else current_block_count.?;
 
-    for (start..blockcount + 1) |i| {
-        var outputs = std.AutoHashMap([64]u8, Output).init(aa);
+    for (start..block_count + 1) |i| {
+        // [72]u8 is for txid + vout in hex format
+        var outputs = std.AutoHashMap([72]u8, Output).init(aa);
         // [64]u8 is for txid, bool is for isCoinbase
-        var relevanttransactions = std.AutoHashMap([64]u8, bool).init(aa);
+        var relevant_transactions = std.AutoHashMap([64]u8, bool).init(aa);
         const blockhash = try rpc.getBlockHash(allocator, &client, res.args.location.?, auth, i);
 
-        const rawtransactions = try rpc.getBlockRawTx(aa, &client, res.args.location.?, auth, blockhash);
-        var rawtransactionsmap = std.AutoHashMap([64]u8, []u8).init(aa);
+        const raw_transactions = try rpc.getBlockRawTx(aa, &client, res.args.location.?, auth, blockhash);
+        var raw_transactions_map = std.AutoHashMap([64]u8, []u8).init(aa);
 
-        const blocktransactions = try aa.alloc(tx.Transaction, rawtransactions.len);
-        for (rawtransactions, 0..) |raw, j| {
-            const transaction = try tx.decodeRawTx(aa, raw);
-            blocktransactions[j] = transaction;
+        const block_transactions = try aa.alloc(tx.Transaction, raw_transactions.len);
+        for (raw_transactions, 0..) |tx_raw, j| {
+            const transaction = try tx.decodeRawTx(aa, tx_raw);
+            block_transactions[j] = transaction;
         }
 
         // Following BIP44 a wallet must not allow the derivation of a new address if the previous one is not used
         // So we start by creating 1 new key (both internal and external)
         // Everytime we found a new output we need to generate the next key and re-index the same block to be sure all outputs are included
         while (true) blk: {
-            for (blocktransactions, 0..) |transaction, k| {
-                const raw = rawtransactions[k];
+            for (block_transactions, 0..) |transaction, k| {
+                const raw = raw_transactions[k];
                 const txid = try transaction.getTXID();
-                try rawtransactionsmap.put(txid, raw);
+                try raw_transactions_map.put(txid, raw);
 
-                const txoutputs = try getOutputsFor(aa, transaction, publickeys);
+                const txoutputs = try getOutputsFor(aa, transaction, pubkeys);
                 if (txoutputs.items.len == 0) {
                     break;
                 }
 
-                _ = try relevanttransactions.getOrPutValue(txid, transaction.isCoinbase());
+                _ = try relevant_transactions.getOrPutValue(txid, transaction.isCoinbase());
 
                 for (0..txoutputs.items.len) |j| {
                     const txoutput = txoutputs.items[j];
@@ -211,16 +191,20 @@ pub fn main() !void {
 
                     // If we are generating a new key and the output is new we start re-indexing the block
                     // This ensure the fact that we collect all the outputs since the new key could have been used in previous tx in the same block
-                    const uniquehash = try outputToUniqueHash(txoutput.txid, txoutput.n);
-                    const o = try outputs.getOrPut(uniquehash);
+                    var vout_hex: [8]u8 = undefined;
+                    try utils.intToHexStr(u32, txoutput.vout, &vout_hex);
+                    var key: [72]u8 = undefined;
+                    _ = try std.fmt.bufPrint(&key, "{s}{s}", .{ txoutput.txid, vout_hex });
+
+                    const o = try outputs.getOrPut(key);
                     o.value_ptr.* = txoutput;
                     if (existing == null) {
                         const descriptor = keypaths.get(keypath);
                         // Generate the next key
-                        const accountpublickey = try ExtendedPublicKey.fromAddress(descriptor.?.extended_key);
-                        const key = try bip44.generatePublicFromAccountPublicKey(accountpublickey, next.path[3], next.path[4]);
-                        const keyhash = try key.toHashHex();
-                        try publickeys.put(keyhash, next);
+                        const account_pubkey = try ExtendedPublicKey.fromAddress(descriptor.?.extended_key);
+                        const next_pubkey = try bip44.generatePublicFromAccountPublicKey(account_pubkey, next.path[3], next.path[4]);
+                        const next_pubkey_hash = try next_pubkey.toHashHex();
+                        try pubkeys.put(next_pubkey_hash, next);
                         try keypaths.put(next, descriptor.?);
 
                         if (o.found_existing == false) {
@@ -233,21 +217,21 @@ pub fn main() !void {
             break;
         }
 
-        const txinputs = try getInputsFor(aa, &database, blocktransactions);
-        defer txinputs.deinit();
-        for (0..txinputs.items.len) |k| {
-            const txinput = txinputs.items[k];
-            _ = try relevanttransactions.getOrPutValue(txinput.txid, false); // false because if we are using inputs then the current tx is not coinbase
+        const tx_inputs = try getInputsFor(aa, &database, block_transactions);
+        defer tx_inputs.deinit();
+        for (0..tx_inputs.items.len) |k| {
+            const tx_input = tx_inputs.items[k];
+            _ = try relevant_transactions.getOrPutValue(tx_input.txid, false); // false because if we are using inputs then the current tx is not coinbase
         }
 
         if (outputs.count() > 0) {
             try db.saveOutputs(aa, &database, outputs);
         }
-        if (txinputs.items.len > 0) {
-            try db.saveInputs(&database, txinputs);
+        if (tx_inputs.items.len > 0) {
+            try db.saveInputs(&database, tx_inputs);
         }
-        if (relevanttransactions.count() > 0) {
-            try db.saveTransaction(&database, i, relevanttransactions, rawtransactionsmap);
+        if (relevant_transactions.count() > 0) {
+            try db.saveTransaction(&database, i, relevant_transactions, raw_transactions_map);
         }
         // Since db writes are not in a single transaction we commit block as lastest so that if we restart we dont't risk loosing informations, once block is persisted we are sure outputs, inputs and relevant transactions in that block are persisted too. We can recover from partial commit simply reindexing the block.
         try db.saveBlock(&database, blockhash, i);
@@ -261,23 +245,23 @@ pub fn main() !void {
 
 // return hex value of pubkey hash
 // Memory ownership to the caller
-fn outputToPublicKeyHash(allocator: std.mem.Allocator, output: tx.TxOutput) ![][40]u8 {
+fn outputToPubkeysHash(allocator: std.mem.Allocator, output: tx.TxOutput) ![][40]u8 {
     const s = try script.Script.decode(allocator, output.script_pubkey);
-    const publickeyshash = try s.getValues(allocator);
-    return publickeyshash;
+    const pubkey_hash = try s.getValues(allocator);
+    return pubkey_hash;
 }
 
-fn getOutputsFor(allocator: std.mem.Allocator, transaction: tx.Transaction, publickeys: std.AutoHashMap([40]u8, KeyPath(5))) !std.ArrayList(Output) {
+fn getOutputsFor(allocator: std.mem.Allocator, transaction: tx.Transaction, pubkeys: std.AutoHashMap([40]u8, KeyPath(5))) !std.ArrayList(Output) {
     var outputs = std.ArrayList(Output).init(allocator);
     for (0..transaction.outputs.items.len) |i| {
-        const txoutput = transaction.outputs.items[i];
-        const outputpubkeyshash = outputToPublicKeyHash(allocator, txoutput) catch continue; // TODO: is this the best we can do?
-        for (outputpubkeyshash) |outputpubkeyhash| {
-            const pubkey = publickeys.get(outputpubkeyhash);
+        const tx_output = transaction.outputs.items[i];
+        const output_pubkeys_hash = try outputToPubkeysHash(allocator, tx_output);
+        for (output_pubkeys_hash) |output_pubkey_hash| {
+            const pubkey = pubkeys.get(output_pubkey_hash);
             if (pubkey != null) {
                 const txid = try transaction.getTXID();
-                const n = @as(u32, @intCast(i));
-                const output = Output{ .txid = txid, .n = n, .keypath = pubkey.?, .amount = txoutput.amount, .unspent = true };
+                const vout = @as(u32, @intCast(i));
+                const output = Output{ .txid = txid, .vout = vout, .keypath = pubkey.?, .amount = tx_output.amount, .unspent = true };
                 try outputs.append(output);
                 break;
             }
@@ -295,10 +279,10 @@ fn getInputsFor(allocator: std.mem.Allocator, database: *sqlite.Db, transactions
                 continue;
             }
             const input = transaction.inputs.items[i];
-            const existing = try db.getOutput(database, input.prevout.?.txid, input.prevout.?.n);
+            const existing = try db.getOutput(database, input.prevout.?.txid, input.prevout.?.vout);
             if (existing != null) {
                 const txid = try transaction.getTXID();
-                try inputs.append(.{ .txid = txid, .outputtxid = existing.?.txid, .outputn = existing.?.n });
+                try inputs.append(.{ .txid = txid, .output_txid = existing.?.txid, .output_vout = existing.?.vout });
             }
         }
     }

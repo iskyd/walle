@@ -4,8 +4,7 @@ const utils = @import("utils.zig");
 const Network = @import("const.zig").Network;
 const script = @import("script.zig");
 const PublicKey = @import("bip32.zig").PublicKey;
-const Secp256k1Point = @import("crypto").Secp256k1Point;
-const Bech32Encoder = @import("crypto").Bech32Encoder;
+const crypto = @import("crypto");
 
 pub const Address = struct {
     val: []const u8,
@@ -22,74 +21,74 @@ pub const Address = struct {
 
 // P2PK and P2MS do not have an address
 
-pub fn deriveP2PKHAddress(allocator: std.mem.Allocator, pk: PublicKey, n: Network) !Address {
-    const pkh = try pk.toHash();
-    var pkwithprefix: [42]u8 = undefined;
+pub fn deriveP2PKHAddress(allocator: std.mem.Allocator, pubkey: PublicKey, n: Network) !Address {
+    const pubkey_hash = try pubkey.toHash();
+    var pubkey_withprefix: [42]u8 = undefined;
     _ = switch (n) {
-        Network.MAINNET => try std.fmt.bufPrint(&pkwithprefix, "00{x}", .{std.fmt.fmtSliceHexLower(&pkh)}),
-        else => _ = try std.fmt.bufPrint(&pkwithprefix, "6f{x}", .{std.fmt.fmtSliceHexLower(&pkh)}),
+        Network.mainnet => try std.fmt.bufPrint(&pubkey_withprefix, "00{x}", .{std.fmt.fmtSliceHexLower(&pubkey_hash)}),
+        else => _ = try std.fmt.bufPrint(&pubkey_withprefix, "6f{x}", .{std.fmt.fmtSliceHexLower(&pubkey_hash)}),
     };
-    var b: [21]u8 = undefined;
-    _ = try std.fmt.hexToBytes(&b, &pkwithprefix);
+    var bytes: [21]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytes, &pubkey_withprefix);
 
-    var checksum: [4]u8 = utils.calculateChecksum(&b);
+    var checksum: [4]u8 = utils.calculateChecksum(&bytes);
     var addr: [25]u8 = undefined;
-    @memcpy(addr[0..21], b[0..21]);
+    @memcpy(addr[0..21], bytes[0..21]);
     @memcpy(addr[21..25], &checksum);
 
-    const base58addr = try allocator.alloc(u8, 34);
-    try utils.toBase58(base58addr, &addr);
-    return try Address.init(allocator, base58addr);
+    const addr_base58 = try allocator.alloc(u8, 34);
+    try utils.toBase58(addr_base58, &addr);
+    return try Address.init(allocator, addr_base58);
 }
 
 pub fn deriveP2SHAddress(allocator: std.mem.Allocator, s: script.Script, n: Network) !Address {
     const cap = s.hexCapBytes();
-    const bytes = try allocator.alloc(u8, cap);
-    try s.toBytes(allocator, bytes);
-    defer allocator.free(bytes);
+    const script_bytes = try allocator.alloc(u8, cap);
+    try s.toBytes(allocator, script_bytes);
+    defer allocator.free(script_bytes);
 
-    const r = utils.hash160(bytes);
+    const r = utils.hash160(script_bytes);
     var rstr: [42]u8 = undefined;
     _ = switch (n) {
-        Network.MAINNET => try std.fmt.bufPrint(&rstr, "05{x}", .{std.fmt.fmtSliceHexLower(&r)}),
+        Network.mainnet => try std.fmt.bufPrint(&rstr, "05{x}", .{std.fmt.fmtSliceHexLower(&r)}),
         else => _ = try std.fmt.bufPrint(&rstr, "c4{x}", .{std.fmt.fmtSliceHexLower(&r)}),
     };
-    var bytes_hashed: [21]u8 = undefined;
-    _ = try std.fmt.hexToBytes(&bytes_hashed, &rstr);
-    var checksum: [32]u8 = utils.doubleSha256(&bytes_hashed);
+    var bytes: [21]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytes, &rstr);
+    var checksum: [32]u8 = utils.doubleSha256(&bytes);
     var addr: [25]u8 = undefined;
-    @memcpy(addr[0..21], bytes_hashed[0..21]);
+    @memcpy(addr[0..21], bytes[0..21]);
     @memcpy(addr[21..], checksum[0..4]);
 
     return switch (n) {
-        Network.MAINNET => {
-            const base58addr = try allocator.alloc(u8, 34);
-            try utils.toBase58(base58addr, &addr);
-            return try Address.init(allocator, base58addr);
+        Network.mainnet => {
+            const addr_base58 = try allocator.alloc(u8, 34);
+            try utils.toBase58(addr_base58, &addr);
+            return try Address.init(allocator, addr_base58);
         },
         else => {
-            const base58addr = try allocator.alloc(u8, 35);
-            try utils.toBase58(base58addr, &addr);
-            return try Address.init(allocator, base58addr);
+            const addr_base58 = try allocator.alloc(u8, 35);
+            try utils.toBase58(addr_base58, &addr);
+            return try Address.init(allocator, addr_base58);
         },
     };
 }
 
 pub fn deriveP2WPKHAddress(allocator: std.mem.Allocator, s: script.Script, n: Network) !Address {
-    const publickeyhash = s.stack.items[2].v;
-    assert(publickeyhash.len == 40);
+    const pubkey_hash = s.stack.items[2].v;
+    assert(pubkey_hash.len == 40);
 
     const version: u5 = 0;
     const hrp = switch (n) {
-        .MAINNET => "bc".*,
+        .mainnet => "bc".*,
         else => "tb".*,
     };
 
     var bytes: [20]u8 = undefined;
-    _ = try std.fmt.hexToBytes(&bytes, publickeyhash);
-    const cap = Bech32Encoder.calcSize(&hrp, &bytes) + 1; // + 1 is for version
+    _ = try std.fmt.hexToBytes(&bytes, pubkey_hash);
+    const cap = crypto.Bech32Encoder.calcSize(&hrp, &bytes) + 1; // + 1 is for version
     const encoded = try allocator.alloc(u8, cap);
-    _ = Bech32Encoder.encode(encoded, &hrp, &bytes, version, .bech32);
+    _ = crypto.Bech32Encoder.encode(encoded, &hrp, &bytes, version, .bech32);
     return try Address.init(allocator, encoded);
 }
 
@@ -103,10 +102,10 @@ test "deriveP2PKHAddress" {
     for (pubkeys) |pubkeystr| {
         const v = try std.fmt.parseInt(u264, &pubkeystr, 16);
         const c: [33]u8 = @bitCast(@byteSwap(v));
-        const p = try Secp256k1Point.fromCompressed(c);
+        const p = try crypto.Secp256k1Point.fromCompressed(c);
         const pk = PublicKey{ .point = p };
-        const addrmainnet = try deriveP2PKHAddress(allocator, pk, Network.MAINNET);
-        const addrtestnet = try deriveP2PKHAddress(allocator, pk, Network.TESTNET);
+        const addrmainnet = try deriveP2PKHAddress(allocator, pk, Network.mainnet);
+        const addrtestnet = try deriveP2PKHAddress(allocator, pk, Network.testnet);
         defer addrmainnet.deinit();
         defer addrtestnet.deinit();
 
@@ -158,14 +157,14 @@ test "deriveP2WPKH" {
     const addr = try deriveP2WPKHAddress(
         allocator,
         s,
-        .MAINNET,
+        .mainnet,
     );
     defer addr.deinit();
 
     const addr_testnet = try deriveP2WPKHAddress(
         allocator,
         s,
-        .TESTNET,
+        .testnet,
     );
     defer addr_testnet.deinit();
 

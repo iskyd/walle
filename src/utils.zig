@@ -5,13 +5,13 @@ const base58 = @import("base58");
 const Ripemd160 = @import("crypto").Ripemd160;
 
 pub const DecodedCompactSize = struct {
-    totalBytes: u8,
+    total_bytes: u8,
     n: u64,
 };
 
 pub const EncodedCompactSize = struct {
-    compactSizeByte: u8,
-    totalBytes: u8,
+    compact_size_byte: u8,
+    total_bytes: u8,
     n: u64,
 };
 
@@ -57,9 +57,9 @@ pub fn verifyChecksum(bytes: []const u8, checksum: [4]u8) bool {
 }
 
 pub fn debugPrintBytes(comptime len: u32, bytes: []const u8) void {
-    var buf: [len]u8 = undefined;
-    _ = std.fmt.bufPrint(&buf, "{x}", .{std.fmt.fmtSliceHexLower(bytes)}) catch unreachable;
-    std.debug.print("DEBUG PRINT BYTES: {s}\n", .{buf});
+    var buffer: [len]u8 = undefined;
+    _ = std.fmt.bufPrint(&buffer, "{x}", .{std.fmt.fmtSliceHexLower(bytes)}) catch unreachable;
+    std.debug.print("DEBUG PRINT BYTES: {s}\n", .{buffer});
 }
 
 pub fn doubleSha256(bytes: []const u8) [32]u8 {
@@ -91,28 +91,28 @@ pub fn encodeutf8(in: []const u8, buffer: []u8) !u16 {
 
 pub fn decodeCompactSize(v: []u8) DecodedCompactSize {
     return switch (v[0]) {
-        0...252 => DecodedCompactSize{ .totalBytes = 1, .n = v[0] },
+        0...252 => DecodedCompactSize{ .total_bytes = 1, .n = v[0] },
         253 => {
             const n = std.mem.readInt(u16, v[1..3], .big);
-            return DecodedCompactSize{ .totalBytes = 3, .n = n };
+            return DecodedCompactSize{ .total_bytes = 3, .n = n };
         },
         254 => {
             const n = std.mem.readInt(u32, v[1..5], .big);
-            return DecodedCompactSize{ .totalBytes = 5, .n = n };
+            return DecodedCompactSize{ .total_bytes = 5, .n = n };
         },
         255 => {
             const n = std.mem.readInt(u64, v[1..9], .big);
-            return DecodedCompactSize{ .totalBytes = 9, .n = n };
+            return DecodedCompactSize{ .total_bytes = 9, .n = n };
         },
     };
 }
 
 pub fn encodeCompactSize(n: u64) EncodedCompactSize {
     return switch (n) {
-        0...252 => EncodedCompactSize{ .compactSizeByte = @intCast(n), .totalBytes = 0, .n = n },
-        253...65535 => EncodedCompactSize{ .compactSizeByte = 253, .totalBytes = 2, .n = n },
-        65536...4294967295 => EncodedCompactSize{ .compactSizeByte = 254, .totalBytes = 4, .n = n },
-        4294967296...18446744073709551615 => EncodedCompactSize{ .compactSizeByte = 255, .totalBytes = 8, .n = n },
+        0...252 => EncodedCompactSize{ .compact_size_byte = @intCast(n), .total_bytes = 0, .n = n },
+        253...65535 => EncodedCompactSize{ .compact_size_byte = 253, .total_bytes = 2, .n = n },
+        65536...4294967295 => EncodedCompactSize{ .compact_size_byte = 254, .total_bytes = 4, .n = n },
+        4294967296...18446744073709551615 => EncodedCompactSize{ .compact_size_byte = 255, .total_bytes = 8, .n = n },
     };
 }
 

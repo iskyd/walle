@@ -2,151 +2,151 @@ const std = @import("std");
 const assert = std.debug.assert;
 
 pub const ScriptType = enum(u8) {
-    P2WPKH,
+    p2wpkh,
 };
 
-pub const opcode = enum(u8) {
+pub const Opcode = enum(u8) {
     // constants
-    OP_FALSE = 0x00,
-    OP_PUSHDATA1 = 0x4c,
-    OP_PUSHDATA2 = 0x4d,
-    OP_PUSHDATA4 = 0x4e,
-    OP_1NEGATE = 0x4f,
-    OP_TRUE = 0x51, // OP_TRUE == OP_1
-    OP_2 = 0x52,
-    OP_3 = 0x53,
-    OP_4 = 0x54,
-    OP_5 = 0x55,
-    OP_6 = 0x56,
-    OP_7 = 0x57,
-    OP_8 = 0x58,
-    OP_9 = 0x59,
-    OP_10 = 0x5a,
-    OP_11 = 0x5b,
-    OP_12 = 0x5c,
-    OP_13 = 0x5d,
-    OP_14 = 0x5e,
-    OP_15 = 0x5f,
-    OP_16 = 0x60,
+    op_false = 0x00,
+    op_pushdata1 = 0x4c,
+    op_pushdata2 = 0x4d,
+    op_pushdata4 = 0x4e,
+    op_1negate = 0x4f,
+    op_true = 0x51, // OP_TRUE == OP_1
+    op_2 = 0x52,
+    op_3 = 0x53,
+    op_4 = 0x54,
+    op_5 = 0x55,
+    op_6 = 0x56,
+    op_7 = 0x57,
+    op_8 = 0x58,
+    op_9 = 0x59,
+    op_10 = 0x5a,
+    op_11 = 0x5b,
+    op_12 = 0x5c,
+    op_13 = 0x5d,
+    op_14 = 0x5e,
+    op_15 = 0x5f,
+    op_16 = 0x60,
 
     // Flow control
-    OP_NOP = 0x61,
-    OP_IF = 0x63,
-    OP_ELSE = 0x64,
-    OP_ENDIF = 0x68,
-    OP_VERIFY = 0x69,
-    OP_RETURN = 0x6a,
+    op_nop = 0x61,
+    op_if = 0x63,
+    op_else = 0x64,
+    op_endif = 0x68,
+    op_verify = 0x69,
+    op_return = 0x6a,
 
     // Stack
-    OP_TOALTSTACK = 0x6b,
-    OP_FROMALTSTACK = 0x6c,
-    OP_IFDUP = 0x73,
-    OP_DEPTH = 0x74,
-    OP_DROP = 0x75,
-    OP_DUP = 0x76,
-    OP_NIP = 0x77,
-    OP_OVER = 0x78,
-    OP_PICK = 0x79,
-    OP_ROLL = 0x7a,
-    OP_ROT = 0x7b,
-    OP_SWAP = 0x7c,
-    OP_TUCK = 0x7d,
-    OP_2DROP = 0x6d,
-    OP_2DUP = 0x6e,
-    OP_3DUP = 0x6f,
-    OP_2OVER = 0x70,
-    OP_2ROT = 0x71,
-    OP_2SWAP = 0x72,
+    op_totalstacl = 0x6b,
+    op_fromaltstack = 0x6c,
+    op_ifdup = 0x73,
+    op_depth = 0x74,
+    op_drop = 0x75,
+    op_dup = 0x76,
+    op_nip = 0x77,
+    op_over = 0x78,
+    op_pick = 0x79,
+    op_roll = 0x7a,
+    op_rot = 0x7b,
+    op_swap = 0x7c,
+    op_tuck = 0x7d,
+    op_2drop = 0x6d,
+    op_2dup = 0x6e,
+    op_3dup = 0x6f,
+    op_2over = 0x70,
+    op_2rot = 0x71,
+    op_2swap = 0x72,
 
     // Splice
-    OP_SIZE = 0x82,
+    op_size = 0x82,
 
     // Bitwise logic
-    OP_INVERT = 0x83,
-    OP_AND = 0x84,
-    OP_OR = 0x85,
-    OP_XOR = 0x86,
-    OP_EQUAL = 0x87,
-    OP_EQUALVERIFY = 0x88,
+    op_invert = 0x83,
+    op_and = 0x84,
+    op_or = 0x85,
+    op_xor = 0x86,
+    op_equal = 0x87,
+    op_equalverify = 0x88,
 
     // Arithmetic
-    OP_1ADD = 0x8b,
-    OP_1SUB = 0x8c,
-    OP_NEGATE = 0x8f,
-    OP_ABS = 0x90,
-    OP_NOT = 0x91,
-    OP_0NOTEQUAL = 0x92,
-    OP_ADD = 0x93,
-    OP_SUB = 0x94,
-    OP_BOOLAND = 0x9a,
-    OP_NUMEQUAL = 0x9c,
-    OP_NUMEQUALVERIFY = 0x9d,
-    OP_NUMNOTEQUAL = 0x9e,
-    OP_LESSTHAN = 0x9f,
-    OP_GREATERTHAN = 0xa0,
-    OP_LESSTHANOREQUAL = 0xa1,
-    OP_GREATERTHANOREQUAL = 0xa2,
-    OP_MIN = 0xa3,
-    OP_MAX = 0xa4,
-    OP_WITHIN = 0xa5,
+    op_1add = 0x8b,
+    op_1sub = 0x8c,
+    op_negate = 0x8f,
+    op_abs = 0x90,
+    op_not = 0x91,
+    op_0notequal = 0x92,
+    op_add = 0x93,
+    op_sub = 0x94,
+    op_booland = 0x9a,
+    op_numequal = 0x9c,
+    op_numequalverify = 0x9d,
+    op_numnotequal = 0x9e,
+    op_lessthan = 0x9f,
+    op_greaterthan = 0xa0,
+    op_lessthanorequal = 0xa1,
+    op_greaterthanorequal = 0xa2,
+    op_min = 0xa3,
+    op_max = 0xa4,
+    op_within = 0xa5,
 
     // Crypto
-    OP_RIPEMD160 = 0xa6,
-    OP_SHA1 = 0xa7,
-    OP_SHA256 = 0xa8,
-    OP_HASH160 = 0xa9,
-    OP_HASH256 = 0xaa,
-    OP_CODESEPARATOR = 0xab,
-    OP_CHECKSIG = 0xac,
-    OP_CHECKSIGVERIFY = 0xad,
-    OP_CHECKMULTISIG = 0xae,
-    OP_CHECKMULTISIGVERIFY = 0xaf,
-    OP_CHECKSIGADD = 0xba,
+    op_ripemd160 = 0xa6,
+    op_sha1 = 0xa7,
+    op_sha256 = 0xa8,
+    op_hash160 = 0xa9,
+    op_hash256 = 0xaa,
+    op_codeseparator = 0xab,
+    op_checksig = 0xac,
+    op_checksigverify = 0xad,
+    op_checkmultisig = 0xae,
+    op_checkmultisigverify = 0xaf,
+    op_checksigadd = 0xba,
 
     // Locktime
-    OP_CHECKLOCKTIMEVERIFY = 0xb1,
-    OP_CHECKSEQUENCEVERIFY = 0xb2,
+    op_checklocktimeverify = 0xb1,
+    op_checksequenceverify = 0xb2,
 
     // Pseudowords
-    OP_PUBKEYHASH = 0xfd,
-    OP_PUBKEY = 0xfe,
-    OP_INVALIDOPCODE = 0xff,
+    op_pubkeyhash = 0xfd,
+    op_pubkey = 0xfe,
+    op_invalidopcode = 0xff,
 
     // Reserved words
-    OP_RESERVED = 0x50,
-    OP_VER = 0x62,
-    OP_VERIF = 0x65,
-    OP_VERNOTIF = 0x66,
-    OP_RESERVED1 = 0x89,
-    OP_RESERVED2 = 0x8a,
+    op_reserverd = 0x50,
+    op_ver = 0x62,
+    op_verif = 0x65,
+    op_vernotif = 0x66,
+    op_reserved1 = 0x89,
+    op_reserverd2 = 0x8a,
 
     // n <= 16
-    pub fn fromNum(n: u8) opcode {
+    pub fn fromNum(n: u8) Opcode {
         assert(n <= 16);
         return switch (n) {
-            0 => opcode.OP_FALSE,
-            1 => opcode.OP_TRUE,
-            2 => opcode.OP_2,
-            3 => opcode.OP_3,
-            4 => opcode.OP_4,
-            5 => opcode.OP_5,
-            6 => opcode.OP_6,
-            7 => opcode.OP_7,
-            8 => opcode.OP_8,
-            9 => opcode.OP_9,
-            10 => opcode.OP_10,
-            11 => opcode.OP_11,
-            12 => opcode.OP_12,
-            13 => opcode.OP_13,
-            14 => opcode.OP_14,
-            15 => opcode.OP_15,
-            16 => opcode.OP_16,
+            0 => Opcode.op_false,
+            1 => Opcode.op_true,
+            2 => Opcode.op_2,
+            3 => Opcode.op_3,
+            4 => Opcode.op_4,
+            5 => Opcode.op_5,
+            6 => Opcode.op_6,
+            7 => Opcode.op_7,
+            8 => Opcode.op_8,
+            9 => Opcode.op_9,
+            10 => Opcode.op_10,
+            11 => Opcode.op_11,
+            12 => Opcode.op_12,
+            13 => Opcode.op_13,
+            14 => Opcode.op_14,
+            15 => Opcode.op_15,
+            16 => Opcode.op_16,
             else => unreachable,
         };
     }
 };
 
-const ScriptOp = union(enum) { op: opcode, v: []const u8, pushbytes: usize };
+const ScriptOp = union(enum) { op: Opcode, v: []const u8, push_bytes: usize };
 
 pub const Script = struct {
     allocator: std.mem.Allocator,
@@ -187,10 +187,10 @@ pub const Script = struct {
                     @memcpy(buffer[cur .. cur + v.len], v);
                     cur += v.len;
                 },
-                ScriptOp.pushbytes => |pb| {
-                    var pbbuf: [2]u8 = undefined;
-                    _ = try std.fmt.bufPrint(&pbbuf, "{x}", .{pb});
-                    @memcpy(buffer[cur .. cur + 2], pbbuf[0..2]);
+                ScriptOp.push_bytes => |pb| {
+                    var push_bytes_buffer: [2]u8 = undefined;
+                    _ = try std.fmt.bufPrint(&push_bytes_buffer, "{x}", .{pb});
+                    @memcpy(buffer[cur .. cur + 2], push_bytes_buffer[0..2]);
                     cur += 2;
                 },
             }
@@ -208,7 +208,7 @@ pub const Script = struct {
                 ScriptOp.v => |v| {
                     cap += v.len;
                 },
-                ScriptOp.pushbytes => |_| {
+                ScriptOp.push_bytes => |_| {
                     cap += 2;
                 },
             }
@@ -222,10 +222,10 @@ pub const Script = struct {
 
     pub fn toBytes(self: Script, allocator: std.mem.Allocator, buffer: []u8) !void {
         const c = self.hexCap();
-        const redeemscript = try allocator.alloc(u8, c);
-        defer allocator.free(redeemscript);
-        try self.toHex(redeemscript);
-        _ = try std.fmt.hexToBytes(buffer, redeemscript);
+        const redeem_script = try allocator.alloc(u8, c);
+        defer allocator.free(redeem_script);
+        try self.toHex(redeem_script);
+        _ = try std.fmt.hexToBytes(buffer, redeem_script);
     }
 
     pub fn decode(allocator: std.mem.Allocator, hex: []const u8) !Script {
@@ -236,10 +236,10 @@ pub const Script = struct {
             current += 2;
             // It is a valid opcode
             if (v == 0 or v >= 76) {
-                const op: opcode = @enumFromInt(v);
+                const op: Opcode = @enumFromInt(v);
                 try script.push(ScriptOp{ .op = op });
-            } else { // it is a pushbytes
-                try script.push(ScriptOp{ .pushbytes = v });
+            } else { // it is a push_bytes
+                try script.push(ScriptOp{ .push_bytes = v });
                 const data = hex[current .. current + (v * 2)];
                 try script.push(ScriptOp{ .v = data });
                 current += v * 2;
@@ -281,8 +281,8 @@ pub const Script = struct {
     }
 
     pub fn getType(self: Script) !ScriptType {
-        if (self.stack.items.len == 3 and self.stack.items[0].op == opcode.OP_FALSE and self.stack.items[1].pushbytes == 20) {
-            return ScriptType.P2WPKH;
+        if (self.stack.items.len == 3 and self.stack.items[0].op == Opcode.op_false and self.stack.items[1].push_bytes == 20) {
+            return ScriptType.p2wpkh;
         }
 
         return error.InvalidScript;
@@ -301,21 +301,20 @@ pub const Script = struct {
                 ScriptOp.v => |v| {
                     try writer.print("{s} ", .{v});
                 },
-                ScriptOp.pushbytes => |pb| {
+                ScriptOp.push_bytes => |pb| {
                     try writer.print("OP_PUSHBYTES_{d} ", .{pb});
                 },
             }
         }
-        //try writer.print("\n");
     }
 };
 
 // pubkey as str
 pub fn p2pk(allocator: std.mem.Allocator, pubkey: []const u8) !Script {
     var script = Script.init(allocator);
-    try script.push(ScriptOp{ .pushbytes = pubkey.len / 2 });
+    try script.push(ScriptOp{ .push_bytes = pubkey.len / 2 });
     try script.push(ScriptOp{ .v = pubkey });
-    try script.push(ScriptOp{ .op = opcode.OP_CHECKSIG });
+    try script.push(ScriptOp{ .op = Opcode.op_checksig });
 
     return script;
 }
@@ -327,13 +326,13 @@ pub fn p2ms(allocator: std.mem.Allocator, pubkeys: [][]const u8, m: u8, n: u8) !
     assert(n <= 16);
 
     var script = Script.init(allocator);
-    try script.push(ScriptOp{ .op = opcode.fromNum(m) });
+    try script.push(ScriptOp{ .op = Opcode.fromNum(m) });
     for (pubkeys) |pubkey| {
-        try script.push(ScriptOp{ .pushbytes = pubkey.len / 2 });
+        try script.push(ScriptOp{ .push_bytes = pubkey.len / 2 });
         try script.push(ScriptOp{ .v = pubkey });
     }
-    try script.push(ScriptOp{ .op = opcode.fromNum(n) });
-    try script.push(ScriptOp{ .op = opcode.OP_CHECKMULTISIG });
+    try script.push(ScriptOp{ .op = Opcode.fromNum(n) });
+    try script.push(ScriptOp{ .op = Opcode.op_checkmultisig });
 
     return script;
 }
@@ -341,12 +340,12 @@ pub fn p2ms(allocator: std.mem.Allocator, pubkeys: [][]const u8, m: u8, n: u8) !
 // NOT TESTED
 pub fn p2pkh(allocator: std.mem.Allocator, pkeyhash: []const u8) !Script {
     var script = Script.init(allocator);
-    try script.push(ScriptOp{ .op = opcode.OP_DUP });
-    try script.push(ScriptOp{ .op = opcode.OP_HASH160 });
-    try script.push(ScriptOp{ .pushbytes = 20 });
+    try script.push(ScriptOp{ .op = Opcode.op_dup });
+    try script.push(ScriptOp{ .op = Opcode.op_hash160 });
+    try script.push(ScriptOp{ .push_bytes = 20 });
     try script.push(ScriptOp{ .v = pkeyhash });
-    try script.push(ScriptOp{ .op = opcode.OP_EQUALVERIFY });
-    try script.push(ScriptOp{ .op = opcode.OP_CHECKSIG });
+    try script.push(ScriptOp{ .op = Opcode.op_equalverify });
+    try script.push(ScriptOp{ .op = Opcode.op_checksig });
 
     return script;
 }
@@ -355,8 +354,8 @@ pub fn p2pkh(allocator: std.mem.Allocator, pkeyhash: []const u8) !Script {
 pub fn p2wpkh(allocator: std.mem.Allocator, pubkeyhash: []const u8) !Script {
     assert(pubkeyhash.len == 40);
     var script = Script.init(allocator);
-    try script.push(ScriptOp{ .op = opcode.OP_FALSE });
-    try script.push(ScriptOp{ .pushbytes = 20 });
+    try script.push(ScriptOp{ .op = Opcode.op_false });
+    try script.push(ScriptOp{ .push_bytes = 20 });
     try script.push(ScriptOp{ .v = pubkeyhash[0..] });
 
     return script;
@@ -369,9 +368,9 @@ test "test p2pk" {
     const script = try p2pk(allocator, &uncompressedpubkey);
     defer script.deinit();
 
-    try std.testing.expectEqual(opcode.OP_CHECKSIG, script.stack.items[2].op);
+    try std.testing.expectEqual(Opcode.op_checksig, script.stack.items[2].op);
     try std.testing.expectEqualSlices(u8, &uncompressedpubkey, script.stack.items[1].v);
-    try std.testing.expectEqual(script.stack.items[0].pushbytes, 65);
+    try std.testing.expectEqual(script.stack.items[0].push_bytes, 65);
 }
 
 test "test p2ms" {
@@ -383,13 +382,13 @@ test "test p2ms" {
     const script = try p2ms(allocator, &pubkeys, 1, 2);
     defer script.deinit();
 
-    try std.testing.expectEqual(opcode.OP_CHECKMULTISIG, script.stack.items[6].op);
-    try std.testing.expectEqual(opcode.OP_2, script.stack.items[5].op);
+    try std.testing.expectEqual(Opcode.op_checkmultisig, script.stack.items[6].op);
+    try std.testing.expectEqual(Opcode.op_2, script.stack.items[5].op);
     try std.testing.expectEqualSlices(u8, &p2, script.stack.items[4].v);
-    try std.testing.expectEqual(script.stack.items[3].pushbytes, 65);
+    try std.testing.expectEqual(script.stack.items[3].push_bytes, 65);
     try std.testing.expectEqualSlices(u8, &p1, script.stack.items[2].v);
-    try std.testing.expectEqual(script.stack.items[1].pushbytes, 65);
-    try std.testing.expectEqual(opcode.OP_TRUE, script.stack.items[0].op);
+    try std.testing.expectEqual(script.stack.items[1].push_bytes, 65);
+    try std.testing.expectEqual(Opcode.op_true, script.stack.items[0].op);
 }
 
 test "test hexCap" {
@@ -405,24 +404,24 @@ test "test hexCap" {
 }
 
 test "toHex" {
-    const uncompressedpubkey: [130]u8 = "04ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84c".*;
-    const compressedpubkey: [66]u8 = "03525cbe17e87969013e6457c765594580dc803a8497052d7c1efb0ef401f68bd5".*;
-    const expectedhex: [134]u8 = "4104ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84cac".*;
-    const expectedhex2: [70]u8 = "2103525cbe17e87969013e6457c765594580dc803a8497052d7c1efb0ef401f68bd5ac".*;
+    const uncompressed_pubkey: [130]u8 = "04ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84c".*;
+    const compressed_pubkey: [66]u8 = "03525cbe17e87969013e6457c765594580dc803a8497052d7c1efb0ef401f68bd5".*;
+    const expected_hex: [134]u8 = "4104ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84cac".*;
+    const expected_hex2: [70]u8 = "2103525cbe17e87969013e6457c765594580dc803a8497052d7c1efb0ef401f68bd5ac".*;
     const allocator = std.testing.allocator;
-    const script = try p2pk(allocator, &uncompressedpubkey);
+    const script = try p2pk(allocator, &uncompressed_pubkey);
     defer script.deinit();
 
     var hexbuf: [134]u8 = undefined;
     try script.toHex(&hexbuf);
-    try std.testing.expectEqualSlices(u8, &expectedhex, &hexbuf);
+    try std.testing.expectEqualSlices(u8, &expected_hex, &hexbuf);
 
-    const script2 = try p2pk(allocator, &compressedpubkey);
+    const script2 = try p2pk(allocator, &compressed_pubkey);
     defer script2.deinit();
 
     var hexbuf2: [70]u8 = undefined;
     try script2.toHex(&hexbuf2);
-    try std.testing.expectEqualSlices(u8, &expectedhex2, &hexbuf2);
+    try std.testing.expectEqualSlices(u8, &expected_hex2, &hexbuf2);
 
     // p2ms
     var p1: [130]u8 = "04d81fd577272bbe73308c93009eec5dc9fc319fc1ee2e7066e17220a5d47a18314578be2faea34b9f1f8ca078f8621acd4bc22897b03daa422b9bf56646b342a2".*;
@@ -445,14 +444,14 @@ test "p2wpkh" {
     const script = try p2wpkh(allocator, &hash);
     defer script.deinit();
     try std.testing.expectEqualStrings(&hash, script.stack.items[2].v);
-    try std.testing.expectEqual(20, script.stack.items[1].pushbytes);
-    try std.testing.expectEqual(opcode.OP_FALSE, script.stack.items[0].op);
+    try std.testing.expectEqual(20, script.stack.items[1].push_bytes);
+    try std.testing.expectEqual(Opcode.op_false, script.stack.items[0].op);
     const cap = script.hexCap();
     const buffer = try allocator.alloc(u8, cap);
     defer allocator.free(buffer);
     try script.toHex(buffer);
-    const expectedhex: [44]u8 = "001464cb674c9fdcb5c033ccb5d860978974ff02f400".*;
-    try std.testing.expectEqualStrings(&expectedhex, buffer);
+    const expected_hex: [44]u8 = "001464cb674c9fdcb5c033ccb5d860978974ff02f400".*;
+    try std.testing.expectEqualStrings(&expected_hex, buffer);
 }
 
 test "decode" {
@@ -462,19 +461,19 @@ test "decode" {
     defer script.deinit();
 
     const e1 = "3134047164cbf22f9f54fe738853de24a9f3cf1b".*;
-    try std.testing.expectEqual(script.stack.items[0].op, opcode.OP_DUP);
-    try std.testing.expectEqual(script.stack.items[1].op, opcode.OP_HASH160);
-    try std.testing.expectEqual(script.stack.items[2].pushbytes, 20);
+    try std.testing.expectEqual(script.stack.items[0].op, Opcode.op_dup);
+    try std.testing.expectEqual(script.stack.items[1].op, Opcode.op_hash160);
+    try std.testing.expectEqual(script.stack.items[2].push_bytes, 20);
     try std.testing.expectEqualStrings(script.stack.items[3].v, &e1);
-    try std.testing.expectEqual(script.stack.items[4].op, opcode.OP_EQUALVERIFY);
-    try std.testing.expectEqual(script.stack.items[5].op, opcode.OP_CHECKSIG);
+    try std.testing.expectEqual(script.stack.items[4].op, Opcode.op_equalverify);
+    try std.testing.expectEqual(script.stack.items[5].op, Opcode.op_checksig);
 
     const hex2 = "0014199b7da15e4b0da4e62b5c3a01dd41255b8c45d6".*;
     const script2 = try Script.decode(allocator, &hex2);
     defer script2.deinit();
     const e2 = "199b7da15e4b0da4e62b5c3a01dd41255b8c45d6".*;
-    try std.testing.expectEqual(script2.stack.items[0].op, opcode.OP_FALSE);
-    try std.testing.expectEqual(script2.stack.items[1].pushbytes, 20);
+    try std.testing.expectEqual(script2.stack.items[0].op, Opcode.op_false);
+    try std.testing.expectEqual(script2.stack.items[1].push_bytes, 20);
     try std.testing.expectEqualStrings(script2.stack.items[2].v, &e2);
 }
 
@@ -484,11 +483,11 @@ test "getScriptType" {
     const s = try p2wpkh(allocator, &hash);
     defer s.deinit();
     const t = try s.getType();
-    try std.testing.expectEqual(t, ScriptType.P2WPKH);
+    try std.testing.expectEqual(t, ScriptType.p2wpkh);
 
     const hex = "0014841b80d2cc75f5345c482af96294d04fdd66b2b7".*;
     const decoded = try Script.decode(allocator, &hex);
     defer decoded.deinit();
     const t2 = try decoded.getType();
-    try std.testing.expectEqual(t2, ScriptType.P2WPKH);
+    try std.testing.expectEqual(t2, ScriptType.p2wpkh);
 }

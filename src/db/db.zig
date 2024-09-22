@@ -32,11 +32,11 @@ pub fn initDB(db: *sqlite.Db) !void {
     var stmtTxs = try db.prepare(sqlTxs);
     defer stmtTxs.deinit();
 
-    const sqlOutputs = "CREATE TABLE IF NOT EXISTS outputs(txid VARCHAR(64), n INTEGER, amount INTEGER NOT NULL, unspent INTEGER, path TEXT NOT NULL, PRIMARY KEY(txid, n));";
+    const sqlOutputs = "CREATE TABLE IF NOT EXISTS outputs(txid VARCHAR(64), vout INTEGER, amount INTEGER NOT NULL, unspent INTEGER, path TEXT NOT NULL, PRIMARY KEY(txid, n));";
     var stmtOutputs = try db.prepare(sqlOutputs);
     defer stmtOutputs.deinit();
 
-    const sqlInputs = "CREATE TABLE IF NOT EXISTS inputs(txid VARCHAR(64), reference_output_txid VARCHAR(64) NOT NULL, reference_output_n INTEGER NOT NULL, PRIMARY KEY(txid, reference_output_txid, reference_output_n));";
+    const sqlInputs = "CREATE TABLE IF NOT EXISTS inputs(txid VARCHAR(64), reference_output_txid VARCHAR(64) NOT NULL, reference_output_vout INTEGER NOT NULL, PRIMARY KEY(txid, reference_output_txid, reference_output_vout));";
     var stmtInputs = try db.prepare(sqlInputs);
     defer stmtInputs.deinit();
 
@@ -76,7 +76,7 @@ pub fn saveBlock(db: *sqlite.Db, blockhash: [64]u8, heigth: usize) !void {
     try stmtCommit.exec(.{}, .{});
 }
 
-pub fn saveOutputs(allocator: std.mem.Allocator, db: *sqlite.Db, outputs: std.AutoHashMap([64]u8, Output)) !void {
+pub fn saveOutputs(allocator: std.mem.Allocator, db: *sqlite.Db, outputs: std.AutoHashMap([72]u8, Output)) !void {
     const sqlBegin = "BEGIN TRANSACTION;";
     var stmtBegin = try db.prepare(sqlBegin);
     defer stmtBegin.deinit();
@@ -89,12 +89,12 @@ pub fn saveOutputs(allocator: std.mem.Allocator, db: *sqlite.Db, outputs: std.Au
     var it = outputs.valueIterator();
     while (it.next()) |o| {
         assert(o.keypath != null);
-        const sqlOutput = "INSERT OR IGNORE INTO outputs(txid, n, amount, unspent, path) VALUES(?, ?, ?, true, ?)";
+        const sqlOutput = "INSERT OR IGNORE INTO outputs(txid, vout, amount, unspent, path) VALUES(?, ?, ?, true, ?)";
         var stmtOutput = try db.prepare(sqlOutput);
         defer stmtOutput.deinit();
 
-        const kp = try o.keypath.?.toStr(allocator);
-        try stmtOutput.exec(.{}, .{ .txid = o.txid, .n = o.n, .amount = o.amount, .path = kp });
+        const kp = try o.keypath.?.toStr(allocator, null);
+        try stmtOutput.exec(.{}, .{ .txid = o.txid, .vout = o.vout, .amount = o.amount, .path = kp });
     }
 
     try stmtCommit.exec(.{}, .{});
@@ -112,40 +112,40 @@ pub fn saveInputs(db: *sqlite.Db, inputs: std.ArrayList(Input)) !void {
 
     for (0..inputs.items.len) |i| {
         const input = inputs.items[i];
-        const sqlInput = "INSERT OR IGNORE INTO inputs(txid, reference_output_txid, reference_output_n) VALUES(?, ?, ?)";
+        const sqlInput = "INSERT OR IGNORE INTO inputs(txid, reference_output_txid, reference_output_vout) VALUES(?, ?, ?)";
         var stmtInput = try db.prepare(sqlInput);
         defer stmtInput.deinit();
-        try stmtInput.exec(.{}, .{ .txid = input.txid, .reference_output_txid = input.outputtxid, .reference_output_n = input.outputn });
+        try stmtInput.exec(.{}, .{ .txid = input.txid, .reference_output_txid = input.output_txid, .reference_output_vout = input.output_vout });
 
-        const sqlOutput = "UPDATE outputs SET unspent = false WHERE txid = ? AND n = ?";
+        const sqlOutput = "UPDATE outputs SET unspent = false WHERE txid = ? AND vout = ?";
         var stmtOutput = try db.prepare(sqlOutput);
         defer stmtOutput.deinit();
-        try stmtOutput.exec(.{}, .{ .txid = input.outputtxid, .n = input.outputn });
+        try stmtOutput.exec(.{}, .{ .txid = input.output_txid, .vout = input.output_vout });
     }
 
     try stmtCommit.exec(.{}, .{});
 }
 
-pub fn getOutput(db: *sqlite.Db, txid: [64]u8, n: u32) !?Output {
-    const sqlOutput = "SELECT txid, n, amount AS c FROM outputs WHERE txid = ? AND n = ?";
+pub fn getOutput(db: *sqlite.Db, txid: [64]u8, vout: u32) !?Output {
+    const sqlOutput = "SELECT txid, vout, amount AS c FROM outputs WHERE txid = ? AND vout = ?";
     var stmt = try db.prepare(sqlOutput);
     defer stmt.deinit();
-    const row = try stmt.one(struct { txid: [64]u8, n: u32, amount: u64 }, .{}, .{ .txid = txid, .n = n });
+    const row = try stmt.one(struct { txid: [64]u8, vout: u32, amount: u64 }, .{}, .{ .txid = txid, .vout = vout });
     if (row != null) {
         return Output{
             .txid = row.?.txid,
-            .n = row.?.n,
+            .vout = row.?.vout,
             .amount = row.?.amount,
         };
     }
     return null;
 }
 
-pub fn getOutputDescriptorPath(allocator: std.mem.Allocator, db: *sqlite.Db, txid: [64]u8, n: u32) !KeyPath(5) {
-    const sqlOutput = "SELECT path AS c FROM outputs WHERE txid = ? AND n = ?";
+pub fn getOutputDescriptorPath(allocator: std.mem.Allocator, db: *sqlite.Db, txid: [64]u8, vout: u32) !KeyPath(5) {
+    const sqlOutput = "SELECT path AS c FROM outputs WHERE txid = ? AND vout = ?";
     var stmt = try db.prepare(sqlOutput);
     defer stmt.deinit();
-    const row = try stmt.oneAlloc(struct { path: []u8 }, allocator, .{}, .{ .txid = txid, .n = n });
+    const row = try stmt.oneAlloc(struct { path: []u8 }, allocator, .{}, .{ .txid = txid, .vout = vout });
     if (row != null) {
         defer allocator.free(row.?.path);
         return KeyPath(5).fromStr(row.?.path);

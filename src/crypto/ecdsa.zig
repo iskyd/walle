@@ -2,8 +2,7 @@ const std = @import("std");
 const rand = std.crypto.random;
 const modinv = @import("math.zig").modinv;
 const math = std.math;
-const Secp256k1NumberOfPoints = @import("secp256k1.zig").NUMBER_OF_POINTS;
-const Secp256k1Point = @import("secp256k1.zig").Point;
+const crypto = @import("crypto.zig");
 const is_test = @import("builtin").is_test;
 
 fn intToHexStr(comptime T: type, data: T, buffer: []u8) !void {
@@ -54,11 +53,11 @@ pub fn sign(pk: [32]u8, z: [32]u8, comptime nonce: ?u256) Signature {
     comptime if (nonce == null and is_test == false) {
         unreachable;
     };
-    const n = Secp256k1NumberOfPoints;
+    const n = crypto.secp256k1_number_of_points;
     while (true) {
         const k: u256 = if (comptime nonce != null) nonce.? else rand.intRangeAtMost(u256, 0, n - 1);
         // const k = rand.intRangeAtMost(u256, 0, n - 1);
-        var p = Secp256k1Point.getBasePoint();
+        var p = crypto.Secp256k1Point{ .x = crypto.secp256k1_base_point.x, .y = crypto.secp256k1_base_point.y };
         p.multiply(k);
         const r = @mod(p.x, n);
         if (r == 0) {
@@ -93,25 +92,25 @@ test "sign" {
 
     try std.testing.expectEqual(true, signature.s >= 1);
     try std.testing.expectEqual(true, signature.r >= 1);
-    try std.testing.expectEqual(true, signature.s <= Secp256k1NumberOfPoints - 1);
-    try std.testing.expectEqual(true, signature.r <= Secp256k1NumberOfPoints - 1);
+    try std.testing.expectEqual(true, signature.s <= crypto.secp256k1_number_of_points - 1);
+    try std.testing.expectEqual(true, signature.r <= crypto.secp256k1_number_of_points - 1);
 
     const uz = std.mem.readInt(u256, &bytes, .big); // Message
     const upk = std.mem.readInt(u256, &pk, .big); // private key
-    var Q = Secp256k1Point.getBasePoint();
+    var Q = crypto.Secp256k1Point{ .x = crypto.secp256k1_base_point.x, .y = crypto.secp256k1_base_point.y };
     Q.multiply(upk); // public key
 
-    const w = modinv(i1024, signature.s, Secp256k1NumberOfPoints);
+    const w = modinv(i1024, signature.s, crypto.secp256k1_number_of_points);
 
-    const uu1: u256 = @intCast(@mod(uz * w, Secp256k1NumberOfPoints));
-    const uu2: u256 = @intCast(@mod(signature.r * w, Secp256k1NumberOfPoints));
+    const uu1: u256 = @intCast(@mod(uz * w, crypto.secp256k1_number_of_points));
+    const uu2: u256 = @intCast(@mod(signature.r * w, crypto.secp256k1_number_of_points));
 
-    var p1 = Secp256k1Point.getBasePoint();
+    var p1 = crypto.Secp256k1Point{ .x = crypto.secp256k1_base_point.x, .y = crypto.secp256k1_base_point.y };
     p1.multiply(uu1);
-    var p2 = Secp256k1Point{ .x = Q.x, .y = Q.y };
+    var p2 = crypto.Secp256k1Point{ .x = Q.x, .y = Q.y };
     p2.multiply(uu2);
     p1.add(p2);
-    try std.testing.expectEqual(@mod(p1.x, Secp256k1NumberOfPoints), signature.r);
+    try std.testing.expectEqual(@mod(p1.x, crypto.secp256k1_number_of_points), signature.r);
 }
 
 test "signWithDeterministicNonce" {
