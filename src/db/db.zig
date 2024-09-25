@@ -8,7 +8,7 @@ const assert = std.debug.assert;
 
 pub fn openDB() !sqlite.Db {
     const db = try sqlite.Db.init(.{
-        .mode = sqlite.Db.Mode{ .File = "./test.db" },
+        .mode = sqlite.Db.Mode{ .File = "./walle.db" },
         .open_flags = .{
             .write = true,
             .create = true,
@@ -24,111 +24,101 @@ pub fn closeDB(db: sqlite.Db) void {
 }
 
 pub fn initDB(db: *sqlite.Db) !void {
-    const sqlBlocks = "CREATE TABLE IF NOT EXISTS blocks(hash VARCHAR(64) UNIQUE NOT NULL, heigth INTEGER UNIQUE NOT NULL);";
-    var stmtBlocks = try db.prepare(sqlBlocks);
-    defer stmtBlocks.deinit();
+    const sql_blocks = "CREATE TABLE IF NOT EXISTS blocks(hash VARCHAR(64) UNIQUE NOT NULL, heigth INTEGER UNIQUE NOT NULL);";
+    var stmt_blocks = try db.prepare(sql_blocks);
+    defer stmt_blocks.deinit();
 
-    const sqlTxs = "CREATE TABLE IF NOT EXISTS transactions(txid VARCHAR(64) PRIMARY KEY, rawtx TEXT NOT NULL, block_heigth INTEGER NOT NULL, is_coinbase INTEGER NOT NULL);";
-    var stmtTxs = try db.prepare(sqlTxs);
-    defer stmtTxs.deinit();
+    const sql_transactions = "CREATE TABLE IF NOT EXISTS transactions(txid VARCHAR(64) PRIMARY KEY, raw TEXT NOT NULL, block_heigth INTEGER NOT NULL, is_coinbase INTEGER NOT NULL);";
+    var stmt_transactions = try db.prepare(sql_transactions);
+    defer stmt_transactions.deinit();
 
-    const sqlOutputs = "CREATE TABLE IF NOT EXISTS outputs(txid VARCHAR(64), vout INTEGER, amount INTEGER NOT NULL, unspent INTEGER, path TEXT NOT NULL, PRIMARY KEY(txid, n));";
-    var stmtOutputs = try db.prepare(sqlOutputs);
-    defer stmtOutputs.deinit();
+    const sql_outputs = "CREATE TABLE IF NOT EXISTS outputs(txid VARCHAR(64), vout INTEGER, amount INTEGER NOT NULL, unspent INTEGER, path TEXT NOT NULL, PRIMARY KEY(txid, n));";
+    var stmt_outputs = try db.prepare(sql_outputs);
+    defer stmt_outputs.deinit();
 
-    const sqlInputs = "CREATE TABLE IF NOT EXISTS inputs(txid VARCHAR(64), reference_output_txid VARCHAR(64) NOT NULL, reference_output_vout INTEGER NOT NULL, PRIMARY KEY(txid, reference_output_txid, reference_output_vout));";
-    var stmtInputs = try db.prepare(sqlInputs);
-    defer stmtInputs.deinit();
+    const sql_inputs = "CREATE TABLE IF NOT EXISTS inputs(txid VARCHAR(64), reference_output_txid VARCHAR(64) NOT NULL, reference_output_vout INTEGER NOT NULL, PRIMARY KEY(txid, reference_output_txid, reference_output_vout));";
+    var stmt_inputs = try db.prepare(sql_inputs);
+    defer stmt_inputs.deinit();
 
-    const sqlDescriptors = "CREATE TABLE IF NOT EXISTS descriptors(extended_key VARCHAR(111) PRIMARY KEY, path TEXT NOT NULL, private INTEGER NOT NULL)";
-    var stmtDescriptors = try db.prepare(sqlDescriptors);
-    defer stmtDescriptors.deinit();
+    const sql_descriptors = "CREATE TABLE IF NOT EXISTS descriptors(extended_key VARCHAR(111) PRIMARY KEY, path TEXT NOT NULL, private INTEGER NOT NULL)";
+    var stmt_descriptors = try db.prepare(sql_descriptors);
+    defer stmt_descriptors.deinit();
 
-    const sqlBegin = "BEGIN TRANSACTION;";
-    var stmtBegin = try db.prepare(sqlBegin);
-    defer stmtBegin.deinit();
-    const sqlCommit = "COMMIT;";
-    var stmtCommit = try db.prepare(sqlCommit);
-    defer stmtCommit.deinit();
+    const sql_begin = "BEGIN TRANSACTION;";
+    var stmt_begin = try db.prepare(sql_begin);
+    defer stmt_begin.deinit();
+    const sql_commit = "COMMIT;";
+    var stmt_commit = try db.prepare(sql_commit);
+    defer stmt_commit.deinit();
 
-    try stmtBegin.exec(.{}, .{});
-    try stmtBlocks.exec(.{}, .{});
-    try stmtTxs.exec(.{}, .{});
-    try stmtOutputs.exec(.{}, .{});
-    try stmtInputs.exec(.{}, .{});
-    try stmtDescriptors.exec(.{}, .{});
-    try stmtCommit.exec(.{}, .{});
+    try stmt_begin.exec(.{}, .{});
+    try stmt_blocks.exec(.{}, .{});
+    try stmt_transactions.exec(.{}, .{});
+    try stmt_outputs.exec(.{}, .{});
+    try stmt_inputs.exec(.{}, .{});
+    try stmt_descriptors.exec(.{}, .{});
+    try stmt_commit.exec(.{}, .{});
 }
 
 pub fn saveBlock(db: *sqlite.Db, blockhash: [64]u8, heigth: usize) !void {
-    const blockSql = "INSERT OR IGNORE INTO blocks(hash, heigth) VALUES(?, ?);";
-    var stmtBlock = try db.prepare(blockSql);
-
-    const sqlBegin = "BEGIN TRANSACTION;";
-    var stmtBegin = try db.prepare(sqlBegin);
-    defer stmtBegin.deinit();
-    const sqlCommit = "COMMIT;";
-    var stmtCommit = try db.prepare(sqlCommit);
-    defer stmtCommit.deinit();
-
-    try stmtBegin.exec(.{}, .{});
-    try stmtBlock.exec(.{}, .{ .blockhash = blockhash, .heigth = heigth });
-    try stmtCommit.exec(.{}, .{});
+    const sql_block = "INSERT OR IGNORE INTO blocks(hash, heigth) VALUES(?, ?);";
+    var stmt_block = try db.prepare(sql_block);
+    try stmt_block.exec(.{}, .{ .blockhash = blockhash, .heigth = heigth });
 }
 
 pub fn saveOutputs(allocator: std.mem.Allocator, db: *sqlite.Db, outputs: std.AutoHashMap([72]u8, Output)) !void {
-    const sqlBegin = "BEGIN TRANSACTION;";
-    var stmtBegin = try db.prepare(sqlBegin);
-    defer stmtBegin.deinit();
-    const sqlCommit = "COMMIT;";
-    var stmtCommit = try db.prepare(sqlCommit);
-    defer stmtCommit.deinit();
+    const sql_begin = "BEGIN TRANSACTION;";
+    var stmt_begin = try db.prepare(sql_begin);
+    defer stmt_begin.deinit();
+    const sql_commit = "COMMIT;";
+    var stmt_commit = try db.prepare(sql_commit);
+    defer stmt_commit.deinit();
 
-    try stmtBegin.exec(.{}, .{});
+    try stmt_begin.exec(.{}, .{});
 
     var it = outputs.valueIterator();
     while (it.next()) |o| {
         assert(o.keypath != null);
-        const sqlOutput = "INSERT OR IGNORE INTO outputs(txid, vout, amount, unspent, path) VALUES(?, ?, ?, true, ?)";
-        var stmtOutput = try db.prepare(sqlOutput);
-        defer stmtOutput.deinit();
+        const sql_output = "INSERT OR IGNORE INTO outputs(txid, vout, amount, unspent, path) VALUES(?, ?, ?, true, ?)";
+        var stmt_output = try db.prepare(sql_output);
+        defer stmt_output.deinit();
 
-        const kp = try o.keypath.?.toStr(allocator, null);
-        try stmtOutput.exec(.{}, .{ .txid = o.txid, .vout = o.vout, .amount = o.amount, .path = kp });
+        const keypath = try o.keypath.?.toStr(allocator, null);
+        try stmt_output.exec(.{}, .{ .txid = o.txid, .vout = o.vout, .amount = o.amount, .path = keypath });
     }
 
-    try stmtCommit.exec(.{}, .{});
+    try stmt_commit.exec(.{}, .{});
 }
 
-pub fn saveInputs(db: *sqlite.Db, inputs: std.ArrayList(Input)) !void {
-    const sqlBegin = "BEGIN TRANSACTION;";
-    var stmtBegin = try db.prepare(sqlBegin);
-    defer stmtBegin.deinit();
-    const sqlCommit = "COMMIT;";
-    var stmtCommit = try db.prepare(sqlCommit);
-    defer stmtCommit.deinit();
+pub fn saveInputsAndMarkOutputs(db: *sqlite.Db, inputs: std.ArrayList(Input)) !void {
+    const sql_begin = "BEGIN TRANSACTION;";
+    var stmt_begin = try db.prepare(sql_begin);
+    defer stmt_begin.deinit();
+    const sql_commit = "COMMIT;";
+    var stmt_commit = try db.prepare(sql_commit);
+    defer stmt_commit.deinit();
 
-    try stmtBegin.exec(.{}, .{});
+    try stmt_begin.exec(.{}, .{});
 
     for (0..inputs.items.len) |i| {
         const input = inputs.items[i];
-        const sqlInput = "INSERT OR IGNORE INTO inputs(txid, reference_output_txid, reference_output_vout) VALUES(?, ?, ?)";
-        var stmtInput = try db.prepare(sqlInput);
-        defer stmtInput.deinit();
-        try stmtInput.exec(.{}, .{ .txid = input.txid, .reference_output_txid = input.output_txid, .reference_output_vout = input.output_vout });
+        const sql_input = "INSERT OR IGNORE INTO inputs(txid, reference_output_txid, reference_output_vout) VALUES(?, ?, ?)";
+        var stmt_input = try db.prepare(sql_input);
+        defer stmt_input.deinit();
+        try stmt_input.exec(.{}, .{ .txid = input.txid, .reference_output_txid = input.output_txid, .reference_output_vout = input.output_vout });
 
-        const sqlOutput = "UPDATE outputs SET unspent = false WHERE txid = ? AND vout = ?";
-        var stmtOutput = try db.prepare(sqlOutput);
-        defer stmtOutput.deinit();
-        try stmtOutput.exec(.{}, .{ .txid = input.output_txid, .vout = input.output_vout });
+        const sql_output = "UPDATE outputs SET unspent = false WHERE txid = ? AND vout = ?";
+        var stmt_output = try db.prepare(sql_output);
+        defer stmt_output.deinit();
+        try stmt_output.exec(.{}, .{ .txid = input.output_txid, .vout = input.output_vout });
     }
 
-    try stmtCommit.exec(.{}, .{});
+    try stmt_commit.exec(.{}, .{});
 }
 
 pub fn getOutput(db: *sqlite.Db, txid: [64]u8, vout: u32) !?Output {
-    const sqlOutput = "SELECT txid, vout, amount AS c FROM outputs WHERE txid = ? AND vout = ?";
-    var stmt = try db.prepare(sqlOutput);
+    const sql_output = "SELECT txid, vout, amount FROM outputs WHERE txid = ? AND vout = ?";
+    var stmt = try db.prepare(sql_output);
     defer stmt.deinit();
     const row = try stmt.one(struct { txid: [64]u8, vout: u32, amount: u64 }, .{}, .{ .txid = txid, .vout = vout });
     if (row != null) {
@@ -142,8 +132,8 @@ pub fn getOutput(db: *sqlite.Db, txid: [64]u8, vout: u32) !?Output {
 }
 
 pub fn getOutputDescriptorPath(allocator: std.mem.Allocator, db: *sqlite.Db, txid: [64]u8, vout: u32) !KeyPath(5) {
-    const sqlOutput = "SELECT path AS c FROM outputs WHERE txid = ? AND vout = ?";
-    var stmt = try db.prepare(sqlOutput);
+    const sql_output = "SELECT path FROM outputs WHERE txid = ? AND vout = ?";
+    var stmt = try db.prepare(sql_output);
     defer stmt.deinit();
     const row = try stmt.oneAlloc(struct { path: []u8 }, allocator, .{}, .{ .txid = txid, .vout = vout });
     if (row != null) {
@@ -154,32 +144,16 @@ pub fn getOutputDescriptorPath(allocator: std.mem.Allocator, db: *sqlite.Db, txi
     return error.DescriptorNotFound;
 }
 
-pub fn saveTransaction(db: *sqlite.Db, block_heigth: usize, transactions: std.AutoHashMap([64]u8, bool), rawtransactionsmap: std.AutoHashMap([64]u8, []u8)) !void {
-    const sqlBegin = "BEGIN TRANSACTION;";
-    var stmtBegin = try db.prepare(sqlBegin);
-    defer stmtBegin.deinit();
-    const sqlCommit = "COMMIT;";
-    var stmtCommit = try db.prepare(sqlCommit);
-    defer stmtCommit.deinit();
-
-    try stmtBegin.exec(.{}, .{});
-
-    var it = transactions.keyIterator();
-    while (it.next()) |txid| {
-        const raw = rawtransactionsmap.get(txid.*);
-        const sqlTx = "INSERT OR IGNORE INTO transactions(txid, rawtx, block_heigth, is_coinbase) VALUES(?, ?, ?, ?)";
-        var stmtTx = try db.prepare(sqlTx);
-        defer stmtTx.deinit();
-        const isCoinbase = transactions.get(txid.*).?;
-        try stmtTx.exec(.{}, .{ .txid = txid, .rawtx = raw.?, .block_heigth = block_heigth, .is_coinbase = isCoinbase });
-    }
-
-    try stmtCommit.exec(.{}, .{});
+pub fn saveTransaction(db: *sqlite.Db, txid: [64]u8, transaction_raw: []u8, is_coinbase: bool, block_heigth: usize) !void {
+    const sql_transaction = "INSERT OR IGNORE INTO transactions(txid, raw, block_heigth, is_coinbase) VALUES(?, ?, ?, ?)";
+    var stmt_transaction = try db.prepare(sql_transaction);
+    defer stmt_transaction.deinit();
+    try stmt_transaction.exec(.{}, .{ .txid = txid, .raw = transaction_raw.?, .block_heigth = block_heigth, .is_coinbase = is_coinbase });
 }
 
 pub fn getCurrentBlockHeigth(db: *sqlite.Db) !?usize {
-    const sqlBlock = "SELECT MAX(heigth) AS block_height FROM blocks;";
-    var stmt = try db.prepare(sqlBlock);
+    const sql_block = "SELECT MAX(heigth) AS block_height FROM blocks;";
+    var stmt = try db.prepare(sql_block);
     defer stmt.deinit();
     const row = try stmt.one(struct { block_heigth: usize }, .{}, .{});
     if (row != null) {
