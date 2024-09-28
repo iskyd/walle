@@ -6,6 +6,11 @@ const utils = @import("utils.zig");
 const script = @import("script.zig");
 const tx = @import("tx.zig");
 const deriveP2WPKHAddress = @import("address.zig").deriveP2WPKHAddress;
+const Network = @import("const.zig").Network;
+
+fn showHelp() void {
+    std.debug.print("Valid commands:\nscriptdecode\ntxdecode\nepknew\nepktopublic\nhdderivation\naddr\nFor more information use wbx <cmd> help", .{});
+}
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -16,7 +21,7 @@ pub fn main() !void {
         txdecode,
         epknew,
         epktopublic,
-        hdderivation,
+        derivation,
         addr,
     };
 
@@ -25,15 +30,23 @@ pub fn main() !void {
         return;
     };
     defer std.process.argsFree(allocator, args);
+    if (args.len < 2) {
+        showHelp();
+        return;
+    }
 
     const cmd = std.meta.stringToEnum(Commands, args[1]);
     if (cmd == null) {
-        std.debug.print("Invalid argument\n", .{});
+        showHelp();
         return;
     }
 
     switch (cmd.?) {
         .scriptdecode => {
+            if (args.len < 3 or std.mem.eql(u8, args[2], "help")) {
+                std.debug.print("Decode hex script\nwbx scriptdecode <hex script>\n", .{});
+                return;
+            }
             const s = script.Script.decode(allocator, args[2]) catch {
                 std.debug.print("Invalid script provided\n", .{});
                 return;
@@ -43,6 +56,10 @@ pub fn main() !void {
             std.debug.print("{}\n", .{s});
         },
         .txdecode => {
+            if (args.len < 3 or std.mem.eql(u8, args[2], "help")) {
+                std.debug.print("Decode raw transaction\nwbx txdecode <raw transaction>\n", .{});
+                return;
+            }
             const transaction = tx.decodeRawTx(allocator, args[2]) catch {
                 std.debug.print("Invalid rawtx provided\n", .{});
                 return;
@@ -51,8 +68,13 @@ pub fn main() !void {
             std.debug.print("{}\n", .{transaction});
         },
         .epknew => {
-            if (args.len > 2) {
-                const seed = args[2][0..args[2].len];
+            if (args.len < 3 or std.mem.eql(u8, args[2], "help")) {
+                std.debug.print("Generate new private key. You can specify an existing seed or a random one will be used\nwbx epknew <mainnet/testnet> <?existing seed>\n", .{});
+                return;
+            }
+            const addr_version: bip32.SerializedPrivateKeyVersion = if (std.mem.eql(u8, args[2], "mainnet")) .segwit_mainnet else .segwit_testnet;
+            if (args.len > 3) {
+                const seed = args[3][0..args[3].len];
                 const bytes: []u8 = allocator.alloc(u8, seed.len / 2) catch {
                     std.debug.print("Error while allocating memory", .{});
                     return;
@@ -60,7 +82,7 @@ pub fn main() !void {
                 defer allocator.free(bytes);
                 _ = try std.fmt.hexToBytes(bytes, seed);
                 const epk = bip32.generateExtendedMasterPrivateKey(bytes);
-                const addr = epk.address(.segwit_mainnet, 0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
+                const addr = epk.address(addr_version, 0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
                     std.debug.print("Error while generating address", .{});
                     return;
                 };
@@ -84,7 +106,7 @@ pub fn main() !void {
                 try bip39.mnemonicToSeed(allocator, &mnemonic, "", &seed);
 
                 const epk = bip32.generateExtendedMasterPrivateKey(&seed);
-                const addr = epk.address(.segwit_mainnet, 0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
+                const addr = epk.address(addr_version, 0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
                     std.debug.print("Error while generating address", .{});
                     return;
                 };
@@ -92,6 +114,10 @@ pub fn main() !void {
             }
         },
         .epktopublic => {
+            if (args.len < 3 or std.mem.eql(u8, args[2], "help")) {
+                std.debug.print("Derive public key from a given private key in address form.\nwbx epktopublic <private key addr>\n", .{});
+                return;
+            }
             const epk = bip32.ExtendedPrivateKey.fromAddress(args[2][0..111].*) catch {
                 std.debug.print("Invalid extended private key address", .{});
                 return;
@@ -104,7 +130,12 @@ pub fn main() !void {
             };
             std.debug.print("Compressed public key {s}\n", .{compressed});
         },
-        .hdderivation => {
+        .derivation => {
+            if (args.len < 5 or std.mem.eql(u8, args[2], "help")) {
+                std.debug.print("Bip32 derivation. Use ' to indicate hardened derivation.\nwbx hdderivation <private key addr> <path> <mainnet/testnet>\n", .{});
+                return;
+            }
+            const addr_version: bip32.SerializedPrivateKeyVersion = if (std.mem.eql(u8, args[2], "mainnet")) .segwit_mainnet else .segwit_testnet;
             const epk = bip32.ExtendedPrivateKey.fromAddress(args[2][0..111].*) catch {
                 std.debug.print("Invalid extended private key address", .{});
                 return;
@@ -154,7 +185,7 @@ pub fn main() !void {
             var bytes: [33]u8 = undefined;
             _ = try std.fmt.hexToBytes(&bytes, &compressedpublic);
             const fingerprint = utils.hash160(&bytes)[0..4].*;
-            const addr = current.address(.segwit_mainnet, depth, fingerprint, lastindex) catch {
+            const addr = current.address(addr_version, depth, fingerprint, lastindex) catch {
                 std.debug.print("Error while converting to address\n", .{});
                 return;
             };
@@ -162,6 +193,11 @@ pub fn main() !void {
             std.debug.print("addr: {s}\n", .{addr});
         },
         .addr => {
+            if (args.len < 3 or std.mem.eql(u8, args[2], "help")) {
+                std.debug.print("Generate Pay To Witness Public Key Address.\nwbx addr <compressed public key> <mainnet/testnet>\n", .{});
+                return;
+            }
+            const network: Network = if (std.mem.eql(u8, args[3], "mainnet")) .mainnet else .testnet;
             const compressed = args[2][0..66].*;
             const public = bip32.PublicKey.fromStrCompressed(compressed) catch {
                 std.debug.print("Invalid compressed public key\n", .{});
@@ -178,7 +214,7 @@ pub fn main() !void {
             };
             defer s.deinit();
 
-            const addr = deriveP2WPKHAddress(allocator, s, .mainnet) catch {
+            const addr = deriveP2WPKHAddress(allocator, s, network) catch {
                 std.debug.print("Error while generating address\n", .{});
                 return;
             };
