@@ -235,7 +235,7 @@ pub fn main() !void {
             while (it.next()) |txid| {
                 const raw = raw_transactions_map.get(txid.*).?;
                 const is_coinbase = relevant_transactions.get(txid.*).?;
-                try db.saveTransaction(&database, txid, raw, is_coinbase, i);
+                try db.saveTransaction(&database, txid.*, raw, is_coinbase, i);
             }
         }
         // Since db writes are not in a single transaction we commit block as lastest so that if we restart we dont't risk loosing informations, once block is persisted we are sure outputs, inputs and relevant transactions in that block are persisted too. We can recover from partial commit simply reindexing the block.

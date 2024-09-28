@@ -148,7 +148,7 @@ pub fn saveTransaction(db: *sqlite.Db, txid: [64]u8, transaction_raw: []u8, is_c
     const sql_transaction = "INSERT OR IGNORE INTO transactions(txid, raw, block_heigth, is_coinbase) VALUES(?, ?, ?, ?)";
     var stmt_transaction = try db.prepare(sql_transaction);
     defer stmt_transaction.deinit();
-    try stmt_transaction.exec(.{}, .{ .txid = txid, .raw = transaction_raw.?, .block_heigth = block_heigth, .is_coinbase = is_coinbase });
+    try stmt_transaction.exec(.{}, .{ .txid = txid, .raw = transaction_raw, .block_heigth = block_heigth, .is_coinbase = is_coinbase });
 }
 
 pub fn getCurrentBlockHeigth(db: *sqlite.Db) !?usize {

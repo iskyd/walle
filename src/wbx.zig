@@ -8,7 +8,6 @@ const tx = @import("tx.zig");
 const deriveP2WPKHAddress = @import("address.zig").deriveP2WPKHAddress;
 
 pub fn main() !void {
-    std.debug.print("WALL-E. Bitcoin Wallet written in Zig\n", .{});
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
@@ -61,7 +60,7 @@ pub fn main() !void {
                 defer allocator.free(bytes);
                 _ = try std.fmt.hexToBytes(bytes, seed);
                 const epk = bip32.generateExtendedMasterPrivateKey(bytes);
-                const addr = epk.address(.SEGWIT_MAINNET, 0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
+                const addr = epk.address(.segwit_mainnet, 0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
                     std.debug.print("Error while generating address", .{});
                     return;
                 };
@@ -85,7 +84,7 @@ pub fn main() !void {
                 try bip39.mnemonicToSeed(allocator, &mnemonic, "", &seed);
 
                 const epk = bip32.generateExtendedMasterPrivateKey(&seed);
-                const addr = epk.address(.SEGWIT_MAINNET, 0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
+                const addr = epk.address(.segwit_mainnet, 0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
                     std.debug.print("Error while generating address", .{});
                     return;
                 };
@@ -155,7 +154,7 @@ pub fn main() !void {
             var bytes: [33]u8 = undefined;
             _ = try std.fmt.hexToBytes(&bytes, &compressedpublic);
             const fingerprint = utils.hash160(&bytes)[0..4].*;
-            const addr = current.address(.SEGWIT_MAINNET, depth, fingerprint, lastindex) catch {
+            const addr = current.address(.segwit_mainnet, depth, fingerprint, lastindex) catch {
                 std.debug.print("Error while converting to address\n", .{});
                 return;
             };
@@ -179,7 +178,7 @@ pub fn main() !void {
             };
             defer s.deinit();
 
-            const addr = deriveP2WPKHAddress(allocator, s, .MAINNET) catch {
+            const addr = deriveP2WPKHAddress(allocator, s, .mainnet) catch {
                 std.debug.print("Error while generating address\n", .{});
                 return;
             };

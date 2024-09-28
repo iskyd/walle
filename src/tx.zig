@@ -197,7 +197,7 @@ pub const Transaction = struct {
             const input = self.inputs.items[i];
             try writer.print("    txid: {s}\n", .{input.prevout.?.txid});
             try writer.print("    reverse txid: {s}\n", .{try utils.reverseByteOrderFromHex(64, input.prevout.?.txid)});
-            try writer.print("    n: {d}\n", .{input.prevout.?.n});
+            try writer.print("    n: {d}\n", .{input.prevout.?.vout});
             try writer.print("    sequence: {d}\n\n", .{input.sequence});
         }
         try writer.print("Outputs: \n", .{});

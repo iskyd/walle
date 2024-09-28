@@ -16,11 +16,22 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const exe = b.addExecutable(.{
-        .name = "walle",
+    // indexer
+    const indexer = b.addExecutable(.{
+        .name = "indexer",
         // In this case the main source file is merely a path, however, in more
         // complicated build scripts, this could be a generated file.
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("src/indexer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // walle bitcoin explorer
+    const wbx = b.addExecutable(.{
+        .name = "wbx",
+        // In this case the main source file is merely a path, however, in more
+        // complicated build scripts, this could be a generated file.
+        .root_source_file = b.path("src/wbx.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -35,10 +46,6 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/crypto/crypto.zig"),
     });
 
-    exe.root_module.addImport("base58", base58);
-    exe.root_module.addImport("clap", clap);
-    exe.root_module.addImport("crypto", crypto);
-
     const sqlite = b.addModule("sqlite", .{
         .root_source_file = b.path("lib/zig-sqlite/sqlite.zig"),
     });
@@ -49,57 +56,51 @@ pub fn build(b: *std.Build) void {
         .flags = &[_][]const u8{"-std=c99"},
     });
     sqlite.addIncludePath(b.path("lib/zig-sqlite/c"));
-    exe.linkLibC();
-    exe.linkSystemLibrary("sqlite3");
-    exe.root_module.addImport("sqlite", sqlite);
+
+    indexer.root_module.addImport("base58", base58);
+    indexer.root_module.addImport("clap", clap);
+    indexer.root_module.addImport("crypto", crypto);
+    indexer.linkLibC();
+    indexer.linkSystemLibrary("sqlite3");
+    indexer.root_module.addImport("sqlite", sqlite);
+
+    wbx.root_module.addImport("base58", base58);
+    wbx.root_module.addImport("crypto", crypto);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
-    b.installArtifact(exe);
-
-    // Check step, used for zls
-    const exe_check = b.addExecutable(.{
-        .name = "walle",
-        // In this case the main source file is merely a path, however, in more
-        // complicated build scripts, this could be a generated file.
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    exe_check.root_module.addImport("base58", base58);
-    exe_check.root_module.addImport("clap", clap);
-    exe_check.root_module.addImport("crypto", crypto);
-    exe_check.linkLibC();
-    exe_check.linkSystemLibrary("sqlite3");
-    exe_check.root_module.addImport("sqlite", sqlite);
-
-    const check = b.step("check", "Check if main compiles");
-    check.dependOn(&exe_check.step);
+    b.installArtifact(indexer);
+    b.installArtifact(wbx);
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
     // such a dependency.
-    const run_cmd = b.addRunArtifact(exe);
+    const run_cmd_indexer = b.addRunArtifact(indexer);
+    const run_cmd_wbx = b.addRunArtifact(wbx);
 
     // By making the run step depend on the install step, it will be run from the
     // installation directory rather than directly from within the cache directory.
     // This is not necessary, however, if the application depends on other installed
     // files, this ensures they will be present and in the expected location.
-    run_cmd.step.dependOn(b.getInstallStep());
+    run_cmd_indexer.step.dependOn(b.getInstallStep());
+    run_cmd_wbx.step.dependOn(b.getInstallStep());
 
     // This allows the user to pass arguments to the application in the build
     // command itself, like this: `zig build run -- arg1 arg2 etc`
     if (b.args) |args| {
-        run_cmd.addArgs(args);
+        run_cmd_indexer.addArgs(args);
+        run_cmd_wbx.addArgs(args);
     }
 
     // This creates a build step. It will be visible in the `zig build --help` menu,
     // and can be selected like this: `zig build run`
     // This will evaluate the `run` step rather than the default, which is "install".
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
+    const run_step_indexer = b.step("run_indexer", "Run the indexer");
+    run_step_indexer.dependOn(&run_cmd_indexer.step);
+
+    const run_step_wbx = b.step("run_wbx", "Run the walle bitcoin explorer");
+    run_step_wbx.dependOn(&run_cmd_wbx.step);
 
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request
