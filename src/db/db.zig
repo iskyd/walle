@@ -32,7 +32,7 @@ pub fn initDB(db: *sqlite.Db) !void {
     var stmt_transactions = try db.prepare(sql_transactions);
     defer stmt_transactions.deinit();
 
-    const sql_outputs = "CREATE TABLE IF NOT EXISTS outputs(txid VARCHAR(64), vout INTEGER, amount INTEGER NOT NULL, unspent INTEGER, path TEXT NOT NULL, PRIMARY KEY(txid, n));";
+    const sql_outputs = "CREATE TABLE IF NOT EXISTS outputs(txid VARCHAR(64), vout INTEGER NOT NULL, amount INTEGER NOT NULL, unspent INTEGER, path TEXT NOT NULL, PRIMARY KEY(txid, vout));";
     var stmt_outputs = try db.prepare(sql_outputs);
     defer stmt_outputs.deinit();
 

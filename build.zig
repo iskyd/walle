@@ -36,35 +36,21 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const base58 = b.addModule("base58", .{
-        .root_source_file = b.path("lib/base58/src/lib.zig"),
-    });
-    const clap = b.addModule("clap", .{
-        .root_source_file = b.path("lib/clap/clap.zig"),
-    });
     const crypto = b.addModule("crypto", .{
         .root_source_file = b.path("src/crypto/crypto.zig"),
     });
+    const base58_module = b.dependency("base58-zig", .{ .target = target, .optimize = optimize }).module("base58-zig");
+    const clap_module = b.dependency("clap", .{ .target = target, .optimize = optimize }).module("clap");
+    const sqlite = b.dependency("sqlite", .{ .target = target, .optimize = optimize });
+    const sqlite_module = sqlite.module("sqlite");
 
-    const sqlite = b.addModule("sqlite", .{
-        .root_source_file = b.path("lib/zig-sqlite/sqlite.zig"),
-    });
-    sqlite.addCSourceFiles(.{
-        .files = &[_][]const u8{
-            "lib/zig-sqlite/c/workaround.c",
-        },
-        .flags = &[_][]const u8{"-std=c99"},
-    });
-    sqlite.addIncludePath(b.path("lib/zig-sqlite/c"));
-
-    indexer.root_module.addImport("base58", base58);
-    indexer.root_module.addImport("clap", clap);
+    indexer.root_module.addImport("base58", base58_module);
+    indexer.root_module.addImport("clap", clap_module);
     indexer.root_module.addImport("crypto", crypto);
-    indexer.linkLibC();
-    indexer.linkSystemLibrary("sqlite3");
-    indexer.root_module.addImport("sqlite", sqlite);
+    indexer.linkLibrary(sqlite.artifact("sqlite"));
+    indexer.root_module.addImport("sqlite", sqlite_module);
 
-    wbx.root_module.addImport("base58", base58);
+    wbx.root_module.addImport("base58", base58_module);
     wbx.root_module.addImport("crypto", crypto);
 
     // This declares intent for the executable to be installed into the
@@ -117,9 +103,9 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             // .main_mod_path = .{ .path = "." }, // .main_mod_path in zig 0.12.0
         });
-        unit_tests.root_module.addImport("base58", base58);
+        unit_tests.root_module.addImport("base58", base58_module);
         unit_tests.root_module.addImport("crypto", crypto);
-        unit_tests.root_module.addImport("sqlite", sqlite);
+        unit_tests.root_module.addImport("sqlite", sqlite_module);
         const run_unit_tests = b.addRunArtifact(unit_tests);
         run_unit_tests.has_side_effects = true; // Always execute test, do not cache
         test_step.dependOn(&run_unit_tests.step);

@@ -21,17 +21,10 @@ zig build test
 zig build test --summary all -- src/bip39/bip39.zig src/bip38/bip38.zig
 ```
 
-### Lib
-External libraries such as base58 and clap are installed as git submodule and added to build.zig
-
 ### Dev Environment
 See devbox.json
 ``` bash
 devbox shell
-```
-Ensure that you installed the submodule by:
-```bash
-git submodule update --init
 ```
 
 ### Bitcoin Node
@@ -70,12 +63,12 @@ Join [WALL•E's Discord channel](https://discord.gg/9e9qnzQAH6) to chat with th
 - [x] Serialized Extendend Private/Public Key (https://learnmeabitcoin.com/technical/keys/hd-wallets/extended-keys/)
 - [x] BIP38 (Encrypting Bitcoin Private Key)
 - [x] BIP44
-- [ ] Wallet files
 - [x] ECDSA Signatures
-- [ ] Segwit
+- [x] Segwit
 - [x] Bech32
 - [x] BTC Node integration
 - [x] Wallet Sync
+- [ ] Legacy Wallet
 - [ ] Script Hash (P2SH, P2WSH)
 - [ ] Transactions
 - [ ] CLI
