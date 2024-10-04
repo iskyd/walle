@@ -207,6 +207,24 @@ pub fn getDescriptor(allocator: std.mem.Allocator, db: *sqlite.Db, path: []u8, p
     return null;
 }
 
+pub fn saveDescriptor(allocator: std.mem.Allocator, db: *sqlite.Db, descriptor: Descriptor) !void {
+    const sql = "INSERT INTO descriptors(extended_key, path, private) VALUES(?,?,?);";
+    const path = try descriptor.keypath.toStr(allocator, null);
+    defer allocator.free(path);
+
+    var stmt = try db.prepare(sql);
+    defer stmt.deinit();
+    try stmt.exec(.{}, .{ .extended_key = descriptor.extended_key, .path = path, .private = descriptor.private });
+}
+
+pub fn countDescriptors(db: *sqlite.Db) !usize {
+    const sql = "SELECT COUNT(*) as total FROM descriptors;";
+    var stmt = try db.prepare(sql);
+    defer stmt.deinit();
+    const row = try stmt.one(struct { total: usize }, .{}, .{});
+    return row.?.total;
+}
+
 pub fn getUsedKeyPaths(allocator: std.mem.Allocator, db: *sqlite.Db) ![]KeyPath(5) {
     const sql = "SELECT DISTINCT(path) AS path FROM outputs;";
     var stmt = try db.prepare(sql);

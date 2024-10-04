@@ -162,6 +162,19 @@ pub fn generateAccountPrivate(extended_privkey: bip32.ExtendedPrivateKey, purpos
     return index_extended_privkey;
 }
 
+// Purpose, cointype, and account use hardened derivation
+// 2147483648 is added to the passed values for this fields.
+pub fn generateDescriptorPrivate(extended_privkey: bip32.ExtendedPrivateKey, purpose: u32, cointype: u32, account: u32) !bip32.ExtendedPrivateKey {
+    const purpose_extended_privkey = try bip32.deriveHardenedChild(extended_privkey, purpose + 2147483648);
+    const cointype_extended_privkey = try bip32.deriveHardenedChild(purpose_extended_privkey, cointype + 2147483648);
+
+    // Add check that avoid creation of this account if previous account has no transaction associated
+    // as specified in bip44 https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki#account
+    const account_extended_privkey = try bip32.deriveHardenedChild(cointype_extended_privkey, account + 2147483648);
+
+    return account_extended_privkey;
+}
+
 pub fn generatePublicFromAccountPublicKey(extended_pubkey: bip32.ExtendedPublicKey, change: u32, index: u32) !bip32.PublicKey {
     const change_extended_pubkey = try bip32.deriveChildFromExtendedPublicKey(extended_pubkey, change);
     const index_extended_pubkey = try bip32.deriveChildFromExtendedPublicKey(change_extended_pubkey, index);
