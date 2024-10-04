@@ -201,6 +201,17 @@ test "generatePrivateAccount" {
     try std.testing.expectEqualStrings(expected, &compressed);
 }
 
+test "generateDescriptorPrivate" {
+    const addr_serialized = "xprv9s21ZrQH143K46XPEERBYSrepx6CqH2BDKpP9CzBougQShKQRk1NFXrLH8FzeC5HmLDVm1wmJa8k5Xy8LvcirPkNAF5q5Fav1zmkd8omLnR".*;
+    const master_extended_privkey = try bip32.ExtendedPrivateKey.fromAddress(addr_serialized);
+    const extended_privkey = try generateDescriptorPrivate(master_extended_privkey, bip_84_purpose, 1, 0);
+    const extended_privkey_index = try bip32.deriveChildFromExtendedPrivateKey(extended_privkey, 0);
+    const public = bip32.generatePublicKey(extended_privkey_index.privatekey);
+    const compressed = try public.toStrCompressed();
+    const expected = "02351fc272fab79ebd0386c0308ff7c9b7c171f77c63e979d5f20b38c2a4e93eac";
+    try std.testing.expectEqualStrings(expected, &compressed);
+}
+
 test "keypath" {
     const allocator = std.testing.allocator;
     const k1 = try KeyPath(5).fromStr("84'/0'/0'/0/1");

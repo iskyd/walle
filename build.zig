@@ -36,6 +36,16 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // main wallet
+    const walle = b.addExecutable(.{
+        .name = "walle",
+        // In this case the main source file is merely a path, however, in more
+        // complicated build scripts, this could be a generated file.
+        .root_source_file = b.path("src/walle.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const crypto = b.addModule("crypto", .{
         .root_source_file = b.path("src/crypto/crypto.zig"),
     });
@@ -53,17 +63,25 @@ pub fn build(b: *std.Build) void {
     wbx.root_module.addImport("base58", base58_module);
     wbx.root_module.addImport("crypto", crypto);
 
+    walle.root_module.addImport("base58", base58_module);
+    walle.root_module.addImport("clap", clap_module);
+    walle.root_module.addImport("crypto", crypto);
+    walle.linkLibrary(sqlite.artifact("sqlite"));
+    walle.root_module.addImport("sqlite", sqlite_module);
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(indexer);
     b.installArtifact(wbx);
+    b.installArtifact(walle);
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
     // such a dependency.
     const run_cmd_indexer = b.addRunArtifact(indexer);
     const run_cmd_wbx = b.addRunArtifact(wbx);
+    const run_cmd_walle = b.addRunArtifact(walle);
 
     // By making the run step depend on the install step, it will be run from the
     // installation directory rather than directly from within the cache directory.
@@ -71,6 +89,7 @@ pub fn build(b: *std.Build) void {
     // files, this ensures they will be present and in the expected location.
     run_cmd_indexer.step.dependOn(b.getInstallStep());
     run_cmd_wbx.step.dependOn(b.getInstallStep());
+    run_cmd_walle.step.dependOn(b.getInstallStep());
 
     // This allows the user to pass arguments to the application in the build
     // command itself, like this: `zig build run -- arg1 arg2 etc`
@@ -87,6 +106,9 @@ pub fn build(b: *std.Build) void {
 
     const run_step_wbx = b.step("run_wbx", "Run the walle bitcoin explorer");
     run_step_wbx.dependOn(&run_cmd_wbx.step);
+
+    const run_step_walle = b.step("run_walle", "Run the walle main bitcoin");
+    run_step_walle.dependOn(&run_cmd_walle.step);
 
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request
