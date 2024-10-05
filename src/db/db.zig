@@ -195,7 +195,7 @@ pub fn getDescriptors(allocator: std.mem.Allocator, db: *sqlite.Db) ![]Descripto
 }
 
 pub fn getDescriptor(allocator: std.mem.Allocator, db: *sqlite.Db, path: []u8, private: bool) !?Descriptor {
-    const sql = "SELECT extended_key, path, private FROM descriptor WHERE path=? AND private=? LIMIT 1;";
+    const sql = "SELECT extended_key, path, private FROM descriptors WHERE path=? AND private=? LIMIT 1;";
     var stmt = try db.prepare(sql);
     defer stmt.deinit();
     const row = try stmt.oneAlloc(struct { extended_key: [111]u8, path: []const u8, private: bool }, allocator, .{}, .{ .path = path, .private = private });
@@ -242,4 +242,27 @@ pub fn getUsedKeyPaths(allocator: std.mem.Allocator, db: *sqlite.Db) ![]KeyPath(
         keypaths[i] = try KeyPath(5).fromStr(row.path);
     }
     return keypaths;
+}
+
+fn sqliteKeypathLastIndex(str: []const u8) u32 {
+    const k = KeyPath(5).fromStr(str) catch return 0;
+    return k.path[4];
+}
+
+pub fn getLastUsedIndexFromOutputs(db: *sqlite.Db) !?u32 {
+    const sql_count = "SELECT COUNT(*) as total from outputs;";
+    var stmt_count = try db.prepare(sql_count);
+    defer stmt_count.deinit();
+    const row_count = try stmt_count.one(struct { total: usize }, .{}, .{});
+    if (row_count.?.total == 0) {
+        return null;
+    }
+
+    try db.createScalarFunction("KEYPATH_LAST_INDEX", sqliteKeypathLastIndex, .{});
+    const sql = "SELECT MAX(KEYPATH_LAST_INDEX(path)) AS last FROM outputs;";
+    var stmt = try db.prepare(sql);
+    defer stmt.deinit();
+    const row = try stmt.one(struct { last: u32 }, .{}, .{});
+    assert(row != null); // a row must exists since the count is > 0
+    return row.?.last;
 }
