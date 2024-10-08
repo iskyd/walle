@@ -182,6 +182,13 @@ pub fn generatePublicFromAccountPublicKey(extended_pubkey: bip32.ExtendedPublicK
     return index_extended_pubkey.key;
 }
 
+pub fn generatePrivateFromAccountPrivateKey(extended_privkey: bip32.ExtendedPrivateKey, change: u32, index: u32) ![32]u8 {
+    const change_extended_privkey = try bip32.deriveChildFromExtendedPrivateKey(extended_privkey, change);
+    const index_extended_privkey = try bip32.deriveChildFromExtendedPrivateKey(change_extended_privkey, index);
+
+    return index_extended_privkey.privatekey;
+}
+
 test "generateAccount" {
     const addr_serialized = "tprv8ZgxMBicQKsPefj8cBDzcXJYcnvWBLQwG9sAvKyAYRPiLtdZXvdAmqtjzeHbX7ZX2LY8Sfb7SaLSJbGCFBPMFZdnmv4D7UebvyLTC974BA4".*;
     const master_extended_privkey = try bip32.ExtendedPrivateKey.fromAddress(addr_serialized);

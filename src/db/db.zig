@@ -116,18 +116,31 @@ pub fn saveInputsAndMarkOutputs(db: *sqlite.Db, inputs: std.ArrayList(Input)) !v
     try stmt_commit.exec(.{}, .{});
 }
 
-pub fn getOutput(db: *sqlite.Db, txid: [64]u8, vout: u32) !?Output {
-    const sql_output = "SELECT txid, vout, amount FROM outputs WHERE txid = ? AND vout = ?";
+pub fn existsOutput(db: *sqlite.Db, txid: [64]u8, vout: u32) !bool {
+    const sql = "SELECT COUNT(*) AS total FROM  outputs WHERE txid = ? AND vout = ?";
+    var stmt = try db.prepare(sql);
+    defer stmt.deinit();
+    const row = try stmt.one(struct { total: usize }, .{}, .{ .txid = txid, .vout = vout });
+    return row.?.total > 1;
+}
+
+pub fn getOutput(allocator: std.mem.Allocator, db: *sqlite.Db, txid: [64]u8, vout: u32) !?Output {
+    const sql_output = "SELECT txid, vout, amount, unspent, path FROM outputs WHERE txid = ? AND vout = ?";
     var stmt = try db.prepare(sql_output);
     defer stmt.deinit();
-    const row = try stmt.one(struct { txid: [64]u8, vout: u32, amount: u64 }, .{}, .{ .txid = txid, .vout = vout });
+    const row = try stmt.oneAlloc(struct { txid: [64]u8, vout: u32, amount: u64, unspent: bool, path: []u8 }, allocator, .{}, .{ .txid = txid, .vout = vout });
+
     if (row != null) {
+        defer allocator.free(row.?.path);
         return Output{
             .txid = row.?.txid,
             .vout = row.?.vout,
             .amount = row.?.amount,
+            .unspent = row.?.unspent,
+            .keypath = try KeyPath(5).fromStr(row.?.path),
         };
     }
+
     return null;
 }
 
@@ -174,11 +187,11 @@ pub fn getBalance(db: *sqlite.Db, current_block: usize) !u64 {
 }
 
 // Memory ownership to the caller
-pub fn getDescriptors(allocator: std.mem.Allocator, db: *sqlite.Db) ![]Descriptor {
-    const sql = "SELECT extended_key, path, private FROM descriptors;";
+pub fn getDescriptors(allocator: std.mem.Allocator, db: *sqlite.Db, private: bool) ![]Descriptor {
+    const sql = "SELECT extended_key, path, private FROM descriptors WHERE private = ?;";
     var stmt = try db.prepare(sql);
     defer stmt.deinit();
-    const rows = try stmt.all(struct { extended_key: [111]u8, path: []const u8, private: bool }, allocator, .{}, .{});
+    const rows = try stmt.all(struct { extended_key: [111]u8, path: []const u8, private: bool }, allocator, .{}, .{ .private = private });
     defer {
         for (rows) |row| {
             allocator.free(row.path);
@@ -194,7 +207,7 @@ pub fn getDescriptors(allocator: std.mem.Allocator, db: *sqlite.Db) ![]Descripto
     return descriptors;
 }
 
-pub fn getDescriptor(allocator: std.mem.Allocator, db: *sqlite.Db, path: []u8, private: bool) !?Descriptor {
+pub fn getDescriptor(allocator: std.mem.Allocator, db: *sqlite.Db, path: []const u8, private: bool) !?Descriptor {
     const sql = "SELECT extended_key, path, private FROM descriptors WHERE path=? AND private=? LIMIT 1;";
     var stmt = try db.prepare(sql);
     defer stmt.deinit();
@@ -249,20 +262,40 @@ fn sqliteKeypathLastIndex(str: []const u8) u32 {
     return k.path[4];
 }
 
-pub fn getLastUsedIndexFromOutputs(db: *sqlite.Db) !?u32 {
-    const sql_count = "SELECT COUNT(*) as total from outputs;";
+pub fn getLastUsedIndexFromOutputs(db: *sqlite.Db, base_path: []u8) !?u32 {
+    const sql_count = "SELECT COUNT(*) as total from outputs WHERE path LIKE ?;";
     var stmt_count = try db.prepare(sql_count);
     defer stmt_count.deinit();
-    const row_count = try stmt_count.one(struct { total: usize }, .{}, .{});
+    const row_count = try stmt_count.one(struct { total: usize }, .{}, .{base_path});
     if (row_count.?.total == 0) {
         return null;
     }
 
     try db.createScalarFunction("KEYPATH_LAST_INDEX", sqliteKeypathLastIndex, .{});
-    const sql = "SELECT MAX(KEYPATH_LAST_INDEX(path)) AS last FROM outputs;";
+    const sql = "SELECT MAX(KEYPATH_LAST_INDEX(path)) AS last FROM outputs WHERE path LIKE ?;";
     var stmt = try db.prepare(sql);
     defer stmt.deinit();
-    const row = try stmt.one(struct { last: u32 }, .{}, .{});
+    const row = try stmt.one(struct { last: u32 }, .{}, .{base_path});
     assert(row != null); // a row must exists since the count is > 0
     return row.?.last;
+}
+
+pub fn getUnspentOutputs(allocator: std.mem.Allocator, db: *sqlite.Db) ![]Output {
+    const sql = "SELECT txid, vout, amount, unspent, path FROM outputs WHERE unspent = true";
+    var stmt = try db.prepare(sql);
+    defer stmt.deinit();
+    const rows = try stmt.all(struct { txid: [64]u8, vout: u32, amount: u64, unspent: bool, path: []u8 }, allocator, .{}, .{});
+
+    defer {
+        for (rows) |row| {
+            allocator.free(row.path);
+        }
+        allocator.free(rows);
+    }
+
+    var outputs = try allocator.alloc(Output, rows.len);
+    for (rows, 0..) |row, i| {
+        outputs[i] = Output{ .txid = row.txid, .vout = row.vout, .amount = row.amount, .unspent = row.unspent, .keypath = try KeyPath(5).fromStr(row.path) };
+    }
+    return outputs;
 }

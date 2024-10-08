@@ -50,7 +50,7 @@ pub const Signature = struct {
 // nonce is used in tests to recreate deterministic signature.
 // I don't like this parameter, using the same nonce can expose the private key, but I havent found any better solution
 pub fn sign(pk: [32]u8, z: [32]u8, comptime nonce: ?u256) Signature {
-    comptime if (nonce == null and is_test == false) {
+    comptime if (nonce != null and is_test == false) {
         unreachable;
     };
     const n = crypto.secp256k1_number_of_points;

@@ -206,6 +206,17 @@ pub const Transaction = struct {
             try writer.print("    script pubkey: {s}\n", .{output.script_pubkey});
             try writer.print("    amount: {d}\n\n", .{output.amount});
         }
+
+        if (self.witness.items.len > 0) {
+            try writer.print("Witness: \n", .{});
+            for (0..self.witness.items.len) |i| {
+                const witness = self.witness.items[i];
+                for (0..witness.stack_items.items.len) |j| {
+                    const stack_item = witness.stack_items.items[j];
+                    try writer.print("    item: {s}\n", .{stack_item.item});
+                }
+            }
+        }
     }
 };
 
@@ -307,7 +318,7 @@ test "createTx" {
 }
 
 // [72]u8 = 64 txid + 8 vout
-pub fn signTx(allocator: std.mem.Allocator, tx: *Transaction, privkey: [32]u8, pubkeys: std.AutoHashMap([72]u8, bip32.PublicKey), comptime nonce: ?u256) !void {
+pub fn signTx(allocator: std.mem.Allocator, tx: *Transaction, privkeys: std.AutoHashMap([72]u8, [32]u8), pubkeys: std.AutoHashMap([72]u8, bip32.PublicKey), comptime nonce: ?u256) !void {
     const inputs_preimage_hash = try getTxInputsPreImageHash(allocator, tx.inputs.items);
     const inputs_sequences_preimage_hash = try getTxInputsSequencesPreImageHash(allocator, tx.inputs.items);
     const outputs_preimage_hash = try getTxOutputsPreImageHash(allocator, tx.outputs.items);
@@ -321,6 +332,7 @@ pub fn signTx(allocator: std.mem.Allocator, tx: *Transaction, privkey: [32]u8, p
         try utils.intToHexStr(u32, @byteSwap(input.prevout.?.vout), &vout_hex);
         _ = try std.fmt.bufPrint(&key, "{s}{s}", .{ input.prevout.?.txid, vout_hex });
         const pubkey = pubkeys.get(key).?;
+        const privkey = privkeys.get(key).?;
         const preimage_hash = try getPreImageHash(tx.version, inputs_preimage_hash, inputs_sequences_preimage_hash, outputs_preimage_hash, tx.locktime, input, pubkey, sighash_type);
         const witness = try createWitness(allocator, preimage_hash, privkey, pubkey, sighash_type, nonce);
         try tx.addWitness(witness);

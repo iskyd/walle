@@ -72,7 +72,7 @@ pub fn main() !void {
     }
 
     // Load descriptors
-    const descriptors = try db.getDescriptors(allocator, &database);
+    const descriptors = try db.getDescriptors(allocator, &database, false); // only public descriptors
     defer allocator.free(descriptors);
 
     for (descriptors) |descriptor| {
@@ -284,10 +284,10 @@ fn getInputsFor(allocator: std.mem.Allocator, database: *sqlite.Db, transactions
                 continue;
             }
             const input = transaction.inputs.items[i];
-            const existing = try db.getOutput(database, input.prevout.?.txid, input.prevout.?.vout);
-            if (existing != null) {
+            const exists = try db.existsOutput(database, input.prevout.?.txid, input.prevout.?.vout);
+            if (exists == true) {
                 const txid = try transaction.getTXID();
-                try inputs.append(.{ .txid = txid, .output_txid = existing.?.txid, .output_vout = existing.?.vout });
+                try inputs.append(.{ .txid = txid, .output_txid = input.prevout.?.txid, .output_vout = input.prevout.?.vout });
             }
         }
     }
