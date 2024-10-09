@@ -258,6 +258,14 @@ pub fn main() !void {
 
             try tx.signTx(allocator, &send_transaction, privkeys, pubkeys, null);
             std.debug.print("send transaction\n{}\n", .{send_transaction});
+
+            const raw_tx_cap = tx.encodeTxCap(send_transaction, true);
+            const raw_tx = try allocator.alloc(u8, raw_tx_cap);
+            const raw_tx_hex = try allocator.alloc(u8, raw_tx_cap * 2);
+            try tx.encodeTx(allocator, raw_tx, send_transaction, true);
+            _ = try std.fmt.bufPrint(raw_tx_hex, "{x}", .{std.fmt.fmtSliceHexLower(raw_tx)});
+
+            std.debug.print("\n{s}\n", .{raw_tx_hex});
         },
     }
 }

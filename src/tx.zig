@@ -351,19 +351,23 @@ test "signTx" {
     const output = try TxOutput.init(allocator, 20000, &script_bytes);
     var outputs = [1]TxOutput{output};
 
+    const map_key: [72]u8 = "ac4994014aa36b7f53375658ef595b3cb2891e1735fe5b441686f5e53338e76a01000000".*;
     const privkey_hex: [64]u8 = "7306f5092467981e66eff98b6b03bfe925922c5ecfaf14c4257ef18e81becf1f".*;
     var privkey: [32]u8 = undefined;
     _ = try std.fmt.hexToBytes(&privkey, &privkey_hex);
+    var privkeys = std.AutoHashMap([72]u8, [32]u8).init(allocator);
+    defer privkeys.deinit();
+    try privkeys.put(map_key, privkey);
+
     const pubkey = bip32.generatePublicKey(privkey);
     var pubkeys = std.AutoHashMap([72]u8, bip32.PublicKey).init(allocator);
-    const map_key: [72]u8 = "ac4994014aa36b7f53375658ef595b3cb2891e1735fe5b441686f5e53338e76a01000000".*;
-    try pubkeys.put(map_key, pubkey);
     defer pubkeys.deinit();
+    try pubkeys.put(map_key, pubkey);
 
     var tx = try createTx(allocator, &inputs, &outputs);
     defer tx.deinit();
 
-    try signTx(allocator, &tx, privkey, pubkeys, 123456789);
+    try signTx(allocator, &tx, privkeys, pubkeys, 123456789);
     var tx_raw: [194]u8 = undefined;
     try encodeTx(allocator, &tx_raw, tx, true);
     const expected_tx_raw_hex = "02000000000101ac4994014aa36b7f53375658ef595b3cb2891e1735fe5b441686f5e53338e76a0100000000ffffffff01204e0000000000001976a914ce72abfd0e6d9354a660c18f2825eb392f060fdc88ac02473044022008f4f37e2d8f74e18c1b8fde2374d5f28402fb8ab7fd1cc5b786aa40851a70cb022032b1374d1a0f125eae4f69d1bc0b7f896c964cfdba329f38a952426cf427484c012103eed0d937090cae6ffde917de8a80dc6156e30b13edd5e51e2e50d52428da1c8700000000";
