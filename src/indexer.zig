@@ -148,7 +148,7 @@ pub fn main() !void {
     const progressbar = progress.start("indexing", block_count);
     defer progressbar.end();
 
-    const start: usize = if (current_block_count == null) 0 else current_block_count.?;
+    const start: usize = if (current_block_count == null) 0 else current_block_count.? + 1;
 
     for (start..block_count + 1) |i| {
         // [72]u8 is for txid + vout in hex format
@@ -177,7 +177,7 @@ pub fn main() !void {
 
                 const txoutputs = try getOutputsFor(aa, transaction, pubkeys);
                 if (txoutputs.items.len == 0) {
-                    break;
+                    continue;
                 }
 
                 _ = try relevant_transactions.getOrPutValue(txid, transaction.isCoinbase());
@@ -213,7 +213,6 @@ pub fn main() !void {
                     }
                 }
             }
-
             break;
         }
 
