@@ -80,15 +80,17 @@ pub fn deriveP2WPKHAddress(allocator: std.mem.Allocator, s: script.Script, n: Ne
 
     const version: u5 = 0;
     const hrp = switch (n) {
-        .mainnet => "bc".*,
-        else => "tb".*,
+        .mainnet => "bc",
+        .testnet => "tb",
+        .regtest => "bcrt",
+        else => unreachable,
     };
 
     var bytes: [20]u8 = undefined;
     _ = try std.fmt.hexToBytes(&bytes, pubkey_hash);
-    const cap = crypto.Bech32Encoder.calcSize(&hrp, &bytes) + 1; // + 1 is for version
+    const cap = crypto.Bech32Encoder.calcSize(hrp, &bytes) + 1; // + 1 is for version
     const encoded = try allocator.alloc(u8, cap);
-    _ = crypto.Bech32Encoder.encode(encoded, &hrp, &bytes, version, .bech32);
+    _ = crypto.Bech32Encoder.encode(encoded, hrp, &bytes, version, .bech32);
     return try Address.init(allocator, encoded);
 }
 

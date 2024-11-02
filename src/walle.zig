@@ -51,10 +51,19 @@ fn addressToScript(allocator: std.mem.Allocator, addr: []const u8) ![]u8 {
     _ = try std.fmt.bufPrint(&pubkey_hash_hex, "{x}", .{std.fmt.fmtSliceHexLower(&pubkey_hash)});
     const s = try script.p2wpkh(allocator, &pubkey_hash_hex);
     defer s.deinit();
-    const cap = s.hexCap();
+    const cap = s.hexCapBytes();
     const buffer = try allocator.alloc(u8, cap);
-    try s.toHex(buffer);
+    try s.toBytes(allocator, buffer);
     return buffer;
+}
+
+fn getNetworkFromStr(str: []u8) Network {
+    const n = std.meta.stringToEnum(Network, str);
+    if (n == null) {
+        unreachable;
+    }
+
+    return n.?;
 }
 
 pub fn main() !void {
@@ -95,7 +104,7 @@ pub fn main() !void {
                 return;
             }
 
-            const network: Network = if (std.mem.eql(u8, args[2], "mainnet")) .mainnet else .testnet;
+            const network = getNetworkFromStr(args[2]);
 
             const total_descriptors = try db.countDescriptors(&database);
             if (total_descriptors > 0) {
@@ -144,7 +153,7 @@ pub fn main() !void {
                 return;
             }
 
-            const network: Network = if (std.mem.eql(u8, args[2], "mainnet")) .mainnet else .testnet;
+            const network = getNetworkFromStr(args[2]);
             const descriptor_path = try getDescriptorPath(network);
             const descriptor = try db.getDescriptor(allocator, &database, &descriptor_path, false);
             if (descriptor == null) {
@@ -179,7 +188,7 @@ pub fn main() !void {
                 return;
             }
 
-            const network: Network = if (std.mem.eql(u8, args[2], "mainnet")) .mainnet else .testnet;
+            const network = getNetworkFromStr(args[2]);
             const destination_address = args[3];
             const amount = try std.fmt.parseInt(usize, args[4], 10);
             const total_outputs = try std.fmt.parseInt(usize, args[5], 10);
@@ -205,7 +214,7 @@ pub fn main() !void {
                 outputs[i] = output.?;
             }
 
-            const mining_fee = 100;
+            const mining_fee = 1000;
             if (total_available_amount < amount - mining_fee) {
                 std.debug.print("Specified outputs amount is {d} while the amount you're trying to spend is {d}.\n", .{ total_available_amount, amount });
                 return;
@@ -242,6 +251,7 @@ pub fn main() !void {
                 try pubkeys.put(map_key, pubkey);
                 try privkeys.put(map_key, privkey);
             }
+
             const change_amount = total_available_amount - amount - mining_fee;
             const tx_outputs_cap: u8 = if (change_amount > 0) 2 else 1;
             const tx_outputs = try allocator.alloc(tx.TxOutput, tx_outputs_cap);
