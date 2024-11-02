@@ -169,7 +169,7 @@ pub fn getBlockRawTx(allocator: std.mem.Allocator, client: *std.http.Client, loc
 pub fn sendRawTx(allocator: std.mem.Allocator, client: *std.http.Client, location: []const u8, auth: []const u8, signed_tx_hex: []u8) !void {
     const uri = try std.Uri.parse(location);
     const rpc_id = "walle".*;
-    const rpc_method = "getblock".*;
+    const rpc_method = "sendrawtransaction".*;
     var params = std.ArrayList(RpcParams).init(allocator);
     defer params.deinit();
     const p = RpcParams{ .str = signed_tx_hex };
