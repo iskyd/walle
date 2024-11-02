@@ -70,9 +70,9 @@ pub fn sign(pk: [32]u8, z: [32]u8, comptime nonce: ?u256) Signature {
         if (s == 0) {
             continue;
         }
+        const low_s = if (s > crypto.secp256k1_number_of_points / 2) crypto.secp256k1_number_of_points - s else s;
 
-        // TODO: always use the low s value
-        return Signature{ .r = r, .s = s };
+        return Signature{ .r = r, .s = low_s };
     }
 
     unreachable;
