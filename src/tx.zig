@@ -4,6 +4,7 @@ const utils = @import("utils.zig");
 const KeyPath = @import("bip44.zig").KeyPath;
 const assert = @import("std").debug.assert;
 const signEcdsa = @import("crypto").signEcdsa;
+const nonceFnRfc6979 = @import("crypto").nonceFnRfc6979;
 const db = @import("db/db.zig");
 const sqlite = @import("sqlite");
 const bip32 = @import("bip32.zig");
@@ -318,7 +319,7 @@ test "createTx" {
 }
 
 // [72]u8 = 64 txid + 8 vout
-pub fn signTx(allocator: std.mem.Allocator, tx: *Transaction, privkeys: std.AutoHashMap([72]u8, [32]u8), pubkeys: std.AutoHashMap([72]u8, bip32.PublicKey), comptime nonce: ?u256) !void {
+pub fn signTx(allocator: std.mem.Allocator, tx: *Transaction, privkeys: std.AutoHashMap([72]u8, [32]u8), pubkeys: std.AutoHashMap([72]u8, bip32.PublicKey), comptime nonce_fn: fn (pk: [32]u8, z: [32]u8) u256) !void {
     const inputs_preimage_hash = try getTxInputsPreImageHash(allocator, tx.inputs.items);
     const inputs_sequences_preimage_hash = try getTxInputsSequencesPreImageHash(allocator, tx.inputs.items);
     const outputs_preimage_hash = try getTxOutputsPreImageHash(allocator, tx.outputs.items);
@@ -334,7 +335,7 @@ pub fn signTx(allocator: std.mem.Allocator, tx: *Transaction, privkeys: std.Auto
         const pubkey = pubkeys.get(key).?;
         const privkey = privkeys.get(key).?;
         const preimage_hash = try getPreImageHash(tx.version, inputs_preimage_hash, inputs_sequences_preimage_hash, outputs_preimage_hash, tx.locktime, input, pubkey, sighash_type);
-        const witness = try createWitness(allocator, preimage_hash, privkey, pubkey, sighash_type, nonce);
+        const witness = try createWitness(allocator, preimage_hash, privkey, pubkey, sighash_type, nonce_fn);
         try tx.addWitness(witness);
     }
 }
@@ -367,7 +368,7 @@ test "signTx" {
     var tx = try createTx(allocator, &inputs, &outputs);
     defer tx.deinit();
 
-    try signTx(allocator, &tx, privkeys, pubkeys, 123456789);
+    try signTx(allocator, &tx, privkeys, pubkeys, nonceFn123456789);
     var tx_raw: [194]u8 = undefined;
     try encodeTx(allocator, &tx_raw, tx, true);
     const expected_tx_raw_hex = "02000000000101ac4994014aa36b7f53375658ef595b3cb2891e1735fe5b441686f5e53338e76a0100000000ffffffff01204e0000000000001976a914ce72abfd0e6d9354a660c18f2825eb392f060fdc88ac02473044022008f4f37e2d8f74e18c1b8fde2374d5f28402fb8ab7fd1cc5b786aa40851a70cb022032b1374d1a0f125eae4f69d1bc0b7f896c964cfdba329f38a952426cf427484c012103eed0d937090cae6ffde917de8a80dc6156e30b13edd5e51e2e50d52428da1c8700000000";
@@ -818,8 +819,8 @@ test "getPreImageHash" {
     try std.testing.expectEqualSlices(u8, &expected_bytes, &hash);
 }
 
-pub fn createWitness(allocator: std.mem.Allocator, preimage_hash: [32]u8, privkey: [32]u8, pubkey: bip32.PublicKey, sighash_type: SighashType, comptime nonce: ?u256) !TxWitness {
-    const signature = signEcdsa(privkey, preimage_hash, nonce);
+pub fn createWitness(allocator: std.mem.Allocator, preimage_hash: [32]u8, privkey: [32]u8, pubkey: bip32.PublicKey, sighash_type: SighashType, comptime nonce_fn: fn (pk: [32]u8, z: [32]u8) u256) !TxWitness {
+    const signature = signEcdsa(privkey, preimage_hash, nonce_fn);
     const partial_serialized = try signature.derEncode(allocator);
     defer allocator.free(partial_serialized);
     var sighash_type_hex: [2]u8 = undefined;
@@ -838,6 +839,12 @@ pub fn createWitness(allocator: std.mem.Allocator, preimage_hash: [32]u8, privke
     return witness;
 }
 
+fn nonceFn123456789(pk: [32]u8, z: [32]u8) u256 {
+    _ = pk;
+    _ = z;
+    return 123456789;
+}
+
 test "createWitness" {
     const allocator = std.testing.allocator;
     const preimage_hash_hex = "d7b60220e1b9b2c1ab40845118baf515203f7b6f0ad83cbb68d3c89b5b3098a6";
@@ -848,7 +855,7 @@ test "createWitness" {
     _ = try std.fmt.hexToBytes(&privkey, &privkey_hex);
     const pubkey = bip32.generatePublicKey(privkey);
 
-    const witness = try createWitness(allocator, preimage_hash, privkey, pubkey, SighashType.sighash_all, 123456789);
+    const witness = try createWitness(allocator, preimage_hash, privkey, pubkey, SighashType.sighash_all, nonceFn123456789);
     defer witness.deinit();
 
     const expected_signature_hex = "3044022008f4f37e2d8f74e18c1b8fde2374d5f28402fb8ab7fd1cc5b786aa40851a70cb022032b1374d1a0f125eae4f69d1bc0b7f896c964cfdba329f38a952426cf427484c01";

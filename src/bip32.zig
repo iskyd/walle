@@ -228,6 +228,7 @@ pub const WifPrivateKey = struct {
         const netslice: [1]u8 = switch (net) {
             Network.mainnet => [1]u8{0b10000000},
             Network.testnet => [1]u8{0b11101111},
+            Network.regtest => [1]u8{0b11101111},
             else => unreachable,
         };
 
