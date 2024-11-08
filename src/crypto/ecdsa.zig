@@ -131,10 +131,7 @@ pub fn nonceFnRfc6979(pk: [32]u8, z: [32]u8) u256 {
         HmacSha256.create(v[0..32], v[0..32], &k);
     }
 
-    const n = std.mem.readInt(u256, v[0..32], .big);
-
-    std.debug.print("calculated nonce = {d}\n", .{n});
-    return n;
+    return std.mem.readInt(u256, v[0..32], .big);
 }
 
 fn nonceFn123456789(pk: [32]u8, z: [32]u8) u256 {

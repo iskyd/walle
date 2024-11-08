@@ -679,7 +679,7 @@ fn getTxInputsSequencesPreImageHash(allocator: std.mem.Allocator, inputs: []TxIn
     defer allocator.free(sequences_concat);
     for (inputs, 0..) |input, i| {
         var sequence_hex: [8]u8 = undefined;
-        try utils.intToHexStr(u32, input.sequence, &sequence_hex);
+        try utils.intToHexStr(u32, @byteSwap(input.sequence), &sequence_hex);
         @memcpy(sequences_concat[i * 8 .. i * 8 + 8], &sequence_hex);
     }
     const bytes: []u8 = try allocator.alloc(u8, sequences_concat.len / 2);

@@ -248,13 +248,6 @@ pub fn main() !void {
                 const extended_privkey = try bip32.ExtendedPrivateKey.fromAddress(private_descriptor.?.extended_key);
                 const privkey = try bip44.generatePrivateFromAccountPrivateKey(extended_privkey, output.keypath.?.path[3], output.keypath.?.path[4]);
 
-                const wif = bip32.WifPrivateKey.fromPrivateKey(privkey, network, true);
-                const wifbase58 = try wif.toBase58();
-                std.debug.print("wifbase58: {s}\n", .{wifbase58});
-
-                utils.debugPrintBytes(64, &privkey);
-                std.debug.print("pubkey: {s}\n", .{try pubkey.toStrCompressed()});
-
                 try pubkeys.put(map_key, pubkey);
                 try privkeys.put(map_key, privkey);
             }
@@ -273,14 +266,7 @@ pub fn main() !void {
 
             var send_transaction = try tx.createTx(allocator, tx_inputs, tx_outputs);
 
-            const raw_tx_cap_no_sign = tx.encodeTxCap(send_transaction, false);
-            const raw_tx_no_sign = try allocator.alloc(u8, raw_tx_cap_no_sign);
-            const raw_tx_hex_no_sign = try allocator.alloc(u8, raw_tx_cap_no_sign * 2);
-            try tx.encodeTx(allocator, raw_tx_no_sign, send_transaction, false);
-            _ = try std.fmt.bufPrint(raw_tx_hex_no_sign, "{x}", .{std.fmt.fmtSliceHexLower(raw_tx_no_sign)});
-
             try tx.signTx(allocator, &send_transaction, privkeys, pubkeys, crypto.nonceFnRfc6979);
-            std.debug.print("send transaction\n{}\n", .{send_transaction});
 
             const raw_tx_cap = tx.encodeTxCap(send_transaction, true);
             const raw_tx = try allocator.alloc(u8, raw_tx_cap);
@@ -288,7 +274,6 @@ pub fn main() !void {
             try tx.encodeTx(allocator, raw_tx, send_transaction, true);
             _ = try std.fmt.bufPrint(raw_tx_hex, "{x}", .{std.fmt.fmtSliceHexLower(raw_tx)});
 
-            std.debug.print("\n{s}\n", .{raw_tx_hex_no_sign});
             std.debug.print("\n{s}\n", .{raw_tx_hex});
         },
     }
