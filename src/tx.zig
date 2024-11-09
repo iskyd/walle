@@ -419,6 +419,96 @@ test "signTxSequence" {
     try std.testing.expectEqualStrings(expected_raw_tx, &signed_raw_tx_hex);
 }
 
+test "signTxTwoOutputs" {
+    const allocator = std.testing.allocator;
+    const prevout = Output{ .txid = "7fba14cf89b33828d415a259371005dcf78f1872fb9a27428317190998aba527".*, .vout = 0, .amount = 100000000 };
+    const input = try TxInput.init(allocator, prevout, "", 4294967293);
+    defer input.deinit();
+    var inputs = [1]TxInput{input};
+    const s1_hex = "001484ac03e34560097ebf22214c4c94311553e1b576".*;
+    var s1: [22]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&s1, &s1_hex);
+    const s2_hex = "0014e5ba5d0f231892dbcfd0696a0ca3c0395e8ec465".*;
+    var s2: [22]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&s2, &s2_hex);
+    const o1 = try TxOutput.init(allocator, 5000000, &s1);
+    const o2 = try TxOutput.init(allocator, 94990000, &s2);
+    var outputs = [2]TxOutput{ o1, o2 };
+    var tx = try createTx(allocator, &inputs, &outputs);
+    defer tx.deinit();
+
+    const map_key: [72]u8 = "7fba14cf89b33828d415a259371005dcf78f1872fb9a27428317190998aba52700000000".*;
+    const privkey_hex: [64]u8 = "90d8ee77d3a4e91f68c49e06607c274f35e8403d907aaf1ed697a6c3f3940924".*;
+    var privkey: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&privkey, &privkey_hex);
+    var privkeys = std.AutoHashMap([72]u8, [32]u8).init(allocator);
+    defer privkeys.deinit();
+    try privkeys.put(map_key, privkey);
+
+    const pubkey = bip32.generatePublicKey(privkey);
+    var pubkeys = std.AutoHashMap([72]u8, bip32.PublicKey).init(allocator);
+    defer pubkeys.deinit();
+    try pubkeys.put(map_key, pubkey);
+
+    try signTx(allocator, &tx, privkeys, pubkeys, nonceFnRfc6979);
+
+    const expected_raw_tx = "020000000001017fba14cf89b33828d415a259371005dcf78f1872fb9a27428317190998aba5270000000000fdffffff02404b4c000000000016001484ac03e34560097ebf22214c4c94311553e1b576b06ea90500000000160014e5ba5d0f231892dbcfd0696a0ca3c0395e8ec4650247304402204eedb3e4d31d6c3721a74c33bee020d5796daf61151e6b6ca7ff65f72c1a8eae022008e0324dd3c457f01df78bb7f6224fc6591438e5eefe0ca1ff32204b9914a76f0121036289e37d0a17017896431dbdee2ec315d403d3bc1ed58c5dc126d5c72caa281400000000";
+    var buffer: [222]u8 = undefined;
+    try encodeTx(allocator, &buffer, tx, true);
+    var signed_raw_tx_hex: [444]u8 = undefined;
+    _ = try std.fmt.bufPrint(&signed_raw_tx_hex, "{x}", .{std.fmt.fmtSliceHexLower(&buffer)});
+
+    try std.testing.expectEqualStrings(expected_raw_tx, &signed_raw_tx_hex);
+}
+
+test "signTxTwoInputsTwoOutputs" {
+    const allocator = std.testing.allocator;
+    const prevout1 = Output{ .txid = "1f7b68181c109c7561c710890808bd9a9a4ad5189417dc912f48fc0e5f81956c".*, .vout = 0, .amount = 200000000 };
+    const prevout2 = Output{ .txid = "c74bcc93937c118b3e455992104e75716dfcea006f28dfa96965a0fc716d1ebd".*, .vout = 1, .amount = 300000000 };
+    const input1 = try TxInput.init(allocator, prevout1, "", 4294967293);
+    const input2 = try TxInput.init(allocator, prevout2, "", 4294967293);
+    defer input1.deinit();
+    defer input2.deinit();
+    var inputs = [2]TxInput{ input1, input2 };
+    const s1_hex = "001484ac03e34560097ebf22214c4c94311553e1b576".*;
+    var s1: [22]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&s1, &s1_hex);
+    const s2_hex = "0014e5ba5d0f231892dbcfd0696a0ca3c0395e8ec465".*;
+    var s2: [22]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&s2, &s2_hex);
+    const o1 = try TxOutput.init(allocator, 400000000, &s1);
+    const o2 = try TxOutput.init(allocator, 99990000, &s2);
+    var outputs = [2]TxOutput{ o1, o2 };
+    var tx = try createTx(allocator, &inputs, &outputs);
+    defer tx.deinit();
+
+    const map_key1: [72]u8 = "1f7b68181c109c7561c710890808bd9a9a4ad5189417dc912f48fc0e5f81956c00000000".*;
+    const map_key2: [72]u8 = "c74bcc93937c118b3e455992104e75716dfcea006f28dfa96965a0fc716d1ebd01000000".*;
+    const privkey_hex: [64]u8 = "90d8ee77d3a4e91f68c49e06607c274f35e8403d907aaf1ed697a6c3f3940924".*;
+    var privkey: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&privkey, &privkey_hex);
+    var privkeys = std.AutoHashMap([72]u8, [32]u8).init(allocator);
+    defer privkeys.deinit();
+    try privkeys.put(map_key1, privkey);
+    try privkeys.put(map_key2, privkey);
+
+    const pubkey = bip32.generatePublicKey(privkey);
+    var pubkeys = std.AutoHashMap([72]u8, bip32.PublicKey).init(allocator);
+    defer pubkeys.deinit();
+    try pubkeys.put(map_key1, pubkey);
+    try pubkeys.put(map_key2, pubkey);
+
+    try signTx(allocator, &tx, privkeys, pubkeys, nonceFnRfc6979);
+
+    const expected_raw_tx = "020000000001021f7b68181c109c7561c710890808bd9a9a4ad5189417dc912f48fc0e5f81956c0000000000fdffffffc74bcc93937c118b3e455992104e75716dfcea006f28dfa96965a0fc716d1ebd0100000000fdffffff020084d7170000000016001484ac03e34560097ebf22214c4c94311553e1b576f0b9f50500000000160014e5ba5d0f231892dbcfd0696a0ca3c0395e8ec465024730440220682db19a8fea55f376d8a907362f94391c37313952e450020702f7ce7ccead3c02205bfa236d24e6f35a0bb21ef1a7de479b49fe6d31658600f2ea4554a841a1b4200121036289e37d0a17017896431dbdee2ec315d403d3bc1ed58c5dc126d5c72caa28140247304402206bad1e9a3813e51c21cc4e9a5616d86ecf25d210902f3e5b2fb826b9db6cd4fb022049b2c744653115d4c08cd7666e534807e27a8c94403fdb6999df2f9b9a082e3e0121036289e37d0a17017896431dbdee2ec315d403d3bc1ed58c5dc126d5c72caa281400000000";
+    var buffer: [370]u8 = undefined;
+    try encodeTx(allocator, &buffer, tx, true);
+    var signed_raw_tx_hex: [740]u8 = undefined;
+    _ = try std.fmt.bufPrint(&signed_raw_tx_hex, "{x}", .{std.fmt.fmtSliceHexLower(&buffer)});
+
+    try std.testing.expectEqualStrings(expected_raw_tx, &signed_raw_tx_hex);
+}
+
 pub fn decodeRawTx(allocator: std.mem.Allocator, tx_raw: []const u8) !Transaction {
     var bytes: []u8 = try allocator.alloc(u8, tx_raw.len / 2);
     _ = try std.fmt.hexToBytes(bytes, tx_raw);
