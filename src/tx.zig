@@ -381,6 +381,44 @@ test "signTx" {
     try std.testing.expectEqualSlices(u8, &expected_tx_raw, &tx_raw);
 }
 
+test "signTxSequence" {
+    const allocator = std.testing.allocator;
+    const prevout = Output{ .txid = "7fba14cf89b33828d415a259371005dcf78f1872fb9a27428317190998aba527".*, .vout = 0, .amount = 100000000 };
+    const input = try TxInput.init(allocator, prevout, "", 4294967293);
+    defer input.deinit();
+    var inputs = [1]TxInput{input};
+    const scriptpubkey_hex = "001484ac03e34560097ebf22214c4c94311553e1b576".*;
+    var scriptpubkey: [22]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&scriptpubkey, &scriptpubkey_hex);
+    const output = try TxOutput.init(allocator, 99999000, &scriptpubkey);
+    var outputs = [1]TxOutput{output};
+    var tx = try createTx(allocator, &inputs, &outputs);
+    defer tx.deinit();
+
+    const map_key: [72]u8 = "7fba14cf89b33828d415a259371005dcf78f1872fb9a27428317190998aba52700000000".*;
+    const privkey_hex: [64]u8 = "90d8ee77d3a4e91f68c49e06607c274f35e8403d907aaf1ed697a6c3f3940924".*;
+    var privkey: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&privkey, &privkey_hex);
+    var privkeys = std.AutoHashMap([72]u8, [32]u8).init(allocator);
+    defer privkeys.deinit();
+    try privkeys.put(map_key, privkey);
+
+    const pubkey = bip32.generatePublicKey(privkey);
+    var pubkeys = std.AutoHashMap([72]u8, bip32.PublicKey).init(allocator);
+    defer pubkeys.deinit();
+    try pubkeys.put(map_key, pubkey);
+
+    try signTx(allocator, &tx, privkeys, pubkeys, nonceFnRfc6979);
+
+    const expected_raw_tx = "020000000001017fba14cf89b33828d415a259371005dcf78f1872fb9a27428317190998aba5270000000000fdffffff0118ddf5050000000016001484ac03e34560097ebf22214c4c94311553e1b57602483045022100fb95b36c2bb30eb89ac7239fa0268e6d099f2fd95ef9277ed12116499b62e899022000d4ce7a39fa4edc84aacb80785bc7d1510683fbd3edb975cc6cb2f1e8f138370121036289e37d0a17017896431dbdee2ec315d403d3bc1ed58c5dc126d5c72caa281400000000";
+    var buffer: [192]u8 = undefined;
+    try encodeTx(allocator, &buffer, tx, true);
+    var signed_raw_tx_hex: [384]u8 = undefined;
+    _ = try std.fmt.bufPrint(&signed_raw_tx_hex, "{x}", .{std.fmt.fmtSliceHexLower(&buffer)});
+
+    try std.testing.expectEqualStrings(expected_raw_tx, &signed_raw_tx_hex);
+}
+
 pub fn decodeRawTx(allocator: std.mem.Allocator, tx_raw: []const u8) !Transaction {
     var bytes: []u8 = try allocator.alloc(u8, tx_raw.len / 2);
     _ = try std.fmt.hexToBytes(bytes, tx_raw);
