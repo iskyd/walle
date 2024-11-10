@@ -102,12 +102,12 @@ pub fn saveInputsAndMarkOutputs(db: *sqlite.Db, inputs: std.ArrayList(Input)) !v
 
     for (0..inputs.items.len) |i| {
         const input = inputs.items[i];
-        const sql_input = "INSERT OR IGNORE INTO inputs(txid, reference_output_txid, reference_output_vout) VALUES(?, ?, ?)";
+        const sql_input = "INSERT OR IGNORE INTO inputs(txid, reference_output_txid, reference_output_vout) VALUES(?, ?, ?);";
         var stmt_input = try db.prepare(sql_input);
         defer stmt_input.deinit();
         try stmt_input.exec(.{}, .{ .txid = input.txid, .reference_output_txid = input.output_txid, .reference_output_vout = input.output_vout });
 
-        const sql_output = "UPDATE outputs SET unspent = false WHERE txid = ? AND vout = ?";
+        const sql_output = "UPDATE outputs SET unspent = false WHERE txid = ? AND vout = ?;";
         var stmt_output = try db.prepare(sql_output);
         defer stmt_output.deinit();
         try stmt_output.exec(.{}, .{ .txid = input.output_txid, .vout = input.output_vout });
@@ -121,7 +121,7 @@ pub fn existsOutput(db: *sqlite.Db, txid: [64]u8, vout: u32) !bool {
     var stmt = try db.prepare(sql);
     defer stmt.deinit();
     const row = try stmt.one(struct { total: usize }, .{}, .{ .txid = txid, .vout = vout });
-    return row.?.total > 1;
+    return row.?.total > 0;
 }
 
 pub fn getOutput(allocator: std.mem.Allocator, db: *sqlite.Db, txid: [64]u8, vout: u32) !?Output {
