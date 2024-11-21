@@ -4,6 +4,7 @@ const Output = @import("../tx.zig").Output;
 const Input = @import("../tx.zig").Input;
 const KeyPath = @import("../bip44.zig").KeyPath;
 const Descriptor = @import("../bip44.zig").Descriptor;
+const Block = @import("../block.zig").Block;
 const assert = std.debug.assert;
 
 pub fn openDB() !sqlite.Db {
@@ -24,11 +25,11 @@ pub fn closeDB(db: sqlite.Db) void {
 }
 
 pub fn initDB(db: *sqlite.Db) !void {
-    const sql_blocks = "CREATE TABLE IF NOT EXISTS blocks(hash VARCHAR(64) UNIQUE NOT NULL, heigth INTEGER UNIQUE NOT NULL);";
+    const sql_blocks = "CREATE TABLE IF NOT EXISTS blocks(hash VARCHAR(64) UNIQUE NOT NULL, height INTEGER UNIQUE NOT NULL);";
     var stmt_blocks = try db.prepare(sql_blocks);
     defer stmt_blocks.deinit();
 
-    const sql_transactions = "CREATE TABLE IF NOT EXISTS transactions(txid VARCHAR(64) PRIMARY KEY, raw TEXT NOT NULL, block_heigth INTEGER NOT NULL, is_coinbase INTEGER NOT NULL);";
+    const sql_transactions = "CREATE TABLE IF NOT EXISTS transactions(txid VARCHAR(64) PRIMARY KEY, raw TEXT NOT NULL, block_height INTEGER NOT NULL, is_coinbase INTEGER NOT NULL);";
     var stmt_transactions = try db.prepare(sql_transactions);
     defer stmt_transactions.deinit();
 
@@ -60,10 +61,10 @@ pub fn initDB(db: *sqlite.Db) !void {
     try stmt_commit.exec(.{}, .{});
 }
 
-pub fn saveBlock(db: *sqlite.Db, blockhash: [64]u8, heigth: usize) !void {
-    const sql_block = "INSERT OR IGNORE INTO blocks(hash, heigth) VALUES(?, ?);";
+pub fn saveBlock(db: *sqlite.Db, blockhash: [64]u8, height: usize) !void {
+    const sql_block = "INSERT OR IGNORE INTO blocks(hash, height) VALUES(?, ?);";
     var stmt_block = try db.prepare(sql_block);
-    try stmt_block.exec(.{}, .{ .blockhash = blockhash, .heigth = heigth });
+    try stmt_block.exec(.{}, .{ .blockhash = blockhash, .height = height });
 }
 
 pub fn saveOutputs(allocator: std.mem.Allocator, db: *sqlite.Db, outputs: std.AutoHashMap([72]u8, Output)) !void {
@@ -157,29 +158,40 @@ pub fn getOutputDescriptorPath(allocator: std.mem.Allocator, db: *sqlite.Db, txi
     return error.DescriptorNotFound;
 }
 
-pub fn saveTransaction(db: *sqlite.Db, txid: [64]u8, transaction_raw: []u8, is_coinbase: bool, block_heigth: usize) !void {
-    const sql_transaction = "INSERT OR IGNORE INTO transactions(txid, raw, block_heigth, is_coinbase) VALUES(?, ?, ?, ?)";
+pub fn saveTransaction(db: *sqlite.Db, txid: [64]u8, transaction_raw: []u8, is_coinbase: bool, block_height: usize) !void {
+    const sql_transaction = "INSERT OR IGNORE INTO transactions(txid, raw, block_height, is_coinbase) VALUES(?, ?, ?, ?)";
     var stmt_transaction = try db.prepare(sql_transaction);
     defer stmt_transaction.deinit();
-    try stmt_transaction.exec(.{}, .{ .txid = txid, .raw = transaction_raw, .block_heigth = block_heigth, .is_coinbase = is_coinbase });
+    try stmt_transaction.exec(.{}, .{ .txid = txid, .raw = transaction_raw, .block_height = block_height, .is_coinbase = is_coinbase });
 }
 
-pub fn getCurrentBlockHeigth(db: *sqlite.Db) !?usize {
-    const sql_block = "SELECT MAX(heigth) AS block_height FROM blocks;";
+pub fn getLastBlock(db: *sqlite.Db) !?Block {
+    const sql_block = "SELECT height, hash FROM blocks ORDER BY height DESC LIMIT 1;";
     var stmt = try db.prepare(sql_block);
     defer stmt.deinit();
-    const row = try stmt.one(struct { block_heigth: usize }, .{}, .{});
+    const row = try stmt.one(struct { height: usize, hash: [64]u8 }, .{}, .{});
     if (row != null) {
-        return row.?.block_heigth;
+        return Block{ .hash = row.?.hash, .height = row.?.block_height };
     }
     return null;
 }
 
+pub fn getBlock(db: *sqlite.Db, height: usize) !Block {
+    const sql_block = "SELECT height AS block_height, hash FROM blocks WHERE height = ?;";
+    var stmt = try db.prepare(sql_block);
+    defer stmt.deinit();
+    const row = try stmt.one(struct { block_height: usize, hash: [64]u8 }, .{}, .{ .height = height });
+    if (row != null) {
+        return Block{ .hash = row.?.hash, .height = row.?.block_height };
+    }
+    return error.BlockNotFound;
+}
+
 pub fn getBalance(db: *sqlite.Db, current_block: usize) !u64 {
-    const sql = "SELECT SUM(o.amount) AS balance FROM outputs o JOIN transactions t ON t.txid = o.txid WHERE ((t.block_heigth <= ? AND is_coinbase is true) OR (is_coinbase is false)) AND unspent = true;";
+    const sql = "SELECT SUM(o.amount) AS balance FROM outputs o JOIN transactions t ON t.txid = o.txid WHERE ((t.block_height <= ? AND is_coinbase is true) OR (is_coinbase is false)) AND unspent = true;";
     var stmt = try db.prepare(sql);
     defer stmt.deinit();
-    const row = try stmt.one(struct { balance: u64 }, .{}, .{ .block_heigth = current_block - 100 });
+    const row = try stmt.one(struct { balance: u64 }, .{}, .{ .block_height = current_block - 100 });
     if (row != null) {
         return row.?.balance;
     }
@@ -298,4 +310,32 @@ pub fn getUnspentOutputs(allocator: std.mem.Allocator, db: *sqlite.Db) ![]Output
         outputs[i] = Output{ .txid = row.txid, .vout = row.vout, .amount = row.amount, .unspent = row.unspent, .keypath = try KeyPath(5).fromStr(row.path) };
     }
     return outputs;
+}
+
+pub fn deleteOutputsFromBlockHeight(db: *sqlite.Db, block_height: usize) !void {
+    const sql = "DELETE FROM ouputs o JOIN transactions t ON t.txid = o.txid WHERE t.block_height > ?;";
+    var stmt = try db.prepare(sql);
+    defer stmt.deinit();
+    try stmt.exec(.{}, .{ .block_height = block_height });
+}
+
+pub fn deleteInputsFromBlockHeight(db: *sqlite.Db, block_height: usize) !void {
+    const sql = "DELETE FROM inputs i JOIN transactions t ON t.txid = i.txid WHERE t.block_height > ?;";
+    var stmt = try db.prepare(sql);
+    defer stmt.deinit();
+    try stmt.exec(.{}, .{ .block_height = block_height });
+}
+
+pub fn deleteTransactionsFromBlockHeight(db: *sqlite.Db, block_height: usize) !void {
+    const sql = "DELETE FROM transactions WHERE block_height > ?;";
+    var stmt = try db.prepare(sql);
+    defer stmt.deinit();
+    try stmt.exec(.{}, .{ .block_height = block_height });
+}
+
+pub fn deleteBlocksFromBlockHeight(db: *sqlite.Db, block_height: usize) !void {
+    const sql = "DELETE FROM blocks WHERE height > ?;";
+    var stmt = try db.prepare(sql);
+    defer stmt.deinit();
+    try stmt.exec(.{}, .{ .height = block_height });
 }

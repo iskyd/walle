@@ -1,5 +1,4 @@
 const std = @import("std");
-const Block = @import("../block.zig").Block;
 
 const RpcParams = union(enum) { num: usize, str: []u8 };
 

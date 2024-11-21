@@ -1,5 +1,4 @@
 const std = @import("std");
-const Block = @import("block.zig").Block;
 const tx = @import("tx.zig");
 const Output = tx.Output;
 const Input = tx.Input;
@@ -60,13 +59,38 @@ pub fn main() !void {
     defer allocator.free(auth);
     var client = std.http.Client{ .allocator = allocator };
     defer client.deinit();
-    const block_count = try rpc.getBlockCount(allocator, &client, res.args.location.?, auth);
-    std.debug.print("Total blocks {d}\n", .{block_count});
-    const current_block_count = try db.getCurrentBlockHeigth(&database);
-    std.debug.print("Current blocks {?d}\n", .{current_block_count});
-    if (current_block_count != null and block_count == current_block_count) {
+    const rpc_location = res.args.location.?;
+
+    // Manage fork.
+    const last_block = try db.getLastBlock(&database);
+    var current_block_height: ?usize = if (last_block != null) last_block.?.height else null;
+    if (current_block_height != null) {
+        while (current_block_height.? >= 0) {
+            const b = try db.getBlock(&database, current_block_height.?);
+            const node_block_hash = try rpc.getBlockHash(allocator, &client, rpc_location, auth, current_block_height.?);
+            if (std.mem.eql(u8, &b.hash, &node_block_hash)) {
+                break;
+            }
+            current_block_height.? -= 1;
+        }
+
+        // Fork happened. Delete everything we have next to the current_height block
+        if (current_block_height.? < last_block.?.height) {
+            try db.deleteOutputsFromBlockHeight(&database, current_block_height.?);
+            try db.deleteInputsFromBlockHeight(&database, current_block_height.?);
+            try db.deleteTransactionsFromBlockHeight(&database, current_block_height.?);
+
+            // Blocks need to be the last one since this db transactions are not atomic.
+            try db.deleteBlocksFromBlockHeight(&database, current_block_height.?);
+        }
+    }
+
+    const block_height = try rpc.getBlockCount(allocator, &client, rpc_location, auth);
+    std.debug.print("Total blocks {d}\n", .{block_height});
+    std.debug.print("Current blocks {?d}\n", .{current_block_height});
+    if (current_block_height != null and block_height == current_block_height.?) {
         std.debug.print("Already indexed, do nothing\n", .{});
-        const balance = try db.getBalance(&database, current_block_count.?);
+        const balance = try db.getBalance(&database, current_block_height.?);
         std.debug.print("Current balance: {d}\n", .{balance});
         return;
     }
@@ -145,12 +169,12 @@ pub fn main() !void {
     std.debug.print("keys generated\n", .{});
 
     var progress = std.Progress.start(.{});
-    const progressbar = progress.start("indexing", block_count);
+    const progressbar = progress.start("indexing", block_height);
     defer progressbar.end();
 
-    const start: usize = if (current_block_count == null) 0 else current_block_count.? + 1;
+    const start: usize = if (current_block_height == null) 0 else current_block_height.? + 1;
 
-    for (start..block_count + 1) |i| {
+    for (start..block_height + 1) |i| {
         // [72]u8 is for txid + vout in hex format
         var outputs = std.AutoHashMap([72]u8, Output).init(aa);
         // [64]u8 is for txid, bool is for isCoinbase
