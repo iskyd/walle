@@ -171,7 +171,7 @@ pub fn getLastBlock(db: *sqlite.Db) !?Block {
     defer stmt.deinit();
     const row = try stmt.one(struct { height: usize, hash: [64]u8 }, .{}, .{});
     if (row != null) {
-        return Block{ .hash = row.?.hash, .height = row.?.block_height };
+        return Block{ .hash = row.?.hash, .height = row.?.height };
     }
     return null;
 }

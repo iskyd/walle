@@ -117,52 +117,48 @@ pub fn main() !void {
 
     const account_pubkeys = try allocator.alloc(ExtendedPublicKey, descriptors.len);
     defer allocator.free(account_pubkeys);
-    const keypaths_used = try db.getUsedKeyPaths(allocator, &database);
-    defer allocator.free(keypaths_used);
 
-    for (keypaths_used) |keypath| {
-        const existing = keypaths.get(keypath);
-        if (existing != null) {
-            continue;
-        }
-
-        const d = KeyPath(3){ .path = [3]u32{ keypath.path[0], keypath.path[1], keypath.path[3] } };
-        const pubkey_addr = descriptors_map.get(d);
-        if (pubkey_addr == null) {
-            std.debug.print("descriptor not found for path {d}'/{d}'/{d}'\n", .{ d.path[0], d.path[1], d.path[2] });
-            continue;
-        }
-
-        // Generate the current used keypath and public key
-        const extended_pubkey = try ExtendedPublicKey.fromAddress(pubkey_addr.?);
-        try keypaths.put(keypath, Descriptor{ .extended_key = pubkey_addr.?, .keypath = d, .private = false });
-        const pubkey = try bip44.generatePublicFromAccountPublicKey(extended_pubkey, keypath.path[3], keypath.path[4]);
-        const pubkey_hash = try pubkey.toHashHex();
-        try pubkeys.put(pubkey_hash, keypath);
-
-        // Generate the next one
-        const next_pubkey = try bip44.generatePublicFromAccountPublicKey(extended_pubkey, keypath.path[3], keypath.path[4] + 1);
-        const next_pubkey_hash = try next_pubkey.toHashHex();
-        try pubkeys.put(next_pubkey_hash, keypath.getNext(1));
-    }
-
+    // For every descriptor we get the latest used index (if one) and generate all the keys to this latest index + 1
+    // Otherwise we only derive the first keypath (.../0)
     for (descriptors) |descriptor| {
-        const account_pubkey = try ExtendedPublicKey.fromAddress(descriptor.extended_key);
+        const keypath_cap = descriptor.keypath.getStrCap(null) + 2; // + 2 for /0 or /1 (internal / external)
+        const keypath_internal_str = try allocator.alloc(u8, keypath_cap);
+        defer allocator.free(keypath_internal_str);
+        const keypath_external_str = try allocator.alloc(u8, keypath_cap);
+        defer allocator.free(keypath_external_str);
+        const partial_keypath_str = try descriptor.keypath.toStr(allocator, null);
+        defer allocator.free(partial_keypath_str);
+        _ = try std.fmt.bufPrint(keypath_internal_str, "{s}/{d}", .{ partial_keypath_str, bip44.change_internal_chain });
+        _ = try std.fmt.bufPrint(keypath_external_str, "{s}/{d}", .{ partial_keypath_str, bip44.change_external_chain });
 
-        const keypath_internal = KeyPath(5){ .path = [5]u32{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], bip44.change_internal_chain, 0 } };
-        if (keypaths.get(keypath_internal) == null) {
-            const internal_pubkey = try bip44.generatePublicFromAccountPublicKey(account_pubkey, bip44.change_internal_chain, 0);
-            const internal_pubkey_hash = try internal_pubkey.toHashHex();
-            try keypaths.put(keypath_internal, descriptor);
-            try pubkeys.put(internal_pubkey_hash, keypath_internal);
+        const last_internal_index = try db.getLastUsedIndexFromOutputs(&database, keypath_internal_str);
+        const last_external_index = try db.getLastUsedIndexFromOutputs(&database, keypath_internal_str);
+        var last_indexes: [2]i64 = [2]i64{ -1, -1 };
+        if (last_internal_index != null) {
+            last_indexes[0] = last_internal_index.?;
+        }
+        if (last_external_index != null) {
+            last_indexes[1] = last_external_index.?;
         }
 
-        const keypath_external = KeyPath(5){ .path = [5]u32{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], bip44.change_external_chain, 0 } };
-        if (keypaths.get(keypath_external) == null) {
-            const external_pubkey = try bip44.generatePublicFromAccountPublicKey(account_pubkey, bip44.change_external_chain, 0);
-            const external_pubkey_hash = try external_pubkey.toHashHex();
-            try keypaths.put(keypath_external, descriptor);
-            try pubkeys.put(external_pubkey_hash, keypath_external);
+        for (last_indexes, 0..) |last_index, t| {
+            // This depends on the order specified above. Improve this behaviour pls.
+            const change_type: u32 = if (t == 0) bip44.change_internal_chain else bip44.change_external_chain;
+            for (0..@as(usize, @intCast(last_index + 2))) |i| {
+                const pubkey_addr = descriptors_map.get(descriptor.keypath);
+                if (pubkey_addr == null) {
+                    std.debug.print("descriptor not found for path {d}'/{d}'/{d}'\n", .{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2] });
+                    continue;
+                }
+
+                const keypath = KeyPath(5){ .path = [5]u32{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], change_type, @as(u32, @intCast(i)) } };
+
+                const extended_pubkey = try ExtendedPublicKey.fromAddress(pubkey_addr.?);
+                try keypaths.put(keypath, Descriptor{ .extended_key = pubkey_addr.?, .keypath = descriptor.keypath, .private = false });
+                const pubkey = try bip44.generatePublicFromAccountPublicKey(extended_pubkey, keypath.path[3], keypath.path[4]);
+                const pubkey_hash = try pubkey.toHashHex();
+                try pubkeys.put(pubkey_hash, keypath);
+            }
         }
     }
 
