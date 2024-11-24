@@ -11,6 +11,7 @@ const Output = @import("tx.zig").Output;
 const tx = @import("tx.zig");
 const sqlite = @import("sqlite");
 const crypto = @import("crypto");
+const rpc = @import("rpc/rpc.zig");
 
 fn showHelp() void {
     std.debug.print("Valid commands: createwallet, newaddr, listoutputs, send\nFor more information use walle <cmd> help", .{});
@@ -75,6 +76,7 @@ pub fn main() !void {
         newaddr,
         listoutputs,
         send,
+        broadcasttx,
     };
 
     const args = std.process.argsAlloc(allocator) catch {
@@ -275,6 +277,26 @@ pub fn main() !void {
             _ = try std.fmt.bufPrint(raw_tx_hex, "{x}", .{std.fmt.fmtSliceHexLower(raw_tx)});
 
             std.debug.print("\n{s}\n", .{raw_tx_hex});
+        },
+        .broadcasttx => {
+            if (args.len < 6 or std.mem.eql(u8, args[2], "help")) {
+                std.debug.print("Broadcast tx <rpc location> <rpc user> <rpc password> <raw tx>\n", .{});
+                return;
+            }
+            const rpc_location = args[2];
+            const rpc_user = args[3];
+            const rpc_password = args[4];
+            const raw_tx = args[5];
+
+            std.debug.print("rpc location {s}\n", .{rpc_location});
+
+            const auth = try rpc.generateAuth(allocator, rpc_user, rpc_password);
+            defer allocator.free(auth);
+            var client = std.http.Client{ .allocator = allocator };
+            defer client.deinit();
+            try rpc.sendRawTx(allocator, &client, rpc_location, auth, raw_tx);
+
+            std.debug.print("Transaction broadcasted\n", .{});
         },
     }
 }
