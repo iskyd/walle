@@ -35,7 +35,7 @@ jobs:
   flake-check:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
     runs-on: ${{matrix.os}}
     permissions:
       id-token: "write"
