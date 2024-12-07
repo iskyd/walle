@@ -113,12 +113,12 @@ pub const Opcode = enum(u8) {
     op_invalidopcode = 0xff,
 
     // Reserved words
-    op_reserverd = 0x50,
+    op_reserved = 0x50,
     op_ver = 0x62,
     op_verif = 0x65,
     op_vernotif = 0x66,
     op_reserved1 = 0x89,
-    op_reserverd2 = 0x8a,
+    op_reserved2 = 0x8a,
 
     // n <= 16
     pub fn fromNum(n: u8) Opcode {
@@ -151,7 +151,7 @@ const ScriptOp = union(enum) { op: Opcode, v: []const u8, push_bytes: usize };
 pub const Script = struct {
     allocator: std.mem.Allocator,
 
-    // Script stack is a LIFO (as the data structur imply) during execution
+    // Script stack is a LIFO (as the data structure imply) during execution
     // To execute a script we must start from the latest element
     stack: std.ArrayList(ScriptOp),
 
