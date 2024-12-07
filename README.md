@@ -29,11 +29,47 @@ zig build test --summary all -- src/bip39/bip39.zig src/bip38/bip38.zig
 
 #### Dev Environment
 
+##### Devbox
+
 You can directly use devbox to create a complete dev environment. Check devbox.json and [devbox](https://www.jetify.com/devbox) docs for more information.
 
 ``` bash
 devbox shell
 ```
+
+##### Nix + devenv
+
+In order to get a shell with all the tools you need to contribute to this project you can run
+
+```bash
+direnv allow
+```
+
+This will enable the `direnv` environment that will automatically makes you enter the development shell every time you enter the project directory (or any subdirectory). This uses [nix](https://nixos.org/download/) (with [flakes](https://nixos.wiki/wiki/Flakes)) and [direnv](https://direnv.net).
+
+This command
+
+```bash
+nix flake check
+```
+
+will run regular checks of the flake, in particular it will run _git hooks_.
+This runs in the GHA `flake-check` job.
+
+###### Git hooks
+
+The `nix` shell will install the git hooks automatically.
+The pre-commit configuration `.pre-commit-config.yaml` is git-ignored because it will be a simple
+link to the `/nix/store`: the semantic is not changing but the location can differ from different
+machines/configuration.
+
+You can manually trigger the hooks on all files:
+
+```bash
+pre-commit run -a
+```
+
+Check the `--help` for more usages.
 
 #### Bitcoin Node
 
