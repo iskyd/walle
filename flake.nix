@@ -33,6 +33,10 @@
           };
           pre-commit = {
             settings = {
+              default_stages = [
+                "pre-commit"
+                "pre-push"
+              ];
               hooks = {
                 actionlint.enable = true;
                 typos = {
