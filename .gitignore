@@ -18,3 +18,5 @@ zig-out/
 /docgen_tmp/
 .vscode/
 *~
+.direnv
+.pre-commit-config.yaml
