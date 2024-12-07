@@ -137,7 +137,7 @@ pub fn generateAccount(extended_privkey: bip32.ExtendedPrivateKey, purpose: u32,
     // as specified in bip44 https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki#account
     const account_extended_privkey = try bip32.deriveHardenedChild(cointype_extended_privkey, account + 2147483648);
 
-    const pubkey = bip32.generatePublicKey(account_extended_privkey.privatekey);
+    const pubkey = bip32.PublicKey.fromPrivateKey(account_extended_privkey.privatekey);
     const account_extended_pubkey = bip32.ExtendedPublicKey{ .key = pubkey, .chaincode = account_extended_privkey.chaincode };
 
     const change_extended_pubkey = try bip32.deriveChildFromExtendedPublicKey(account_extended_pubkey, change);
@@ -202,7 +202,7 @@ test "generatePrivateAccount" {
     const addr_serialized = "tprv8ZgxMBicQKsPefj8cBDzcXJYcnvWBLQwG9sAvKyAYRPiLtdZXvdAmqtjzeHbX7ZX2LY8Sfb7SaLSJbGCFBPMFZdnmv4D7UebvyLTC974BA4".*;
     const master_extended_privkey = try bip32.ExtendedPrivateKey.fromAddress(addr_serialized);
     const extended_privkey = try generateAccountPrivate(master_extended_privkey, bip_84_purpose, 1, 0, 0, 0);
-    const public = bip32.generatePublicKey(extended_privkey.privatekey);
+    const public = bip32.PublicKey.fromPrivateKey(extended_privkey.privatekey);
     const compressed = try public.toStrCompressed();
     const expected = "03c260ee3c4975bf34ae63854c0f9309302d27cf588984ec943c2b1139aa7984ed";
     try std.testing.expectEqualStrings(expected, &compressed);
@@ -213,7 +213,7 @@ test "generateDescriptorPrivate" {
     const master_extended_privkey = try bip32.ExtendedPrivateKey.fromAddress(addr_serialized);
     const extended_privkey = try generateDescriptorPrivate(master_extended_privkey, bip_84_purpose, 1, 0);
     const extended_privkey_index = try bip32.deriveChildFromExtendedPrivateKey(extended_privkey, 0);
-    const public = bip32.generatePublicKey(extended_privkey_index.privatekey);
+    const public = bip32.PublicKey.fromPrivateKey(extended_privkey_index.privatekey);
     const compressed = try public.toStrCompressed();
     const expected = "02351fc272fab79ebd0386c0308ff7c9b7c171f77c63e979d5f20b38c2a4e93eac";
     try std.testing.expectEqualStrings(expected, &compressed);

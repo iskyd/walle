@@ -81,7 +81,7 @@ pub fn main() !void {
                 };
                 defer allocator.free(bytes);
                 _ = try std.fmt.hexToBytes(bytes, seed);
-                const epk = bip32.generateExtendedMasterPrivateKey(bytes);
+                const epk = bip32.ExtendedPrivateKey.fromSeed(bytes);
                 const addr = epk.address(addr_version, 0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
                     std.debug.print("Error while generating address", .{});
                     return;
@@ -105,7 +105,7 @@ pub fn main() !void {
                 var seed: [64]u8 = undefined;
                 try bip39.mnemonicToSeed(allocator, &mnemonic, "", &seed);
 
-                const epk = bip32.generateExtendedMasterPrivateKey(&seed);
+                const epk = bip32.ExtendedPrivateKey.fromSeed(&seed);
                 const addr = epk.address(addr_version, 0, [4]u8{ 0, 0, 0, 0 }, 0) catch {
                     std.debug.print("Error while generating address", .{});
                     return;
@@ -123,7 +123,7 @@ pub fn main() !void {
                 return;
             };
 
-            const public = bip32.generatePublicKey(epk.privatekey);
+            const public = bip32.PublicKey.fromPrivateKey(epk.privatekey);
             const compressed = public.toStrCompressed() catch {
                 std.debug.print("Error while compressing public key", .{});
                 return;
@@ -176,7 +176,7 @@ pub fn main() !void {
             const strprivate = current.toStrPrivate() catch {
                 return;
             };
-            const public = bip32.generatePublicKey(epk.privatekey);
+            const public = bip32.PublicKey.fromPrivateKey(epk.privatekey);
             const compressedpublic = public.toStrCompressed() catch {
                 std.debug.print("Error while generating parent public key\n", .{});
                 return;

@@ -128,11 +128,11 @@ pub fn main() !void {
 
             var seed: [64]u8 = undefined;
             try bip39.mnemonicToSeed(allocator, &mnemonic, "", &seed);
-            const master_extended_privkey: bip32.ExtendedPrivateKey = bip32.generateExtendedMasterPrivateKey(&seed);
+            const master_extended_privkey: bip32.ExtendedPrivateKey = bip32.ExtendedPrivateKey.fromSeed(&seed);
 
             const cointype: u32 = if (network == .mainnet) bip44.bitcoin_coin_type else bip44.bitcoin_testnet_coin_type;
             const descriptor_privkey = try bip44.generateDescriptorPrivate(master_extended_privkey, bip44.bip_84_purpose, cointype, 0);
-            const pubkey = bip32.generatePublicKey(descriptor_privkey.privatekey);
+            const pubkey = bip32.PublicKey.fromPrivateKey(descriptor_privkey.privatekey);
             const pubkey_compressed = try pubkey.compress();
 
             const privkey_version: bip32.SerializedPrivateKeyVersion = if (network == .mainnet) .segwit_mainnet else .segwit_testnet;

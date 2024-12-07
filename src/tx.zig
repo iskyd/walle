@@ -304,7 +304,7 @@ test "createTx" {
     const privkey_hex: [64]u8 = "7306f5092467981e66eff98b6b03bfe925922c5ecfaf14c4257ef18e81becf1f".*;
     var privkey: [32]u8 = undefined;
     _ = try std.fmt.hexToBytes(&privkey, &privkey_hex);
-    const pubkey = bip32.generatePublicKey(privkey);
+    const pubkey = bip32.PublicKey.fromPrivateKey(privkey);
     var pubkeys = std.AutoHashMap([72]u8, bip32.PublicKey).init(allocator);
     const key: [72]u8 = "ac4994014aa36b7f53375658ef595b3cb2891e1735fe5b441686f5e53338e76a01000000".*;
     try pubkeys.put(key, pubkey);
@@ -360,7 +360,7 @@ test "signTx" {
     defer privkeys.deinit();
     try privkeys.put(map_key, privkey);
 
-    const pubkey = bip32.generatePublicKey(privkey);
+    const pubkey = bip32.PublicKey.fromPrivateKey(privkey);
     var pubkeys = std.AutoHashMap([72]u8, bip32.PublicKey).init(allocator);
     defer pubkeys.deinit();
     try pubkeys.put(map_key, pubkey);
@@ -403,7 +403,7 @@ test "signTxSequence" {
     defer privkeys.deinit();
     try privkeys.put(map_key, privkey);
 
-    const pubkey = bip32.generatePublicKey(privkey);
+    const pubkey = bip32.PublicKey.fromPrivateKey(privkey);
     var pubkeys = std.AutoHashMap([72]u8, bip32.PublicKey).init(allocator);
     defer pubkeys.deinit();
     try pubkeys.put(map_key, pubkey);
@@ -445,7 +445,7 @@ test "signTxTwoOutputs" {
     defer privkeys.deinit();
     try privkeys.put(map_key, privkey);
 
-    const pubkey = bip32.generatePublicKey(privkey);
+    const pubkey = bip32.PublicKey.fromPrivateKey(privkey);
     var pubkeys = std.AutoHashMap([72]u8, bip32.PublicKey).init(allocator);
     defer pubkeys.deinit();
     try pubkeys.put(map_key, pubkey);
@@ -492,7 +492,7 @@ test "signTxTwoInputsTwoOutputs" {
     try privkeys.put(map_key1, privkey);
     try privkeys.put(map_key2, privkey);
 
-    const pubkey = bip32.generatePublicKey(privkey);
+    const pubkey = bip32.PublicKey.fromPrivateKey(privkey);
     var pubkeys = std.AutoHashMap([72]u8, bip32.PublicKey).init(allocator);
     defer pubkeys.deinit();
     try pubkeys.put(map_key1, pubkey);
@@ -939,7 +939,7 @@ test "getPreImageHash" {
     const privkey_hex: [64]u8 = "7306f5092467981e66eff98b6b03bfe925922c5ecfaf14c4257ef18e81becf1f".*;
     var privkey: [32]u8 = undefined;
     _ = try std.fmt.hexToBytes(&privkey, &privkey_hex);
-    const pubkey = bip32.generatePublicKey(privkey);
+    const pubkey = bip32.PublicKey.fromPrivateKey(privkey);
     const expected = "d7b60220e1b9b2c1ab40845118baf515203f7b6f0ad83cbb68d3c89b5b3098a6";
     var expected_bytes: [32]u8 = undefined;
     _ = try std.fmt.hexToBytes(&expected_bytes, expected);
@@ -981,7 +981,7 @@ test "createWitness" {
     const privkey_hex: [64]u8 = "7306f5092467981e66eff98b6b03bfe925922c5ecfaf14c4257ef18e81becf1f".*;
     var privkey: [32]u8 = undefined;
     _ = try std.fmt.hexToBytes(&privkey, &privkey_hex);
-    const pubkey = bip32.generatePublicKey(privkey);
+    const pubkey = bip32.PublicKey.fromPrivateKey(privkey);
 
     const witness = try createWitness(allocator, preimage_hash, privkey, pubkey, SighashType.sighash_all, nonceFn123456789);
     defer witness.deinit();
