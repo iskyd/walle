@@ -181,7 +181,7 @@ pub fn main() !void {
                 std.debug.print("Output txid={s} vout={d} -> amount = {d}\n", .{ output.txid, output.vout, output.amount });
                 balance += output.amount;
             }
-            std.debug.print("Avaiable balance = {d}\n", .{balance});
+            std.debug.print("Available balance = {d}\n", .{balance});
         },
         .send => {
             // TODO: change 3 to 7

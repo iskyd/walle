@@ -15,8 +15,8 @@ pub const Encoding = enum(u30) {
 /// MixedCase
 /// : Both lower and uppercase characters were found in source.
 ///
-/// NoSeperator
-/// : The seperator "1" wasn't found in source.
+/// NoSeparator
+/// : The separator "1" wasn't found in source.
 ///
 /// BadChar
 /// : A character in the string is outside the valid range.
@@ -32,7 +32,7 @@ pub const Encoding = enum(u30) {
 pub const Error = error{
     TooLong,
     MixedCase,
-    NoSeperator,
+    NoSeparator,
     BadChar,
     HRPEmpty,
     HRPTooLong,
@@ -61,7 +61,7 @@ pub const standard_uppercase = struct {
 };
 
 /// Calculates the space needed for expanding `data` to a sequence of u5s,
-/// plus a padding bit if neeeded.
+/// plus a padding bit if needed.
 pub inline fn calcExpansion(len: usize) usize {
     const size: usize = len * 8;
     return @divTrunc(size, 5) + @as(u1, @bitCast((@rem(size, 5) > 0)));
@@ -138,7 +138,7 @@ pub fn Bech32Encoder(comptime set: [32]u8, comptime uppercase: bool) type {
         /// should be aware of. The first are limit checks:
         ///
         /// - That the HRP doesn't exceed ::max_hrp_size.
-        /// - That the expansion of data doesn't excede max_data_size. See
+        /// - That the expansion of data doesn't exceed max_data_size. See
         ///   ::calcExpansion for how this is done.
         /// - That the full string doesn't exceed 90 chars. See
         ///   ::calcSize to compute this yourself.
@@ -225,7 +225,7 @@ pub fn Bech32Decoder(comptime set: [32]u8) type {
         pub fn calcSizeForSlice(source: []const u8) Error!usize {
             if (source.len > max_string_size) return Error.TooLong;
             const sep = std.mem.lastIndexOfScalar(u8, source, '1') orelse
-                return Error.NoSeperator;
+                return Error.NoSeparator;
             if (sep == 0) return Error.HRPEmpty;
             if (sep > max_hrp_size) return Error.HRPTooLong;
 
