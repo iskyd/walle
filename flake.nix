@@ -34,6 +34,7 @@
           pre-commit = {
             settings = {
               hooks = {
+                actionlint.enable = true;
                 typos = {
                   excludes = [
                     ".*\.txt"
