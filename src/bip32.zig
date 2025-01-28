@@ -637,3 +637,45 @@ test "extendedPrivateKeyAddress" {
     const addr = try epk.address(.mainnet, 0, [4]u8{ 0, 0, 0, 0 }, 0);
     try std.testing.expectEqualStrings(&expected, &addr);
 }
+
+test "t" {
+    const epk = try ExtendedPrivateKey.fromAddress("tprv8ZgxMBicQKsPfCxvMSGLjZegGFnZn9VZfVdsnEbuzTGdS9aZjvaYpyh7NsxsrAc8LsRQZ2EYaCfkvwNpas8cKUBbptDzadY7c3hUi8i33XJ".*);
+    var strkey: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&strkey, "{x}", .{std.fmt.fmtSliceHexLower(&epk.privatekey)});
+    var strchaincode: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&strchaincode, "{x}", .{std.fmt.fmtSliceHexLower(&epk.chaincode)});
+    try std.testing.expectEqualStrings("3cce48c84f22343cbdac8e7f252ed8ca11fce329deae7ed635b73822dfed9c77", &strkey);
+    try std.testing.expectEqualStrings("ea6f63babb3dc5c58ea4cd11cb3fc9d7baa51c0e14be8230ffb8b1696796a63f", &strchaincode);
+
+    const pubkey = PublicKey.fromPrivateKey(epk.privatekey);
+    try std.testing.expectEqualStrings("03b337fd5dbfcf1a5c86cc8e2956a331048264be996a005c5a444280877e303359", &try pubkey.toStrCompressed());
+
+    const c1 = try deriveChildFromExtendedPrivateKey(epk, 1);
+    var strkeyc1: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&strkeyc1, "{x}", .{std.fmt.fmtSliceHexLower(&c1.privatekey)});
+    var strchaincodec1: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&strchaincodec1, "{x}", .{std.fmt.fmtSliceHexLower(&c1.chaincode)});
+    try std.testing.expectEqualStrings("9e8d70914e98c5c9982b19877a6d495ab815c02a7896a593f457861e956c61b4", &strkeyc1);
+    try std.testing.expectEqualStrings("a0596502c28d66ef847e2539bea2f88f3bd4dc367976ff50780fa5ceda45a9bf", &strchaincodec1);
+
+    const c2 = try deriveHardenedChild(epk, 2147483649);
+    var strkeyc2: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&strkeyc2, "{x}", .{std.fmt.fmtSliceHexLower(&c2.privatekey)});
+    var strchaincodec2: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&strchaincodec2, "{x}", .{std.fmt.fmtSliceHexLower(&c2.chaincode)});
+    try std.testing.expectEqualStrings("ab22a43e4bbe9990af4ec355e476c0cd5734531bbc3de0992b819878422bd268", &strkeyc2);
+    try std.testing.expectEqualStrings("ee6538cac715c3207cb3b41ec4c42a2e0a2fc7ab0e0c4e1322b28ee6417c0e64", &strchaincodec2);
+
+    // 84'/1'/0'/0
+    const d1 = try deriveHardenedChild(epk, 2147483648 + 84);
+    const d2 = try deriveHardenedChild(d1, 2147483648 + 1);
+    const d3 = try deriveHardenedChild(d2, 2147483648);
+    const d4 = try deriveChildFromExtendedPrivateKey(d3, 0);
+
+    var strkeyd4: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&strkeyd4, "{x}", .{std.fmt.fmtSliceHexLower(&d4.privatekey)});
+    var strchaincoded4: [64]u8 = undefined;
+    _ = try std.fmt.bufPrint(&strchaincoded4, "{x}", .{std.fmt.fmtSliceHexLower(&d4.chaincode)});
+    try std.testing.expectEqualStrings("ef3b8a82492a138ca4e39f6d508ec858e60dbfac64a143b021687aa42897682c", &strkeyd4);
+    try std.testing.expectEqualStrings("da50dba459aa9adcb6410bba999e5a6827d583d100efea52ede417a767729c70", &strchaincoded4);
+}

@@ -22,7 +22,7 @@ pub const Signature = struct {
     r: u256,
 
     // Memory ownership to the caller
-    // Return hex str
+    // Return bytes
     pub fn derEncode(self: Signature, allocator: std.mem.Allocator) ![]u8 {
         var rh: [64]u8 = undefined;
         try intToHexStr(u256, self.r, &rh);
@@ -37,12 +37,17 @@ pub const Signature = struct {
         }
 
         const buffer = try allocator.alloc(u8, cap * 2);
+        defer allocator.free(buffer);
         if (cap <= 70) {
             _ = try std.fmt.bufPrint(buffer, "30{d}02{d}{s}0220{s}", .{ 24 + rlen, rlen, rh, sh });
         } else {
             _ = try std.fmt.bufPrint(buffer, "30{d}02{d}00{s}0220{s}", .{ 24 + rlen, rlen, rh, sh });
         }
-        return buffer;
+
+        const bytes = try allocator.alloc(u8, cap);
+        _ = try std.fmt.hexToBytes(bytes, buffer);
+
+        return bytes;
     }
 };
 
@@ -193,16 +198,22 @@ test "derEncode" {
     const signature = Signature{ .r = 60814256026707795035851733563580772451123242639235623828001822966996257085604, .s = 42543829508311938641100165987203410741729026897852222254335630893556193035246 };
     const serialized = try signature.derEncode(allocator);
     defer allocator.free(serialized);
+    var serialized_hex: [142]u8 = undefined;
+    _ = try std.fmt.bufPrint(&serialized_hex, "{x}", .{std.fmt.fmtSliceHexLower(serialized)});
+
     const expected = "30450221008673a62d0995c213e1b1455f3fbe66a8774f6ad2cdeebbdf9148c05cadaa18a402205e0ef444dc3b15dc93b25046c62b0bd8dea1463f0dd3df7b6dbea067b09403ee";
-    try std.testing.expectEqualStrings(expected, serialized);
+    try std.testing.expectEqualStrings(expected, &serialized_hex);
     try std.testing.expectEqual(signature.r, 60814256026707795035851733563580772451123242639235623828001822966996257085604);
     try std.testing.expectEqual(signature.s, 42543829508311938641100165987203410741729026897852222254335630893556193035246);
 
     const signature2 = Signature{ .r = 20563619043091547917171744686276600212876833865692707756359368710575856337166, .s = 53911059558236206164581555165446301142462550061465543326712028582562493425622 };
     const serialized2 = try signature2.derEncode(allocator);
     defer allocator.free(serialized2);
+    var serialized_hex2: [140]u8 = undefined;
+    _ = try std.fmt.bufPrint(&serialized_hex2, "{x}", .{std.fmt.fmtSliceHexLower(serialized2)});
+
     const expected2 = "304402202d76988e59ac0d668d7e93ad176dc2b8a108e5f92a3ddc3b88afd448e394c10e02207730941108ec58665d78640fcfbbbe06b241b9899ebe85965728ba2aa110e7d6";
-    try std.testing.expectEqualStrings(expected2, serialized2);
+    try std.testing.expectEqualStrings(expected2, &serialized_hex2);
     try std.testing.expectEqual(signature2.r, 20563619043091547917171744686276600212876833865692707756359368710575856337166);
     try std.testing.expectEqual(signature2.s, 53911059558236206164581555165446301142462550061465543326712028582562493425622);
 }

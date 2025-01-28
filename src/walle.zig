@@ -7,7 +7,7 @@ const Network = @import("const.zig").Network;
 const utils = @import("utils.zig");
 const address = @import("address.zig");
 const script = @import("script.zig");
-const Output = @import("tx.zig").Output;
+const Utxo = @import("tx.zig").Utxo;
 const tx = @import("tx.zig");
 const sqlite = @import("sqlite");
 const crypto = @import("crypto");
@@ -193,27 +193,27 @@ pub fn main() !void {
             const network = getNetworkFromStr(args[2]);
             const destination_address = args[3];
             const amount = try std.fmt.parseInt(usize, args[4], 10);
-            const total_outputs = try std.fmt.parseInt(usize, args[5], 10);
+            const total_utxos = try std.fmt.parseInt(usize, args[5], 10);
 
-            std.debug.print("Sending to {s} an amount of {d} using {d} outputs\n", .{ destination_address, amount, total_outputs });
+            std.debug.print("Sending to {s} an amount of {d} using {d} outputs\n", .{ destination_address, amount, total_utxos });
 
-            const outputs = try allocator.alloc(Output, total_outputs);
+            const utxos = try allocator.alloc(Utxo, total_utxos);
             var total_available_amount: usize = 0;
-            for (0..total_outputs) |i| {
-                const txid: [64]u8 = args[6 + (i * 2)][0..64].*;
+            for (0..total_utxos) |i| {
+                const txid: [32]u8 = try utils.hexToBytes(32, args[6 + (i * 2)][0..64]);
                 const vout = try std.fmt.parseInt(u32, args[7 + (i * 2)], 10);
 
-                const output = try db.getOutput(allocator, &database, txid, vout);
-                if (output == null) {
+                const utxo = try db.getOutput(allocator, &database, txid, vout);
+                if (utxo == null) {
                     std.debug.print("Specified output with txid {s} and vout {d} does not exist\n", .{ txid, vout });
                     return;
                 }
-                if (output.?.unspent.? != true) {
+                if (utxo.?.unspent.? != true) {
                     std.debug.print("Specified output with txid {s} and vout {d} is already spent\n", .{ txid, vout });
                     return;
                 }
-                total_available_amount += output.?.amount;
-                outputs[i] = output.?;
+                total_available_amount += utxo.?.amount;
+                utxos[i] = utxo.?;
             }
 
             const mining_fee = 1000;
@@ -229,31 +229,6 @@ pub fn main() !void {
                 return;
             }
 
-            var pubkeys = std.AutoHashMap([72]u8, bip32.PublicKey).init(allocator);
-            var privkeys = std.AutoHashMap([72]u8, [32]u8).init(allocator);
-            const tx_inputs = try allocator.alloc(tx.TxInput, outputs.len);
-            for (outputs, 0..) |output, i| {
-                tx_inputs[i] = try tx.TxInput.init(allocator, output, "", 4294967293); // This sequence will enable both locktime and rbf
-                var map_key: [72]u8 = undefined;
-                var vout_hex: [8]u8 = undefined;
-                try utils.intToHexStr(u32, @byteSwap(output.vout), &vout_hex);
-                _ = try std.fmt.bufPrint(&map_key, "{s}{s}", .{ output.txid, vout_hex });
-
-                const output_descriptor_path = try output.keypath.?.toStr(allocator, 3);
-
-                const public_descriptor = try db.getDescriptor(allocator, &database, output_descriptor_path, false);
-                const private_descriptor = try db.getDescriptor(allocator, &database, output_descriptor_path, true);
-
-                const extended_pubkey = try bip32.ExtendedPublicKey.fromAddress(public_descriptor.?.extended_key);
-                const pubkey = try bip44.generatePublicFromAccountPublicKey(extended_pubkey, output.keypath.?.path[3], output.keypath.?.path[4]);
-
-                const extended_privkey = try bip32.ExtendedPrivateKey.fromAddress(private_descriptor.?.extended_key);
-                const privkey = try bip44.generatePrivateFromAccountPrivateKey(extended_privkey, output.keypath.?.path[3], output.keypath.?.path[4]);
-
-                try pubkeys.put(map_key, pubkey);
-                try privkeys.put(map_key, privkey);
-            }
-
             const change_amount = total_available_amount - amount - mining_fee;
             const tx_outputs_cap: u8 = if (change_amount > 0) 2 else 1;
             const tx_outputs = try allocator.alloc(tx.TxOutput, tx_outputs_cap);
@@ -266,9 +241,41 @@ pub fn main() !void {
                 tx_outputs[1] = try tx.TxOutput.init(allocator, change_amount, script_pubkey_change);
             }
 
-            var send_transaction = try tx.createTx(allocator, tx_inputs, tx_outputs);
+            const tx_inputs = try allocator.alloc(tx.TxInput, utxos.len);
+            const all_outpoints = try allocator.alloc(tx.Outpoint, utxos.len);
+            const witnesses = try allocator.alloc(tx.TxWitness, utxos.len);
+            for (utxos, 0..) |utxo, i| {
+                all_outpoints[i] = utxo.outpoint;
+            }
 
-            try tx.signTx(allocator, &send_transaction, privkeys, pubkeys, crypto.nonceFnRfc6979);
+            for (utxos, 0..) |utxo, i| {
+                const sequence: u32 = 4294967293; // This sequence will enable both locktime and rbf
+                tx_inputs[i] = try tx.TxInput.init(allocator, utxo.outpoint, "", sequence);
+                const output_descriptor_path = try utxo.keypath.?.toStr(allocator, 3);
+
+                const public_descriptor = try db.getDescriptor(allocator, &database, output_descriptor_path, false);
+                const private_descriptor = try db.getDescriptor(allocator, &database, output_descriptor_path, true);
+
+                const extended_pubkey = try bip32.ExtendedPublicKey.fromAddress(public_descriptor.?.extended_key);
+                const pubkey = try bip44.generatePublicFromAccountPublicKey(extended_pubkey, utxo.keypath.?.path[3], utxo.keypath.?.path[4]);
+
+                const extended_privkey = try bip32.ExtendedPrivateKey.fromAddress(private_descriptor.?.extended_key);
+                const privkey = try bip44.generatePrivateFromAccountPrivateKey(extended_privkey, utxo.keypath.?.path[3], utxo.keypath.?.path[4]);
+
+                var scriptcode_hex: [50]u8 = undefined; // scriptcode is 1976a914{publickeyhash}88ac
+                const pubkeyhash = try pubkey.toHashHex();
+                _ = try std.fmt.bufPrint(&scriptcode_hex, "76a914{s}88ac", .{pubkeyhash});
+                const scriptcode = try utils.hexToBytes(25, &scriptcode_hex);
+
+                const commitment_hash = try tx.getCommitmentHash(allocator, utxo.outpoint, utxo.amount, scriptcode, all_outpoints, tx_outputs, 2, sequence, 0, .sighash_all);
+
+                witnesses[i] = try tx.getP2WPKHWitness(allocator, privkey, commitment_hash, .sighash_all, crypto.nonceFnRfc6979);
+            }
+
+            var send_transaction = try tx.createTx(allocator, tx_inputs, tx_outputs);
+            for (witnesses) |witness| {
+                send_transaction.addWitness(witness);
+            }
 
             const raw_tx_cap = tx.encodeTxCap(send_transaction, true);
             const raw_tx = try allocator.alloc(u8, raw_tx_cap);

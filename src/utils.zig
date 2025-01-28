@@ -26,6 +26,18 @@ pub fn intToHexStr(comptime T: type, data: T, buffer: []u8) !void {
     _ = try std.fmt.bufPrint(buffer[missing..], "{x}", .{data});
 }
 
+pub fn hexToBytes(comptime size: usize, hex_str: []const u8) ![size]u8 {
+    var bytes: [size]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bytes, hex_str);
+    return bytes;
+}
+
+pub fn bytesToHex(comptime size: usize, bytes: []const u8) ![size]u8 {
+    var hex: [size]u8 = undefined;
+    _ = try std.fmt.bufPrint(&hex, "{x}", .{std.fmt.fmtSliceHexLower(bytes)});
+    return hex;
+}
+
 pub fn toBase58(buffer: []u8, bytes: []const u8) !void {
     const encoder = base58.Encoder.init(.{});
     _ = try encoder.encode(bytes, buffer);
