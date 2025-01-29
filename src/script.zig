@@ -1,5 +1,6 @@
 const std = @import("std");
 const assert = std.debug.assert;
+const utils = @import("utils.zig");
 
 pub const ScriptType = enum(u8) {
     p2wpkh,
@@ -457,24 +458,24 @@ test "p2wpkh" {
 test "decode" {
     const allocator = std.testing.allocator;
     const hex = "76a9143134047164cbf22f9f54fe738853de24a9f3cf1b88ac".*;
-    const script = try Script.decode(allocator, &hex);
+    const script = try Script.decode(allocator, &try utils.hexToBytes(25, &hex));
     defer script.deinit();
 
     const e1 = "3134047164cbf22f9f54fe738853de24a9f3cf1b".*;
     try std.testing.expectEqual(script.stack.items[0].op, Opcode.op_dup);
     try std.testing.expectEqual(script.stack.items[1].op, Opcode.op_hash160);
     try std.testing.expectEqual(script.stack.items[2].push_bytes, 20);
-    try std.testing.expectEqualStrings(script.stack.items[3].v, &e1);
+    try std.testing.expectEqualStrings(&try utils.bytesToHex(40, script.stack.items[3].v), &e1);
     try std.testing.expectEqual(script.stack.items[4].op, Opcode.op_equalverify);
     try std.testing.expectEqual(script.stack.items[5].op, Opcode.op_checksig);
 
     const hex2 = "0014199b7da15e4b0da4e62b5c3a01dd41255b8c45d6".*;
-    const script2 = try Script.decode(allocator, &hex2);
+    const script2 = try Script.decode(allocator, &try utils.hexToBytes(22, &hex2));
     defer script2.deinit();
     const e2 = "199b7da15e4b0da4e62b5c3a01dd41255b8c45d6".*;
     try std.testing.expectEqual(script2.stack.items[0].op, Opcode.op_false);
     try std.testing.expectEqual(script2.stack.items[1].push_bytes, 20);
-    try std.testing.expectEqualStrings(script2.stack.items[2].v, &e2);
+    try std.testing.expectEqualStrings(&try utils.bytesToHex(40, script2.stack.items[2].v), &e2);
 }
 
 test "getScriptType" {
@@ -486,7 +487,7 @@ test "getScriptType" {
     try std.testing.expectEqual(t, ScriptType.p2wpkh);
 
     const hex = "0014841b80d2cc75f5345c482af96294d04fdd66b2b7".*;
-    const decoded = try Script.decode(allocator, &hex);
+    const decoded = try Script.decode(allocator, &try utils.hexToBytes(22, &hex));
     defer decoded.deinit();
     const t2 = try decoded.getType();
     try std.testing.expectEqual(t2, ScriptType.p2wpkh);
