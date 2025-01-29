@@ -7,7 +7,7 @@ const Network = @import("const.zig").Network;
 const utils = @import("utils.zig");
 const address = @import("address.zig");
 const script = @import("script.zig");
-const Utxo = @import("tx.zig").Utxo;
+const Output = @import("tx.zig").Output;
 const tx = @import("tx.zig");
 const sqlite = @import("sqlite");
 const crypto = @import("crypto");
@@ -178,7 +178,7 @@ pub fn main() !void {
             var balance: usize = 0;
             std.debug.print("Available outputs\n", .{});
             for (outputs) |output| {
-                std.debug.print("Output txid={s} vout={d} -> amount = {d}\n", .{ output.txid, output.vout, output.amount });
+                std.debug.print("Output txid={s} vout={d} -> amount = {d}\n", .{ try utils.bytesToHex(64, &output.outpoint.txid), output.outpoint.vout, output.amount });
                 balance += output.amount;
             }
             std.debug.print("Available balance = {d}\n", .{balance});
@@ -197,7 +197,7 @@ pub fn main() !void {
 
             std.debug.print("Sending to {s} an amount of {d} using {d} outputs\n", .{ destination_address, amount, total_utxos });
 
-            const utxos = try allocator.alloc(Utxo, total_utxos);
+            const utxos = try allocator.alloc(Output, total_utxos);
             var total_available_amount: usize = 0;
             for (0..total_utxos) |i| {
                 const txid: [32]u8 = try utils.hexToBytes(32, args[6 + (i * 2)][0..64]);
@@ -267,14 +267,14 @@ pub fn main() !void {
                 _ = try std.fmt.bufPrint(&scriptcode_hex, "76a914{s}88ac", .{pubkeyhash});
                 const scriptcode = try utils.hexToBytes(25, &scriptcode_hex);
 
-                const commitment_hash = try tx.getCommitmentHash(allocator, utxo.outpoint, utxo.amount, scriptcode, all_outpoints, tx_outputs, 2, sequence, 0, .sighash_all);
+                const commitment_hash = try tx.getCommitmentHash(allocator, utxo.outpoint, @as(u32, @intCast(utxo.amount)), &scriptcode, all_outpoints, tx_outputs, 2, sequence, 0, .sighash_all);
 
                 witnesses[i] = try tx.getP2WPKHWitness(allocator, privkey, commitment_hash, .sighash_all, crypto.nonceFnRfc6979);
             }
 
             var send_transaction = try tx.createTx(allocator, tx_inputs, tx_outputs);
             for (witnesses) |witness| {
-                send_transaction.addWitness(witness);
+                try send_transaction.addWitness(witness);
             }
 
             const raw_tx_cap = tx.encodeTxCap(send_transaction, true);

@@ -1,10 +1,12 @@
 const std = @import("std");
 const sqlite = @import("sqlite");
 const Output = @import("../tx.zig").Output;
+const Outpoint = @import("../tx.zig").Outpoint;
 const Input = @import("../tx.zig").Input;
 const KeyPath = @import("../bip44.zig").KeyPath;
 const Descriptor = @import("../bip44.zig").Descriptor;
 const Block = @import("../block.zig").Block;
+const utils = @import("../utils.zig");
 const assert = std.debug.assert;
 
 pub fn openDB() !sqlite.Db {
@@ -61,13 +63,13 @@ pub fn initDB(db: *sqlite.Db) !void {
     try stmt_commit.exec(.{}, .{});
 }
 
-pub fn saveBlock(db: *sqlite.Db, blockhash: [64]u8, height: usize) !void {
+pub fn saveBlock(db: *sqlite.Db, blockhash: [32]u8, height: usize) !void {
     const sql_block = "INSERT OR IGNORE INTO blocks(hash, height) VALUES(?, ?);";
     var stmt_block = try db.prepare(sql_block);
-    try stmt_block.exec(.{}, .{ .blockhash = blockhash, .height = height });
+    try stmt_block.exec(.{}, .{ .blockhash = try utils.bytesToHex(64, &blockhash), .height = height });
 }
 
-pub fn saveOutputs(allocator: std.mem.Allocator, db: *sqlite.Db, outputs: std.AutoHashMap([72]u8, Output)) !void {
+pub fn saveOutputs(allocator: std.mem.Allocator, db: *sqlite.Db, outputs: []const Output) !void {
     const sql_begin = "BEGIN TRANSACTION;";
     var stmt_begin = try db.prepare(sql_begin);
     defer stmt_begin.deinit();
@@ -77,21 +79,19 @@ pub fn saveOutputs(allocator: std.mem.Allocator, db: *sqlite.Db, outputs: std.Au
 
     try stmt_begin.exec(.{}, .{});
 
-    var it = outputs.valueIterator();
-    while (it.next()) |o| {
-        assert(o.keypath != null);
+    for (outputs) |output| {
+        assert(output.keypath != null);
         const sql_output = "INSERT OR IGNORE INTO outputs(txid, vout, amount, unspent, path) VALUES(?, ?, ?, true, ?)";
         var stmt_output = try db.prepare(sql_output);
         defer stmt_output.deinit();
-
-        const keypath = try o.keypath.?.toStr(allocator, null);
-        try stmt_output.exec(.{}, .{ .txid = o.txid, .vout = o.vout, .amount = o.amount, .path = keypath });
+        const keypath = try output.keypath.?.toStr(allocator, null);
+        try stmt_output.exec(.{}, .{ .txid = try utils.bytesToHex(64, &output.outpoint.txid), .vout = output.outpoint.vout, .amount = output.amount, .path = keypath });
     }
 
     try stmt_commit.exec(.{}, .{});
 }
 
-pub fn saveInputsAndMarkOutputs(db: *sqlite.Db, inputs: std.ArrayList(Input)) !void {
+pub fn saveInputsAndMarkOutputs(db: *sqlite.Db, inputs: []const Input) !void {
     const sql_begin = "BEGIN TRANSACTION;";
     var stmt_begin = try db.prepare(sql_begin);
     defer stmt_begin.deinit();
@@ -101,41 +101,39 @@ pub fn saveInputsAndMarkOutputs(db: *sqlite.Db, inputs: std.ArrayList(Input)) !v
 
     try stmt_begin.exec(.{}, .{});
 
-    for (0..inputs.items.len) |i| {
-        const input = inputs.items[i];
+    for (inputs) |input| {
         const sql_input = "INSERT OR IGNORE INTO inputs(txid, reference_output_txid, reference_output_vout) VALUES(?, ?, ?);";
         var stmt_input = try db.prepare(sql_input);
         defer stmt_input.deinit();
-        try stmt_input.exec(.{}, .{ .txid = input.txid, .reference_output_txid = input.output_txid, .reference_output_vout = input.output_vout });
+        try stmt_input.exec(.{}, .{ .txid = input.txid, .reference_output_txid = try utils.bytesToHex(64, &input.outpoint.txid), .reference_output_vout = input.outpoint.vout });
 
         const sql_output = "UPDATE outputs SET unspent = false WHERE txid = ? AND vout = ?;";
         var stmt_output = try db.prepare(sql_output);
         defer stmt_output.deinit();
-        try stmt_output.exec(.{}, .{ .txid = input.output_txid, .vout = input.output_vout });
+        try stmt_output.exec(.{}, .{ .txid = try utils.bytesToHex(64, &input.outpoint.txid), .vout = input.outpoint.vout });
     }
 
     try stmt_commit.exec(.{}, .{});
 }
 
-pub fn existsOutput(db: *sqlite.Db, txid: [64]u8, vout: u32) !bool {
+pub fn existsOutput(db: *sqlite.Db, txid: [32]u8, vout: u32) !bool {
     const sql = "SELECT COUNT(*) AS total FROM  outputs WHERE txid = ? AND vout = ?";
     var stmt = try db.prepare(sql);
     defer stmt.deinit();
-    const row = try stmt.one(struct { total: usize }, .{}, .{ .txid = txid, .vout = vout });
+    const row = try stmt.one(struct { total: usize }, .{}, .{ .txid = try utils.bytesToHex(64, &txid), .vout = vout });
     return row.?.total > 0;
 }
 
-pub fn getOutput(allocator: std.mem.Allocator, db: *sqlite.Db, txid: [64]u8, vout: u32) !?Output {
+pub fn getOutput(allocator: std.mem.Allocator, db: *sqlite.Db, txid: [32]u8, vout: u32) !?Output {
     const sql_output = "SELECT txid, vout, amount, unspent, path FROM outputs WHERE txid = ? AND vout = ?";
     var stmt = try db.prepare(sql_output);
     defer stmt.deinit();
-    const row = try stmt.oneAlloc(struct { txid: [64]u8, vout: u32, amount: u64, unspent: bool, path: []u8 }, allocator, .{}, .{ .txid = txid, .vout = vout });
+    const row = try stmt.oneAlloc(struct { txid: [64]u8, vout: u32, amount: u64, unspent: bool, path: []u8 }, allocator, .{}, .{ .txid = try utils.bytesToHex(64, &txid), .vout = vout });
 
     if (row != null) {
         defer allocator.free(row.?.path);
         return Output{
-            .txid = row.?.txid,
-            .vout = row.?.vout,
+            .outpoint = Outpoint{ .txid = try utils.hexToBytes(32, &row.?.txid), .vout = row.?.vout },
             .amount = row.?.amount,
             .unspent = row.?.unspent,
             .keypath = try KeyPath(5).fromStr(row.?.path),
@@ -145,11 +143,11 @@ pub fn getOutput(allocator: std.mem.Allocator, db: *sqlite.Db, txid: [64]u8, vou
     return null;
 }
 
-pub fn getOutputDescriptorPath(allocator: std.mem.Allocator, db: *sqlite.Db, txid: [64]u8, vout: u32) !KeyPath(5) {
+pub fn getOutputDescriptorPath(allocator: std.mem.Allocator, db: *sqlite.Db, txid: [32]u8, vout: u32) !KeyPath(5) {
     const sql_output = "SELECT path FROM outputs WHERE txid = ? AND vout = ?";
     var stmt = try db.prepare(sql_output);
     defer stmt.deinit();
-    const row = try stmt.oneAlloc(struct { path: []u8 }, allocator, .{}, .{ .txid = txid, .vout = vout });
+    const row = try stmt.oneAlloc(struct { path: []u8 }, allocator, .{}, .{ .txid = try utils.bytesToHex(64, &txid), .vout = vout });
     if (row != null) {
         defer allocator.free(row.?.path);
         return KeyPath(5).fromStr(row.?.path);
@@ -158,11 +156,11 @@ pub fn getOutputDescriptorPath(allocator: std.mem.Allocator, db: *sqlite.Db, txi
     return error.DescriptorNotFound;
 }
 
-pub fn saveTransaction(db: *sqlite.Db, txid: [64]u8, transaction_raw: []u8, is_coinbase: bool, block_height: usize) !void {
+pub fn saveTransaction(db: *sqlite.Db, txid: [32]u8, transaction_raw: []u8, is_coinbase: bool, block_height: usize) !void {
     const sql_transaction = "INSERT OR IGNORE INTO transactions(txid, raw, block_height, is_coinbase) VALUES(?, ?, ?, ?)";
     var stmt_transaction = try db.prepare(sql_transaction);
     defer stmt_transaction.deinit();
-    try stmt_transaction.exec(.{}, .{ .txid = txid, .raw = transaction_raw, .block_height = block_height, .is_coinbase = is_coinbase });
+    try stmt_transaction.exec(.{}, .{ .txid = try utils.bytesToHex(64, &txid), .raw = transaction_raw, .block_height = block_height, .is_coinbase = is_coinbase });
 }
 
 pub fn getLastBlock(db: *sqlite.Db) !?Block {
@@ -171,7 +169,7 @@ pub fn getLastBlock(db: *sqlite.Db) !?Block {
     defer stmt.deinit();
     const row = try stmt.one(struct { height: usize, hash: [64]u8 }, .{}, .{});
     if (row != null) {
-        return Block{ .hash = row.?.hash, .height = row.?.height };
+        return Block{ .hash = try utils.hexToBytes(32, &row.?.hash), .height = row.?.height };
     }
     return null;
 }
@@ -182,7 +180,7 @@ pub fn getBlock(db: *sqlite.Db, height: usize) !Block {
     defer stmt.deinit();
     const row = try stmt.one(struct { block_height: usize, hash: [64]u8 }, .{}, .{ .height = height });
     if (row != null) {
-        return Block{ .hash = row.?.hash, .height = row.?.block_height };
+        return Block{ .hash = try utils.hexToBytes(32, &row.?.hash), .height = row.?.block_height };
     }
     return error.BlockNotFound;
 }
@@ -307,7 +305,7 @@ pub fn getUnspentOutputs(allocator: std.mem.Allocator, db: *sqlite.Db) ![]Output
 
     var outputs = try allocator.alloc(Output, rows.len);
     for (rows, 0..) |row, i| {
-        outputs[i] = Output{ .txid = row.txid, .vout = row.vout, .amount = row.amount, .unspent = row.unspent, .keypath = try KeyPath(5).fromStr(row.path) };
+        outputs[i] = Output{ .outpoint = Outpoint{ .txid = try utils.hexToBytes(32, &row.txid), .vout = row.vout }, .amount = row.amount, .unspent = row.unspent, .keypath = try KeyPath(5).fromStr(row.path) };
     }
     return outputs;
 }

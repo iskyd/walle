@@ -146,7 +146,7 @@ pub const Opcode = enum(u8) {
     }
 };
 
-const ScriptOp = union(enum) { op: Opcode, v: []const u8, push_bytes: usize };
+pub const ScriptOp = union(enum) { op: Opcode, v: []const u8, push_bytes: usize };
 
 pub const Script = struct {
     allocator: std.mem.Allocator,
@@ -228,21 +228,21 @@ pub const Script = struct {
         _ = try std.fmt.hexToBytes(buffer, redeem_script);
     }
 
-    pub fn decode(allocator: std.mem.Allocator, hex: []const u8) !Script {
+    pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) !Script {
         var script = Script.init(allocator);
         var current: usize = 0;
-        while (current < hex.len) {
-            const v = try std.fmt.parseInt(u32, hex[current .. current + 2], 16);
-            current += 2;
+        while (current < bytes.len) {
+            const v = bytes[current];
+            current += 1;
             // It is a valid opcode
             if (v == 0 or v >= 76) {
                 const op: Opcode = @enumFromInt(v);
                 try script.push(ScriptOp{ .op = op });
             } else { // it is a push_bytes
                 try script.push(ScriptOp{ .push_bytes = v });
-                const data = hex[current .. current + (v * 2)];
+                const data = bytes[current .. current + v];
                 try script.push(ScriptOp{ .v = data });
-                current += v * 2;
+                current += v;
             }
         }
 

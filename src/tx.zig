@@ -21,8 +21,13 @@ pub const Outpoint = struct {
     vout: u32,
 };
 
-// Output represented by transaction hash and index n to its outputs
-pub const Utxo = struct {
+pub const Input = struct {
+    txid: [32]u8,
+    outpoint: Outpoint,
+};
+
+// Can be an utxo or an already spent output
+pub const Output = struct {
     outpoint: Outpoint,
     amount: u64,
     unspent: ?bool = null,
@@ -184,8 +189,8 @@ pub const Transaction = struct {
         try writer.print("Inputs: \n", .{});
         for (0..self.inputs.items.len) |i| {
             const input = self.inputs.items[i];
-            try writer.print("    txid: {s}\n", .{input.prevout.?.txid});
-            try writer.print("    reverse txid: {s}\n", .{try utils.reverseByteOrderFromHex(64, input.prevout.?.txid)});
+            try writer.print("    txid: {s}\n", .{try utils.bytesToHex(64, &input.prevout.?.txid)});
+            try writer.print("    reverse txid: {s}\n", .{try utils.reverseByteOrderFromHex(64, try utils.bytesToHex(64, &input.prevout.?.txid))});
             try writer.print("    n: {d}\n", .{input.prevout.?.vout});
             try writer.print("    sequence: {d}\n\n", .{input.sequence});
         }
@@ -748,7 +753,7 @@ pub fn getCommitmentHash(allocator: std.mem.Allocator, outpoint: Outpoint, amoun
     return utils.doubleSha256(commitment_hash);
 }
 
-pub fn getP2WPKHWitness(allocator: std.mem.Allocator, privkey: [32]u8, commitment_hash: []const u8, sighash: SighashType, nonce_fn: fn (pk: [32]u8, z: [32]u8) u256) !TxWitness {
+pub fn getP2WPKHWitness(allocator: std.mem.Allocator, privkey: [32]u8, commitment_hash: [32]u8, sighash: SighashType, nonce_fn: fn (pk: [32]u8, z: [32]u8) u256) !TxWitness {
     const signature = signEcdsa(privkey, commitment_hash, nonce_fn);
     const der = try signature.derEncode(allocator);
     defer allocator.free(der);

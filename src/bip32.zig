@@ -177,6 +177,11 @@ pub const PublicKey = struct {
         return addr;
     }
 
+    pub fn fromCompressed(compressed: [33]u8) !PublicKey {
+        const p = try crypto.Secp256k1Point.fromCompressed(compressed);
+        return PublicKey{ .point = p };
+    }
+
     pub fn fromStrCompressed(compressed: [66]u8) !PublicKey {
         const v = try std.fmt.parseInt(u264, &compressed, 16);
         const c: [33]u8 = @bitCast(@byteSwap(v));
