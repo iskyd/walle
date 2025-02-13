@@ -2,7 +2,6 @@ const std = @import("std");
 const db = @import("db/db.zig");
 const bip39 = @import("bip39.zig");
 const bip32 = @import("bip32.zig");
-const bip44 = @import("bip44.zig");
 const Network = @import("const.zig").Network;
 const utils = @import("utils.zig");
 const address = @import("address.zig");
@@ -12,12 +11,13 @@ const tx = @import("tx.zig");
 const sqlite = @import("sqlite");
 const crypto = @import("crypto");
 const rpc = @import("rpc/rpc.zig");
+const keypath = @import("keypath.zig");
 
 fn showHelp() void {
     std.debug.print("Valid commands: createwallet, newaddr, listoutputs, send\nFor more information use walle <cmd> help", .{});
 }
 
-fn generateNextAvailableAddress(allocator: std.mem.Allocator, database: *sqlite.Db, descriptor: bip44.Descriptor, change: u8, network: Network) !address.Address {
+fn generateNextAvailableAddress(allocator: std.mem.Allocator, database: *sqlite.Db, descriptor: keypath.Descriptor, change: u8, network: Network) !address.Address {
     const descriptor_path = try descriptor.keypath.toStr(allocator, null);
     const base_path = try allocator.alloc(u8, descriptor_path.len + 4);
     defer allocator.free(base_path);
@@ -30,8 +30,9 @@ fn generateNextAvailableAddress(allocator: std.mem.Allocator, database: *sqlite.
 
     // Generate index with change = 1 for external address
     const account_pubkey = try bip32.ExtendedPublicKey.fromAddress(descriptor.extended_key);
-    const pubkey = try bip44.generatePublicFromAccountPublicKey(account_pubkey, change, next_index);
-    const pubkey_hash = try pubkey.toHashHex();
+    const kp = keypath.KeyPath(2){ .path = [2]keypath.KeyPathElement{ keypath.KeyPathElement{ .value = change, .is_hardened = false }, keypath.KeyPathElement{ .value = next_index, .is_hardened = false } } };
+    const pubkey = try bip32.deriveChildFromKeyPath(bip32.ExtendedPublicKey, account_pubkey, 2, kp);
+    const pubkey_hash = try pubkey.key.toHashHex();
     const s = try script.p2wpkh(allocator, &pubkey_hash);
     const addr = try address.deriveP2WPKHAddress(allocator, s, network);
     return addr;
@@ -39,8 +40,8 @@ fn generateNextAvailableAddress(allocator: std.mem.Allocator, database: *sqlite.
 
 fn getDescriptorPath(network: Network) ![9]u8 {
     var descriptor_path: [9]u8 = undefined;
-    const cointype: u8 = if (network == .mainnet) bip44.bitcoin_coin_type else bip44.bitcoin_testnet_coin_type;
-    _ = try std.fmt.bufPrint(&descriptor_path, "{d}'/{d}'/{d}'", .{ bip44.bip_84_purpose, cointype, 0 });
+    const cointype: u8 = if (network == .mainnet) keypath.bitcoin_coin_type else keypath.bitcoin_testnet_coin_type;
+    _ = try std.fmt.bufPrint(&descriptor_path, "{d}'/{d}'/{d}'", .{ keypath.bip_84_purpose, cointype, 0 });
 
     return descriptor_path;
 }
@@ -130,8 +131,9 @@ pub fn main() !void {
             try bip39.mnemonicToSeed(allocator, &mnemonic, "", &seed);
             const master_extended_privkey: bip32.ExtendedPrivateKey = bip32.ExtendedPrivateKey.fromSeed(&seed);
 
-            const cointype: u32 = if (network == .mainnet) bip44.bitcoin_coin_type else bip44.bitcoin_testnet_coin_type;
-            const descriptor_privkey = try bip44.generateDescriptorPrivate(master_extended_privkey, bip44.bip_84_purpose, cointype, 0);
+            const cointype: u32 = if (network == .mainnet) keypath.bitcoin_coin_type else keypath.bitcoin_testnet_coin_type;
+            const kp = keypath.KeyPath(3){ .path = [3]keypath.KeyPathElement{ keypath.KeyPathElement{ .value = keypath.bip_44_purpose, .is_hardened = true }, keypath.KeyPathElement{ .value = cointype, .is_hardened = true }, keypath.KeyPathElement{ .value = 0, .is_hardened = true } } };
+            const descriptor_privkey = try bip32.deriveChildFromKeyPath(bip32.ExtendedPrivateKey, master_extended_privkey, 3, kp);
             const pubkey = bip32.PublicKey.fromPrivateKey(descriptor_privkey.privatekey);
             const pubkey_compressed = try pubkey.compress();
 
@@ -139,12 +141,12 @@ pub fn main() !void {
             const pubkey_version: bip32.SerializedPublicKeyVersion = if (network == .mainnet) .segwit_mainnet else .segwit_testnet;
             const fingerprint = utils.hash160(&pubkey_compressed)[0..4].*;
             const addr_privkey = try descriptor_privkey.address(privkey_version, 3, fingerprint, 2147483648);
-            const descriptor_priv = bip44.Descriptor{ .extended_key = addr_privkey, .keypath = bip44.KeyPath(3){ .path = [3]u32{ bip44.bip_84_purpose, cointype, 0 } }, .private = true };
+            const descriptor_priv = keypath.Descriptor{ .extended_key = addr_privkey, .keypath = kp, .private = true };
             try db.saveDescriptor(allocator, &database, descriptor_priv);
 
             const extended_pubkey = bip32.ExtendedPublicKey{ .key = pubkey, .chaincode = descriptor_privkey.chaincode };
             const addr_pubkey = try extended_pubkey.address(pubkey_version, 3, fingerprint, 2147483648);
-            const descriptor_pub = bip44.Descriptor{ .extended_key = addr_pubkey, .keypath = bip44.KeyPath(3){ .path = [3]u32{ bip44.bip_84_purpose, cointype, 0 } }, .private = false };
+            const descriptor_pub = keypath.Descriptor{ .extended_key = addr_pubkey, .keypath = kp, .private = false };
             try db.saveDescriptor(allocator, &database, descriptor_pub);
 
             std.debug.print("Wallet initialized\n", .{});
@@ -162,7 +164,7 @@ pub fn main() !void {
                 std.debug.print("A wallet do not exists. Please create it using walletcreate\n", .{});
                 return;
             }
-            const addr = try generateNextAvailableAddress(allocator, &database, descriptor.?, bip44.change_external_chain, network);
+            const addr = try generateNextAvailableAddress(allocator, &database, descriptor.?, keypath.change_external_chain, network);
             defer addr.deinit();
             std.debug.print("addr {s}\n", .{addr.val});
         },
@@ -236,7 +238,7 @@ pub fn main() !void {
             tx_outputs[0] = try tx.TxOutput.init(allocator, amount, script_pubkey_output);
             if (change_amount > 0) {
                 // Change address
-                const change_addr = try generateNextAvailableAddress(allocator, &database, descriptor.?, bip44.change_internal_chain, network);
+                const change_addr = try generateNextAvailableAddress(allocator, &database, descriptor.?, keypath.change_internal_chain, network);
                 const script_pubkey_change = try addressToScript(allocator, change_addr.val);
                 tx_outputs[1] = try tx.TxOutput.init(allocator, change_amount, script_pubkey_change);
             }
@@ -257,19 +259,20 @@ pub fn main() !void {
                 const private_descriptor = try db.getDescriptor(allocator, &database, output_descriptor_path, true);
 
                 const extended_pubkey = try bip32.ExtendedPublicKey.fromAddress(public_descriptor.?.extended_key);
-                const pubkey = try bip44.generatePublicFromAccountPublicKey(extended_pubkey, utxo.keypath.?.path[3], utxo.keypath.?.path[4]);
+                const kp = keypath.KeyPath(2){ .path = [2]keypath.KeyPathElement{ keypath.KeyPathElement{ .value = utxo.keypath.?.path[3].value, .is_hardened = false }, keypath.KeyPathElement{ .value = utxo.keypath.?.path[4].value, .is_hardened = false } } };
+                const pubkey: bip32.ExtendedPublicKey = try bip32.deriveChildFromKeyPath(bip32.ExtendedPublicKey, extended_pubkey, 2, kp);
 
                 const extended_privkey = try bip32.ExtendedPrivateKey.fromAddress(private_descriptor.?.extended_key);
-                const privkey = try bip44.generatePrivateFromAccountPrivateKey(extended_privkey, utxo.keypath.?.path[3], utxo.keypath.?.path[4]);
+                const privkey: bip32.ExtendedPrivateKey = try bip32.deriveChildFromKeyPath(bip32.ExtendedPrivateKey, extended_privkey, 2, kp);
 
                 var scriptcode_hex: [50]u8 = undefined; // scriptcode is 1976a914{publickeyhash}88ac
-                const pubkeyhash = try pubkey.toHashHex();
+                const pubkeyhash = try pubkey.key.toHashHex();
                 _ = try std.fmt.bufPrint(&scriptcode_hex, "76a914{s}88ac", .{pubkeyhash});
                 const scriptcode = try utils.hexToBytes(25, &scriptcode_hex);
 
                 const commitment_hash = try tx.getCommitmentHash(allocator, utxo.outpoint, @as(u32, @intCast(utxo.amount)), &scriptcode, all_outpoints, tx_outputs, 2, sequence, 0, .sighash_all);
 
-                witnesses[i] = try tx.getP2WPKHWitness(allocator, privkey, commitment_hash, .sighash_all, crypto.nonceFnRfc6979);
+                witnesses[i] = try tx.getP2WPKHWitness(allocator, privkey.privatekey, commitment_hash, .sighash_all, crypto.nonceFnRfc6979);
             }
 
             var send_transaction = try tx.createTx(allocator, tx_inputs, tx_outputs);

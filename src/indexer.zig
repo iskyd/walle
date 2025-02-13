@@ -3,11 +3,10 @@ const tx = @import("tx.zig");
 const Output = tx.Output;
 const Outpoint = tx.Outpoint;
 const Input = tx.Input;
-const ExtendedPublicKey = @import("bip32.zig").ExtendedPublicKey;
-const PublicKey = @import("bip32.zig").PublicKey;
-const bip44 = @import("bip44.zig");
-const KeyPath = bip44.KeyPath;
-const Descriptor = bip44.Descriptor;
+const bip32 = @import("bip32.zig");
+const PublicKey = bip32.PublicKey;
+const ExtendedPublicKey = bip32.ExtendedPublicKey;
+const keypath = @import("keypath.zig");
 const Network = @import("const.zig").Network;
 const script = @import("script.zig");
 const utils = @import("utils.zig");
@@ -103,16 +102,16 @@ pub fn main() !void {
     defer allocator.free(descriptors);
 
     for (descriptors) |descriptor| {
-        std.debug.print("Descriptor: extended key = {s}, path = {d}'/{d}'/{d}'\n", .{ descriptor.extended_key, descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2] });
+        std.debug.print("keypath.Descriptor: extended key = {s}, path = {d}'/{d}'/{d}'\n", .{ descriptor.extended_key, descriptor.keypath.path[0].value, descriptor.keypath.path[1].value, descriptor.keypath.path[2].value });
     }
 
     std.debug.print("init key generation\n", .{});
     // use hashmap to store public key hash for fast check
-    var pubkeys = std.AutoHashMap([20]u8, KeyPath(5)).init(allocator);
+    var pubkeys = std.AutoHashMap([20]u8, keypath.KeyPath(5)).init(allocator);
     defer pubkeys.deinit();
-    var keypaths = std.AutoHashMap(KeyPath(5), Descriptor).init(allocator);
+    var keypaths = std.AutoHashMap(keypath.KeyPath(5), keypath.Descriptor).init(allocator);
     defer keypaths.deinit();
-    var descriptors_map = std.AutoHashMap(KeyPath(3), [111]u8).init(allocator);
+    var descriptors_map = std.AutoHashMap(keypath.KeyPath(3), [111]u8).init(allocator);
     defer descriptors_map.deinit();
     for (descriptors) |descriptor| {
         try descriptors_map.put(descriptor.keypath, descriptor.extended_key);
@@ -131,8 +130,8 @@ pub fn main() !void {
         defer allocator.free(keypath_external_str);
         const partial_keypath_str = try descriptor.keypath.toStr(allocator, null);
         defer allocator.free(partial_keypath_str);
-        _ = try std.fmt.bufPrint(keypath_internal_str, "{s}/{d}", .{ partial_keypath_str, bip44.change_internal_chain });
-        _ = try std.fmt.bufPrint(keypath_external_str, "{s}/{d}", .{ partial_keypath_str, bip44.change_external_chain });
+        _ = try std.fmt.bufPrint(keypath_internal_str, "{s}/{d}", .{ partial_keypath_str, keypath.change_internal_chain });
+        _ = try std.fmt.bufPrint(keypath_external_str, "{s}/{d}", .{ partial_keypath_str, keypath.change_external_chain });
 
         const last_internal_index = try db.getLastUsedIndexFromOutputs(&database, keypath_internal_str);
         const last_external_index = try db.getLastUsedIndexFromOutputs(&database, keypath_internal_str);
@@ -146,21 +145,23 @@ pub fn main() !void {
 
         for (last_indexes, 0..) |last_index, t| {
             // This depends on the order specified above. Improve this behaviour pls.
-            const change_type: u32 = if (t == 0) bip44.change_internal_chain else bip44.change_external_chain;
+            const change_type: u32 = if (t == 0) keypath.change_internal_chain else keypath.change_external_chain;
             for (0..@as(usize, @intCast(last_index + 2))) |i| {
                 const pubkey_addr = descriptors_map.get(descriptor.keypath);
                 if (pubkey_addr == null) {
-                    std.debug.print("descriptor not found for path {d}'/{d}'/{d}'\n", .{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2] });
+                    std.debug.print("descriptor not found for path {d}'/{d}'/{d}'\n", .{ descriptor.keypath.path[0].value, descriptor.keypath.path[1].value, descriptor.keypath.path[2].value });
                     continue;
                 }
 
-                const keypath = KeyPath(5){ .path = [5]u32{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], change_type, @as(u32, @intCast(i)) } };
+                const kp = keypath.KeyPath(5){ .path = [5]keypath.KeyPathElement{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], keypath.KeyPathElement{ .value = change_type, .is_hardened = false }, keypath.KeyPathElement{ .value = @as(u32, @intCast(i)), .is_hardened = false } } };
 
                 const extended_pubkey = try ExtendedPublicKey.fromAddress(pubkey_addr.?);
-                try keypaths.put(keypath, Descriptor{ .extended_key = pubkey_addr.?, .keypath = descriptor.keypath, .private = false });
-                const pubkey = try bip44.generatePublicFromAccountPublicKey(extended_pubkey, keypath.path[3], keypath.path[4]);
-                const pubkey_hash = try pubkey.toHash();
-                try pubkeys.put(pubkey_hash, keypath);
+                try keypaths.put(kp, keypath.Descriptor{ .extended_key = pubkey_addr.?, .keypath = descriptor.keypath, .private = false });
+
+                const account_kp = keypath.KeyPath(2){ .path = [2]keypath.KeyPathElement{ keypath.KeyPathElement{ .value = kp.path[3].value, .is_hardened = false }, keypath.KeyPathElement{ .value = kp.path[4].value, .is_hardened = false } } };
+                const pubkey = try bip32.deriveChildFromKeyPath(bip32.ExtendedPublicKey, extended_pubkey, 2, account_kp);
+                const pubkey_hash = try pubkey.key.toHash();
+                try pubkeys.put(pubkey_hash, kp);
             }
         }
     }
@@ -208,8 +209,8 @@ pub fn main() !void {
                 for (0..txoutputs.items.len) |j| {
                     const txoutput = txoutputs.items[j];
                     // We need to generate the key with idx + n if it doesnt already exists
-                    const keypath = txoutput.keypath.?;
-                    const next = keypath.getNext(1);
+                    const kp = txoutput.keypath.?;
+                    const next = kp.getNext(1);
                     const existing = keypaths.get(next);
 
                     // If we are generating a new key and the output is new we start re-indexing the block
@@ -219,11 +220,12 @@ pub fn main() !void {
                     //var key: [72]u8 = undefined;
                     //_ = try std.fmt.bufPrint(&key, "{s}{s}", .{ try utils.bytesToHex(64, &txoutput.outpoint.txid), vout_hex });
                     if (existing == null) {
-                        const descriptor = keypaths.get(keypath);
+                        const descriptor = keypaths.get(kp);
                         // Generate the next key
                         const account_pubkey = try ExtendedPublicKey.fromAddress(descriptor.?.extended_key);
-                        const next_pubkey = try bip44.generatePublicFromAccountPublicKey(account_pubkey, next.path[3], next.path[4]);
-                        const next_pubkey_hash = try next_pubkey.toHash();
+                        const account_kp = keypath.KeyPath(2){ .path = [2]keypath.KeyPathElement{ keypath.KeyPathElement{ .value = next.path[3].value, .is_hardened = false }, keypath.KeyPathElement{ .value = next.path[4].value, .is_hardened = false } } };
+                        const next_pubkey = try bip32.deriveChildFromKeyPath(bip32.ExtendedPublicKey, account_pubkey, 2, account_kp);
+                        const next_pubkey_hash = try next_pubkey.key.toHash();
                         try pubkeys.put(next_pubkey_hash, next);
                         try keypaths.put(next, descriptor.?);
                         break :blk;
@@ -274,7 +276,7 @@ fn scriptPubkeyToPubkeyHash(allocator: std.mem.Allocator, output: tx.TxOutput) !
     return null;
 }
 
-fn getOutputsFor(allocator: std.mem.Allocator, transaction: tx.Transaction, pubkeys: std.AutoHashMap([20]u8, KeyPath(5))) !std.ArrayList(Output) {
+fn getOutputsFor(allocator: std.mem.Allocator, transaction: tx.Transaction, pubkeys: std.AutoHashMap([20]u8, keypath.KeyPath(5))) !std.ArrayList(Output) {
     var outputs = std.ArrayList(Output).init(allocator);
     for (0..transaction.outputs.items.len) |i| {
         const tx_output = transaction.outputs.items[i];
@@ -294,7 +296,7 @@ fn getOutputsFor(allocator: std.mem.Allocator, transaction: tx.Transaction, pubk
     return outputs;
 }
 
-fn getInputsFor(allocator: std.mem.Allocator, transactions: []tx.Transaction, pubkeys: std.AutoHashMap([20]u8, KeyPath(5))) !std.ArrayList(Input) {
+fn getInputsFor(allocator: std.mem.Allocator, transactions: []tx.Transaction, pubkeys: std.AutoHashMap([20]u8, keypath.KeyPath(5))) !std.ArrayList(Input) {
     var inputs = std.ArrayList(Input).init(allocator);
     for (transactions) |transaction| {
         if (transaction.witness.items.len == 0) {

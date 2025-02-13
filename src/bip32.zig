@@ -5,6 +5,7 @@ const crypto = @import("crypto");
 const utils = @import("utils.zig");
 const Network = @import("const.zig").Network;
 const script = @import("script.zig");
+const KeyPath = @import("keypath.zig").KeyPath;
 
 pub const SerializedPrivateKeyVersion = enum(u32) {
     mainnet = 0x0488aDe4,
@@ -333,6 +334,33 @@ pub fn deriveHardenedChild(extended_privkey: ExtendedPrivateKey, index: u32) !Ex
     };
 }
 
+pub fn deriveChildFromKeyPath(comptime T: type, extended_key: T, comptime keypath_depth: u8, keypath: KeyPath(keypath_depth)) !T {
+    return switch (T) {
+        ExtendedPrivateKey => {
+            var r = ExtendedPrivateKey{ .privatekey = extended_key.privatekey, .chaincode = extended_key.chaincode };
+            for (keypath.path) |p| {
+                if (p.is_hardened == true) {
+                    r = try deriveHardenedChild(r, p.value + 2147483648);
+                } else {
+                    r = try deriveChildFromExtendedPrivateKey(r, p.value);
+                }
+            }
+
+            return r;
+        },
+        ExtendedPublicKey => {
+            var r = ExtendedPublicKey{ .key = extended_key.key, .chaincode = extended_key.chaincode };
+            for (keypath.path) |p| {
+                assert(p.is_hardened == false);
+                r = try deriveChildFromExtendedPublicKey(r, p.value);
+            }
+
+            return r;
+        },
+        else => @compileError("Expected type ExtendedPrivateKey or ExtendedPublicKey"),
+    };
+}
+
 test "extendedMasterPrivateKeyFromSeed" {
     const seed = [64]u8{ 0b10111000, 0b01110011, 0b00100001, 0b00101111, 0b10001000, 0b01011100, 0b11001111, 0b11111011, 0b11110100, 0b01101001, 0b00101010, 0b11111100, 0b10111000, 0b01001011, 0b11000010, 0b11100101, 0b01011000, 0b10000110, 0b11011110, 0b00101101, 0b11111010, 0b00000111, 0b11011001, 0b00001111, 0b01011100, 0b00111100, 0b00100011, 0b10011010, 0b10111100, 0b00110001, 0b11000000, 0b10100110, 0b11001110, 0b00000100, 0b01111110, 0b00110000, 0b11111101, 0b10001011, 0b11110110, 0b10100010, 0b10000001, 0b11100111, 0b00010011, 0b10001001, 0b10101010, 0b10000010, 0b11010111, 0b00111101, 0b11110111, 0b01001100, 0b01111011, 0b10111111, 0b10110011, 0b10110000, 0b01101011, 0b01000110, 0b00111001, 0b10100101, 0b11001110, 0b11100111, 0b01110101, 0b11001100, 0b11001101, 0b00111100 };
 
@@ -540,6 +568,10 @@ test "extendedPrivateKeyFromAddress" {
 
     try std.testing.expectEqualStrings(&expected, &strprivatekey);
     try std.testing.expectEqualStrings(&expectedchaincode, &strchaincode);
+
+    const epk2 = try ExtendedPrivateKey.fromAddress("tprv8ZgxMBicQKsPfCxvMSGLjZegGFnZn9VZfVdsnEbuzTGdS9aZjvaYpyh7NsxsrAc8LsRQZ2EYaCfkvwNpas8cKUBbptDzadY7c3hUi8i33XJ".*);
+    try std.testing.expectEqualStrings("3cce48c84f22343cbdac8e7f252ed8ca11fce329deae7ed635b73822dfed9c77", &try utils.bytesToHex(64, &epk2.privatekey));
+    try std.testing.expectEqualStrings("ea6f63babb3dc5c58ea4cd11cb3fc9d7baa51c0e14be8230ffb8b1696796a63f", &try utils.bytesToHex(64, &epk2.chaincode));
 }
 
 test "serializePublicKey" {
@@ -643,44 +675,38 @@ test "extendedPrivateKeyAddress" {
     try std.testing.expectEqualStrings(&expected, &addr);
 }
 
-test "t" {
+test "deriveChildFromKeyPathExtendedPrivate" {
     const epk = try ExtendedPrivateKey.fromAddress("tprv8ZgxMBicQKsPfCxvMSGLjZegGFnZn9VZfVdsnEbuzTGdS9aZjvaYpyh7NsxsrAc8LsRQZ2EYaCfkvwNpas8cKUBbptDzadY7c3hUi8i33XJ".*);
-    var strkey: [64]u8 = undefined;
-    _ = try std.fmt.bufPrint(&strkey, "{x}", .{std.fmt.fmtSliceHexLower(&epk.privatekey)});
-    var strchaincode: [64]u8 = undefined;
-    _ = try std.fmt.bufPrint(&strchaincode, "{x}", .{std.fmt.fmtSliceHexLower(&epk.chaincode)});
-    try std.testing.expectEqualStrings("3cce48c84f22343cbdac8e7f252ed8ca11fce329deae7ed635b73822dfed9c77", &strkey);
-    try std.testing.expectEqualStrings("ea6f63babb3dc5c58ea4cd11cb3fc9d7baa51c0e14be8230ffb8b1696796a63f", &strchaincode);
 
-    const pubkey = PublicKey.fromPrivateKey(epk.privatekey);
-    try std.testing.expectEqualStrings("03b337fd5dbfcf1a5c86cc8e2956a331048264be996a005c5a444280877e303359", &try pubkey.toStrCompressed());
+    const keypath_partial = try KeyPath(3).fromStr("84'/1'/0'");
+    const epk_partial = try deriveChildFromKeyPath(ExtendedPrivateKey, epk, 3, keypath_partial);
 
-    const c1 = try deriveChildFromExtendedPrivateKey(epk, 1);
-    var strkeyc1: [64]u8 = undefined;
-    _ = try std.fmt.bufPrint(&strkeyc1, "{x}", .{std.fmt.fmtSliceHexLower(&c1.privatekey)});
-    var strchaincodec1: [64]u8 = undefined;
-    _ = try std.fmt.bufPrint(&strchaincodec1, "{x}", .{std.fmt.fmtSliceHexLower(&c1.chaincode)});
-    try std.testing.expectEqualStrings("9e8d70914e98c5c9982b19877a6d495ab815c02a7896a593f457861e956c61b4", &strkeyc1);
-    try std.testing.expectEqualStrings("a0596502c28d66ef847e2539bea2f88f3bd4dc367976ff50780fa5ceda45a9bf", &strchaincodec1);
+    const keypath = try KeyPath(4).fromStr("84'/1'/0'/0");
+    const r = try deriveChildFromKeyPath(ExtendedPrivateKey, epk, 4, keypath);
 
-    const c2 = try deriveHardenedChild(epk, 2147483649);
-    var strkeyc2: [64]u8 = undefined;
-    _ = try std.fmt.bufPrint(&strkeyc2, "{x}", .{std.fmt.fmtSliceHexLower(&c2.privatekey)});
-    var strchaincodec2: [64]u8 = undefined;
-    _ = try std.fmt.bufPrint(&strchaincodec2, "{x}", .{std.fmt.fmtSliceHexLower(&c2.chaincode)});
-    try std.testing.expectEqualStrings("ab22a43e4bbe9990af4ec355e476c0cd5734531bbc3de0992b819878422bd268", &strkeyc2);
-    try std.testing.expectEqualStrings("ee6538cac715c3207cb3b41ec4c42a2e0a2fc7ab0e0c4e1322b28ee6417c0e64", &strchaincodec2);
+    try std.testing.expectEqualStrings("ef3b8a82492a138ca4e39f6d508ec858e60dbfac64a143b021687aa42897682c", &try utils.bytesToHex(64, &r.privatekey));
+    try std.testing.expectEqualStrings("da50dba459aa9adcb6410bba999e5a6827d583d100efea52ede417a767729c70", &try utils.bytesToHex(64, &r.chaincode));
 
-    // 84'/1'/0'/0
-    const d1 = try deriveHardenedChild(epk, 2147483648 + 84);
-    const d2 = try deriveHardenedChild(d1, 2147483648 + 1);
-    const d3 = try deriveHardenedChild(d2, 2147483648);
-    const d4 = try deriveChildFromExtendedPrivateKey(d3, 0);
+    // 84'/1'/0'/0/1
+    const n = try deriveChildFromExtendedPrivateKey(r, 1);
 
-    var strkeyd4: [64]u8 = undefined;
-    _ = try std.fmt.bufPrint(&strkeyd4, "{x}", .{std.fmt.fmtSliceHexLower(&d4.privatekey)});
-    var strchaincoded4: [64]u8 = undefined;
-    _ = try std.fmt.bufPrint(&strchaincoded4, "{x}", .{std.fmt.fmtSliceHexLower(&d4.chaincode)});
-    try std.testing.expectEqualStrings("ef3b8a82492a138ca4e39f6d508ec858e60dbfac64a143b021687aa42897682c", &strkeyd4);
-    try std.testing.expectEqualStrings("da50dba459aa9adcb6410bba999e5a6827d583d100efea52ede417a767729c70", &strchaincoded4);
+    const keypath_public = try KeyPath(2).fromStr("0/1");
+    const extended_public = ExtendedPublicKey{ .key = PublicKey.fromPrivateKey(epk_partial.privatekey), .chaincode = epk_partial.chaincode };
+
+    const r2 = try deriveChildFromKeyPath(ExtendedPublicKey, extended_public, 2, keypath_public);
+    const expected_public = PublicKey.fromPrivateKey(n.privatekey);
+
+    try std.testing.expectEqual(expected_public.point.x, r2.key.point.x);
+    try std.testing.expectEqual(expected_public.point.y, r2.key.point.y);
+    try std.testing.expectEqualSlices(u8, &n.chaincode, &r2.chaincode);
 }
+
+//test "deriveChildFromKeyPathExtendedPublic" {
+//    const epk = try ExtendedPrivateKey.fromAddress("tprv8ZgxMBicQKsPfCxvMSGLjZegGFnZn9VZfVdsnEbuzTGdS9aZjvaYpyh7NsxsrAc8LsRQZ2EYaCfkvwNpas8cKUBbptDzadY7c3hUi8i33XJ".*);
+//
+//    const keypath = try KeyPath(4).fromStr("84'/1'/0'/0");
+//    const r = try deriveChildFromKeyPath(ExtendedPrivateKey, epk, 4, keypath);
+//
+//    try std.testing.expectEqualStrings("ef3b8a82492a138ca4e39f6d508ec858e60dbfac64a143b021687aa42897682c", &try utils.bytesToHex(64, &r.privatekey));
+//    try std.testing.expectEqualStrings("da50dba459aa9adcb6410bba999e5a6827d583d100efea52ede417a767729c70", &try utils.bytesToHex(64, &r.chaincode));
+//}

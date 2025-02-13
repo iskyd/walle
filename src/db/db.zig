@@ -3,8 +3,8 @@ const sqlite = @import("sqlite");
 const Output = @import("../tx.zig").Output;
 const Outpoint = @import("../tx.zig").Outpoint;
 const Input = @import("../tx.zig").Input;
-const KeyPath = @import("../bip44.zig").KeyPath;
-const Descriptor = @import("../bip44.zig").Descriptor;
+const KeyPath = @import("../keypath.zig").KeyPath;
+const Descriptor = @import("../keypath.zig").Descriptor;
 const Block = @import("../block.zig").Block;
 const utils = @import("../utils.zig");
 const assert = std.debug.assert;
@@ -269,7 +269,7 @@ pub fn getUsedKeyPaths(allocator: std.mem.Allocator, db: *sqlite.Db) ![]KeyPath(
 
 fn sqliteKeypathLastIndex(str: []const u8) u32 {
     const k = KeyPath(5).fromStr(str) catch return 0;
-    return k.path[4];
+    return k.path[4].value;
 }
 
 pub fn getLastUsedIndexFromOutputs(db: *sqlite.Db, base_path: []u8) !?u32 {
