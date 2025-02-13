@@ -3,7 +3,6 @@ const std = @import("std");
 pub const bip39 = @import("src/bip39.zig");
 pub const bip32 = @import("src/bip32.zig");
 pub const bip38 = @import("src/bip38.zig");
-pub const bip44 = @import("src/bip44.zig");
 pub const utils = @import("src/utils.zig");
 pub const script = @import("src/script.zig");
 pub const tx = @import("src/tx.zig");
