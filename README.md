@@ -110,16 +110,17 @@ curl --verbose -L --user walle --data-binary '{"jsonrpc": "1.0", "id": "walle", 
 - [x] Indexer
 - [x] Addresses
 - [x] Segwit
-- [x] Transactions (create/sign/broadcast)
+- [x] Transactions (create/sign)
 
-### Roadmap
+### Current Roadmap (ordered by priority)
 
-- [ ] Support Legacy Wallet
-- [ ] Support Script Hash (P2SH, P2WSH)
+- [ ] Electrum Server
+- [ ] [Seed Signer](https://seedsigner.com/)
+- [ ] Lightning Network
+- [ ] TUI
 - [ ] Multisig Wallet
 - [ ] Taproot
-- [ ] Export private key
-- [ ] Secure signature from hardware wallet
+- [ ] Legacy Wallet
 
 ### Contributing
 
