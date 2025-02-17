@@ -3,6 +3,7 @@ const sqlite = @import("sqlite");
 const Output = @import("../tx.zig").Output;
 const Outpoint = @import("../tx.zig").Outpoint;
 const Input = @import("../tx.zig").Input;
+const Transaction = @import("../tx.zig").Transaction;
 const KeyPath = @import("../keypath.zig").KeyPath;
 const Descriptor = @import("../keypath.zig").Descriptor;
 const Block = @import("../block.zig").Block;
@@ -133,6 +134,7 @@ pub fn getOutput(allocator: std.mem.Allocator, db: *sqlite.Db, txid: [32]u8, vou
     if (row != null) {
         defer allocator.free(row.?.path);
         return Output{
+            .txid = try utils.hexToBytes(32, &row.?.txid),
             .outpoint = Outpoint{ .txid = try utils.hexToBytes(32, &row.?.txid), .vout = row.?.vout },
             .amount = row.?.amount,
             .unspent = row.?.unspent,
@@ -305,7 +307,7 @@ pub fn getUnspentOutputs(allocator: std.mem.Allocator, db: *sqlite.Db) ![]Output
 
     var outputs = try allocator.alloc(Output, rows.len);
     for (rows, 0..) |row, i| {
-        outputs[i] = Output{ .outpoint = Outpoint{ .txid = try utils.hexToBytes(32, &row.txid), .vout = row.vout }, .amount = row.amount, .unspent = row.unspent, .keypath = try KeyPath(5).fromStr(row.path) };
+        outputs[i] = Output{ .txid = try utils.hexToBytes(32, &row.txid), .outpoint = Outpoint{ .txid = try utils.hexToBytes(32, &row.txid), .vout = row.vout }, .amount = row.amount, .unspent = row.unspent, .keypath = try KeyPath(5).fromStr(row.path) };
     }
     return outputs;
 }

@@ -164,7 +164,7 @@ pub fn main() !void {
                 std.debug.print("A wallet do not exists. Please create it using walletcreate\n", .{});
                 return;
             }
-            const addr = try generateNextAvailableAddress(allocator, &database, descriptor.?, keypath.change_external_chain, network);
+            const addr = try generateNextAvailableAddress(allocator, &database, descriptor.?, keypath.external_chain, network);
             defer addr.deinit();
             std.debug.print("addr {s}\n", .{addr.val});
         },
@@ -238,7 +238,7 @@ pub fn main() !void {
             tx_outputs[0] = try tx.TxOutput.init(allocator, amount, script_pubkey_output);
             if (change_amount > 0) {
                 // Change address
-                const change_addr = try generateNextAvailableAddress(allocator, &database, descriptor.?, keypath.change_internal_chain, network);
+                const change_addr = try generateNextAvailableAddress(allocator, &database, descriptor.?, keypath.internal_chain, network);
                 const script_pubkey_change = try addressToScript(allocator, change_addr.val);
                 tx_outputs[1] = try tx.TxOutput.init(allocator, change_amount, script_pubkey_change);
             }

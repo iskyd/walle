@@ -5,8 +5,8 @@ const utils = @import("utils.zig");
 
 pub const bip_44_purpose = 44;
 pub const bip_84_purpose = 84; // Segwit
-pub const change_external_chain = 0; // Address visible outside the wallet
-pub const change_internal_chain = 1; // Not visible outside the wallet, return transaction change
+pub const external_chain = 0; // Address visible outside the wallet
+pub const internal_chain = 1; // Not visible outside the wallet, return transaction change
 pub const bitcoin_coin_type = 0;
 pub const bitcoin_testnet_coin_type = 1;
 
@@ -116,6 +116,27 @@ pub fn KeyPath(comptime depth: u8) type {
 
             path[depth - 1].value = path[depth - 1].value + v;
             return Self{ .path = path };
+        }
+
+        pub fn extendPath(self: Self, v: u32, is_hardened: bool) KeyPath(depth + 1) {
+            var new_path: [depth + 1]KeyPathElement = undefined;
+            for (self.path, 0..) |p, i| {
+                new_path[i] = KeyPathElement{ .value = p.value, .is_hardened = p.is_hardened };
+            }
+
+            new_path[depth] = KeyPathElement{ .value = v, .is_hardened = is_hardened };
+            return KeyPath(depth + 1){ .path = new_path };
+        }
+
+        pub fn truncPath(self: Self, comptime new_depth: u8) KeyPath(new_depth) {
+            comptime assert(new_depth <= depth);
+
+            var new_path: [new_depth]KeyPathElement = undefined;
+            for (0..new_depth) |i| {
+                new_path[i] = KeyPathElement{ .value = self.path[i].value, .is_hardened = self.path[i].is_hardened };
+            }
+
+            return KeyPath(new_depth){ .path = new_path };
         }
     };
 }

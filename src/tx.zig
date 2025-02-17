@@ -30,6 +30,7 @@ pub const Input = struct {
 pub const Output = struct {
     outpoint: Outpoint,
     amount: u64,
+    txid: [32]u8,
     unspent: ?bool = null,
     keypath: ?KeyPath(5) = null,
 };

@@ -14,6 +14,19 @@ const clap = @import("clap");
 const rpc = @import("rpc/rpc.zig");
 const db = @import("db/db.zig");
 const sqlite = @import("sqlite");
+const Thread = std.Thread;
+const WaitGroup = Thread.WaitGroup;
+
+const KEYS_GAP = 100;
+
+fn generateKeys(pubkeys: *std.AutoHashMap([20]u8, keypath.KeyPath(5)), kp: keypath.KeyPath(4), extended_pubkey: bip32.ExtendedPublicKey, start: usize, end: usize) !void {
+    for (start..end) |i| {
+        const index = @as(u32, @intCast(i));
+        const pubkey = try bip32.deriveChildFromExtendedPublicKey(extended_pubkey, index);
+        const pubkey_hash = try pubkey.key.toHash();
+        try pubkeys.put(pubkey_hash, kp.extendPath(index, false));
+    }
+}
 
 pub fn main() !void {
     std.debug.print("WALL-E. Bitcoin Wallet written in Zig.\nIndexer...\n", .{});
@@ -87,7 +100,7 @@ pub fn main() !void {
         }
     }
 
-    const block_height = try rpc.getBlockCount(allocator, &client, rpc_location, auth);
+    var block_height = try rpc.getBlockCount(allocator, &client, rpc_location, auth);
     std.debug.print("Total blocks {d}\n", .{block_height});
     std.debug.print("Current blocks {?d}\n", .{current_block_height});
     if (current_block_height != null and block_height == current_block_height.?) {
@@ -109,8 +122,17 @@ pub fn main() !void {
     // use hashmap to store public key hash for fast check
     var pubkeys = std.AutoHashMap([20]u8, keypath.KeyPath(5)).init(allocator);
     defer pubkeys.deinit();
+
+    // remove, useless
     var keypaths = std.AutoHashMap(keypath.KeyPath(5), keypath.Descriptor).init(allocator);
     defer keypaths.deinit();
+
+    // this is used to store the last used index for every keypath (both internal and external) for every descriptor.
+    // it is necessary to keep track of the gap between the last generated key and the last used index
+    // if gap < KEYS_GAP, generate missing keys
+    var keypath_last_used_index = std.AutoHashMap(keypath.KeyPath(4), u32).init(allocator);
+    defer keypath_last_used_index.deinit();
+
     var descriptors_map = std.AutoHashMap(keypath.KeyPath(3), [111]u8).init(allocator);
     defer descriptors_map.deinit();
     for (descriptors) |descriptor| {
@@ -123,47 +145,30 @@ pub fn main() !void {
     // For every descriptor we get the latest used index (if one) and generate all the keys to this latest index + 1
     // Otherwise we only derive the first keypath (.../0)
     for (descriptors) |descriptor| {
-        const keypath_cap = descriptor.keypath.getStrCap(null) + 2; // + 2 for /0 or /1 (internal / external)
-        const keypath_internal_str = try allocator.alloc(u8, keypath_cap);
-        defer allocator.free(keypath_internal_str);
-        const keypath_external_str = try allocator.alloc(u8, keypath_cap);
-        defer allocator.free(keypath_external_str);
-        const partial_keypath_str = try descriptor.keypath.toStr(allocator, null);
-        defer allocator.free(partial_keypath_str);
-        _ = try std.fmt.bufPrint(keypath_internal_str, "{s}/{d}", .{ partial_keypath_str, keypath.change_internal_chain });
-        _ = try std.fmt.bufPrint(keypath_external_str, "{s}/{d}", .{ partial_keypath_str, keypath.change_external_chain });
+        const internal_keypath = descriptor.keypath.extendPath(keypath.internal_chain, false);
+        const external_keypath = descriptor.keypath.extendPath(keypath.external_chain, false);
+        const internal_keypath_str = try internal_keypath.toStr(allocator, null);
+        defer allocator.free(internal_keypath_str);
+        const external_keypath_str = try external_keypath.toStr(allocator, null);
+        defer allocator.free(external_keypath_str);
 
-        const last_internal_index = try db.getLastUsedIndexFromOutputs(&database, keypath_internal_str);
-        const last_external_index = try db.getLastUsedIndexFromOutputs(&database, keypath_internal_str);
-        var last_indexes: [2]i64 = [2]i64{ -1, -1 };
-        if (last_internal_index != null) {
-            last_indexes[0] = last_internal_index.?;
-        }
-        if (last_external_index != null) {
-            last_indexes[1] = last_external_index.?;
-        }
+        const last_internal_index = try db.getLastUsedIndexFromOutputs(&database, internal_keypath_str);
+        const last_external_index = try db.getLastUsedIndexFromOutputs(&database, external_keypath_str);
 
-        for (last_indexes, 0..) |last_index, t| {
-            // This depends on the order specified above. Improve this behaviour pls.
-            const change_type: u32 = if (t == 0) keypath.change_internal_chain else keypath.change_external_chain;
-            for (0..@as(usize, @intCast(last_index + 2))) |i| {
-                const pubkey_addr = descriptors_map.get(descriptor.keypath);
-                if (pubkey_addr == null) {
-                    std.debug.print("descriptor not found for path {d}'/{d}'/{d}'\n", .{ descriptor.keypath.path[0].value, descriptor.keypath.path[1].value, descriptor.keypath.path[2].value });
-                    continue;
-                }
+        const descriptor_pubkey_addr = descriptors_map.get(descriptor.keypath).?;
+        const descriptor_pubkey = try ExtendedPublicKey.fromAddress(descriptor_pubkey_addr);
+        const internal_pubkey = try bip32.deriveChildFromExtendedPublicKey(descriptor_pubkey, keypath.internal_chain);
+        const external_pubkey = try bip32.deriveChildFromExtendedPublicKey(descriptor_pubkey, keypath.external_chain);
 
-                const kp = keypath.KeyPath(5){ .path = [5]keypath.KeyPathElement{ descriptor.keypath.path[0], descriptor.keypath.path[1], descriptor.keypath.path[2], keypath.KeyPathElement{ .value = change_type, .is_hardened = false }, keypath.KeyPathElement{ .value = @as(u32, @intCast(i)), .is_hardened = false } } };
+        const new_internal_last_index = if (last_internal_index == null) KEYS_GAP else last_internal_index.? + KEYS_GAP;
+        const new_external_last_index = if (last_external_index == null) KEYS_GAP else last_external_index.? + KEYS_GAP;
 
-                const extended_pubkey = try ExtendedPublicKey.fromAddress(pubkey_addr.?);
-                try keypaths.put(kp, keypath.Descriptor{ .extended_key = pubkey_addr.?, .keypath = descriptor.keypath, .private = false });
+        // 100 gap
+        try generateKeys(&pubkeys, internal_keypath, internal_pubkey, 0, new_internal_last_index);
+        try generateKeys(&pubkeys, external_keypath, external_pubkey, 0, new_external_last_index);
 
-                const account_kp = keypath.KeyPath(2){ .path = [2]keypath.KeyPathElement{ keypath.KeyPathElement{ .value = kp.path[3].value, .is_hardened = false }, keypath.KeyPathElement{ .value = kp.path[4].value, .is_hardened = false } } };
-                const pubkey = try bip32.deriveChildFromKeyPath(bip32.ExtendedPublicKey, extended_pubkey, 2, account_kp);
-                const pubkey_hash = try pubkey.key.toHash();
-                try pubkeys.put(pubkey_hash, kp);
-            }
-        }
+        try keypath_last_used_index.put(internal_keypath, new_internal_last_index);
+        try keypath_last_used_index.put(external_keypath, new_external_last_index);
     }
 
     std.debug.print("keys generated\n", .{});
@@ -173,94 +178,60 @@ pub fn main() !void {
     defer progressbar.end();
 
     const start: usize = if (current_block_height == null) 0 else current_block_height.? + 1;
+    // align to the current block
+    var i: usize = start;
+    while (true) {
+        if (i >= block_height) {
+            block_height = try rpc.getBlockCount(allocator, &client, res.args.location.?, auth);
+        }
 
-    for (start..block_height + 1) |i| {
-        // [72]u8 is for txid + vout in hex format
-        var outputs = std.ArrayList(Output).init(aa);
-        // [64]u8 is for txid, bool is for isCoinbase
-        var relevant_transactions = std.AutoHashMap([32]u8, bool).init(aa);
         const blockhash = try rpc.getBlockHash(allocator, &client, res.args.location.?, auth, i);
-
         const raw_transactions = try rpc.getBlockRawTx(aa, &client, res.args.location.?, auth, blockhash);
         var raw_transactions_map = std.AutoHashMap([32]u8, []u8).init(aa);
 
-        const block_transactions = try aa.alloc(tx.Transaction, raw_transactions.len);
-        for (raw_transactions, 0..) |tx_raw, j| {
+        var block_transactions = std.AutoHashMap([32]u8, tx.Transaction).init(aa);
+        for (raw_transactions) |tx_raw| {
             const transaction = try tx.decodeRawTx(aa, tx_raw);
-            block_transactions[j] = transaction;
+            try raw_transactions_map.put(try transaction.txid(), tx_raw);
+            try block_transactions.put(try transaction.txid(), transaction);
         }
 
-        // Following BIP44 a wallet must not allow the derivation of a new address if the previous one is not used
-        // So we start by creating 1 new key (both internal and external)
-        // Everytime we found a new output we need to generate the next key and re-index the same block to be sure all outputs are included
-        while (true) blk: {
-            for (block_transactions, 0..) |transaction, k| {
-                const raw = raw_transactions[k];
-                const txid = try transaction.txid();
-                try raw_transactions_map.put(txid, raw);
-
-                const txoutputs = try getOutputsFor(aa, transaction, pubkeys);
-                if (txoutputs.items.len == 0) {
-                    continue;
-                }
-
-                _ = try relevant_transactions.getOrPutValue(txid, transaction.isCoinbase());
-
-                for (0..txoutputs.items.len) |j| {
-                    const txoutput = txoutputs.items[j];
-                    // We need to generate the key with idx + n if it doesnt already exists
-                    const kp = txoutput.keypath.?;
-                    const next = kp.getNext(1);
-                    const existing = keypaths.get(next);
-
-                    // If we are generating a new key and the output is new we start re-indexing the block
-                    // This ensure the fact that we collect all the outputs since the new key could have been used in previous tx in the same block
-                    //var vout_hex: [8]u8 = undefined;
-                    //try utils.intToHexStr(u32, txoutput.outpoint.vout, &vout_hex);
-                    //var key: [72]u8 = undefined;
-                    //_ = try std.fmt.bufPrint(&key, "{s}{s}", .{ try utils.bytesToHex(64, &txoutput.outpoint.txid), vout_hex });
-                    if (existing == null) {
-                        const descriptor = keypaths.get(kp);
-                        // Generate the next key
-                        const account_pubkey = try ExtendedPublicKey.fromAddress(descriptor.?.extended_key);
-                        const account_kp = keypath.KeyPath(2){ .path = [2]keypath.KeyPathElement{ keypath.KeyPathElement{ .value = next.path[3].value, .is_hardened = false }, keypath.KeyPathElement{ .value = next.path[4].value, .is_hardened = false } } };
-                        const next_pubkey = try bip32.deriveChildFromKeyPath(bip32.ExtendedPublicKey, account_pubkey, 2, account_kp);
-                        const next_pubkey_hash = try next_pubkey.key.toHash();
-                        try pubkeys.put(next_pubkey_hash, next);
-                        try keypaths.put(next, descriptor.?);
-                        break :blk;
-                    }
-                }
-
-                for (0..txoutputs.items.len) |j| {
-                    try outputs.append(txoutputs.items[j]);
-                }
-            }
-            break;
-        }
-
+        const tx_outputs = try getOutputsFor(aa, block_transactions, pubkeys);
         const tx_inputs = try getInputsFor(aa, block_transactions, pubkeys);
-        defer tx_inputs.deinit();
 
-        if (outputs.items.len > 0) {
-            try db.saveOutputs(aa, &database, outputs.items);
+        for (tx_outputs.items) |tx_output| {
+            const kp = tx_output.keypath.?.truncPath(4);
+            const current_last_used = keypath_last_used_index.get(kp).?;
+            if (tx_output.keypath.?.path[4].value > current_last_used) {
+                try keypath_last_used_index.put(kp, tx_output.keypath.?.path[4].value);
+            }
+        }
+
+        if (tx_outputs.items.len > 0) {
+            try db.saveOutputs(aa, &database, tx_outputs.items);
         }
         if (tx_inputs.items.len > 0) {
             try db.saveInputsAndMarkOutputs(&database, tx_inputs.items);
         }
-        if (relevant_transactions.count() > 0) {
-            var it = relevant_transactions.keyIterator();
-            while (it.next()) |txid| {
-                const raw = raw_transactions_map.get(txid.*).?;
-                const is_coinbase = relevant_transactions.get(txid.*).?;
-                try db.saveTransaction(&database, txid.*, raw, is_coinbase, i);
-            }
+        for (tx_outputs.items) |tx_output| {
+            const transaction = block_transactions.get(tx_output.txid).?;
+            const raw_tx = raw_transactions_map.get(tx_output.txid).?;
+            try db.saveTransaction(&database, tx_output.txid, raw_tx, transaction.isCoinbase(), i);
         }
+
         // Since db writes are not in a single transaction we commit block as latest so that if we restart we dont't risk loosing information, once block is persisted we are sure outputs, inputs and relevant transactions in that block are persisted too. We can recover from partial commit simply reindexing the block.
         try db.saveBlock(&database, try utils.hexToBytes(32, &blockhash), i);
 
         progressbar.completeOne();
         _ = arena.reset(.free_all);
+
+        if (block_height == i) {
+            break;
+        }
+
+        // Generate new keys if needed
+
+        i += 1;
     }
 
     std.debug.print("indexing completed\n", .{});
@@ -276,29 +247,33 @@ fn scriptPubkeyToPubkeyHash(allocator: std.mem.Allocator, output: tx.TxOutput) !
     return null;
 }
 
-fn getOutputsFor(allocator: std.mem.Allocator, transaction: tx.Transaction, pubkeys: std.AutoHashMap([20]u8, keypath.KeyPath(5))) !std.ArrayList(Output) {
+fn getOutputsFor(allocator: std.mem.Allocator, transactions: std.AutoHashMap([32]u8, tx.Transaction), pubkeys: std.AutoHashMap([20]u8, keypath.KeyPath(5))) !std.ArrayList(Output) {
     var outputs = std.ArrayList(Output).init(allocator);
-    for (0..transaction.outputs.items.len) |i| {
-        const tx_output = transaction.outputs.items[i];
-        const output_pubkey_hash = try scriptPubkeyToPubkeyHash(allocator, tx_output);
-        if (output_pubkey_hash == null) {
-            break;
-        }
+    var it = transactions.valueIterator();
+    while (it.next()) |transaction| {
+        for (0..transaction.outputs.items.len) |i| {
+            const tx_output = transaction.outputs.items[i];
+            const output_pubkey_hash = try scriptPubkeyToPubkeyHash(allocator, tx_output);
+            if (output_pubkey_hash == null) {
+                continue;
+            }
 
-        const pubkey = pubkeys.get(output_pubkey_hash.?);
-        if (pubkey != null) {
-            const txid = try transaction.txid();
-            const vout = @as(u32, @intCast(i));
-            const output = Output{ .outpoint = Outpoint{ .txid = txid, .vout = vout }, .keypath = pubkey.?, .amount = tx_output.amount, .unspent = true };
-            try outputs.append(output);
+            const pubkey = pubkeys.get(output_pubkey_hash.?);
+            if (pubkey != null) {
+                const txid = try transaction.txid();
+                const vout = @as(u32, @intCast(i));
+                const output = Output{ .outpoint = Outpoint{ .txid = txid, .vout = vout }, .txid = txid, .keypath = pubkey.?, .amount = tx_output.amount, .unspent = true };
+                try outputs.append(output);
+            }
         }
     }
     return outputs;
 }
 
-fn getInputsFor(allocator: std.mem.Allocator, transactions: []tx.Transaction, pubkeys: std.AutoHashMap([20]u8, keypath.KeyPath(5))) !std.ArrayList(Input) {
+fn getInputsFor(allocator: std.mem.Allocator, transactions: std.AutoHashMap([32]u8, tx.Transaction), pubkeys: std.AutoHashMap([20]u8, keypath.KeyPath(5))) !std.ArrayList(Input) {
     var inputs = std.ArrayList(Input).init(allocator);
-    for (transactions) |transaction| {
+    var it = transactions.valueIterator();
+    while (it.next()) |transaction| {
         if (transaction.witness.items.len == 0) {
             // No segwit, skip
             return inputs;
