@@ -202,7 +202,11 @@ pub fn main() !void {
         for (tx_outputs.items) |tx_output| {
             const kp = tx_output.keypath.?.truncPath(4);
             const current_last_used = keypath_last_used_index.get(kp).?;
+            // Generate new keys if needed
             if (tx_output.keypath.?.path[4].value > current_last_used) {
+                const current_descriptor = descriptors_map.get(tx_output.keypath.?.truncPath(3)).?;
+                const extended_pubkey = try ExtendedPublicKey.fromAddress(current_descriptor);
+                try generateKeys(&pubkeys, tx_output.keypath.?.truncPath(4), extended_pubkey, current_last_used + 1, tx_output.keypath.?.path[4].value + 1);
                 try keypath_last_used_index.put(kp, tx_output.keypath.?.path[4].value);
             }
         }
@@ -228,8 +232,6 @@ pub fn main() !void {
         if (block_height == i) {
             break;
         }
-
-        // Generate new keys if needed
 
         i += 1;
     }
