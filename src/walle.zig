@@ -132,7 +132,7 @@ pub fn main() !void {
             const master_extended_privkey: bip32.ExtendedPrivateKey = bip32.ExtendedPrivateKey.fromSeed(&seed);
 
             const cointype: u32 = if (network == .mainnet) keypath.bitcoin_coin_type else keypath.bitcoin_testnet_coin_type;
-            const kp = keypath.KeyPath(3){ .path = [3]keypath.KeyPathElement{ keypath.KeyPathElement{ .value = keypath.bip_44_purpose, .is_hardened = true }, keypath.KeyPathElement{ .value = cointype, .is_hardened = true }, keypath.KeyPathElement{ .value = 0, .is_hardened = true } } };
+            const kp = keypath.KeyPath(3){ .path = [3]keypath.KeyPathElement{ keypath.KeyPathElement{ .value = keypath.bip_84_purpose, .is_hardened = true }, keypath.KeyPathElement{ .value = cointype, .is_hardened = true }, keypath.KeyPathElement{ .value = 0, .is_hardened = true } } };
             const descriptor_privkey = try bip32.deriveChildFromKeyPath(bip32.ExtendedPrivateKey, master_extended_privkey, 3, kp);
             const pubkey = bip32.PublicKey.fromPrivateKey(descriptor_privkey.privatekey);
             const pubkey_compressed = try pubkey.compress();
