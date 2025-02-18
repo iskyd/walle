@@ -313,14 +313,14 @@ pub fn getUnspentOutputs(allocator: std.mem.Allocator, db: *sqlite.Db) ![]Output
 }
 
 pub fn deleteOutputsFromBlockHeight(db: *sqlite.Db, block_height: usize) !void {
-    const sql = "DELETE FROM outputs o JOIN transactions t ON t.txid = o.txid WHERE t.block_height > ?;";
+    const sql = "DELETE FROM outputs WHERE txid IN (SELECT txid FROM transactions WHERE block_height > ?);";
     var stmt = try db.prepare(sql);
     defer stmt.deinit();
     try stmt.exec(.{}, .{ .block_height = block_height });
 }
 
 pub fn deleteInputsFromBlockHeight(db: *sqlite.Db, block_height: usize) !void {
-    const sql = "DELETE FROM inputs i JOIN transactions t ON t.txid = i.txid WHERE t.block_height > ?;";
+    const sql = "DELETE FROM inputs WHERE txid IN (SELECT txid FROM transactions WHERE block_height > ?);";
     var stmt = try db.prepare(sql);
     defer stmt.deinit();
     try stmt.exec(.{}, .{ .block_height = block_height });

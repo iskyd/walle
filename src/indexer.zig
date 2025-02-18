@@ -45,7 +45,7 @@ pub fn main() !void {
     // used for everything else
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
-    defer std.debug.assert(gpa.deinit() == .ok);
+    // defer std.debug.assert(gpa.deinit() == .ok);
 
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit.
@@ -75,27 +75,13 @@ pub fn main() !void {
 
     // Manage fork.
     const last_block = try db.getLastBlock(&database);
-    var current_block_height: ?usize = if (last_block != null) last_block.?.height else null;
+    const current_block_height: ?usize = if (last_block != null) last_block.?.height else null;
     std.debug.print("last block {?d}\n", .{current_block_height});
 
     if (current_block_height != null) {
-        while (current_block_height.? > 0) {
-            const b = try db.getBlock(&database, current_block_height.?);
-            const node_block_hash = try rpc.getBlockHash(allocator, &client, rpc_location, auth, current_block_height.?);
-            if (std.mem.eql(u8, &b.hash, &try utils.hexToBytes(32, &node_block_hash))) {
-                break;
-            }
-            current_block_height.? -= 1;
-        }
-
-        // Fork happened. Delete everything we have next to the current_height block
-        if (current_block_height.? < last_block.?.height) {
-            try db.deleteOutputsFromBlockHeight(&database, current_block_height.?);
-            try db.deleteInputsFromBlockHeight(&database, current_block_height.?);
-            try db.deleteTransactionsFromBlockHeight(&database, current_block_height.?);
-
-            // Blocks need to be the last one since this db transactions are not atomic.
-            try db.deleteBlocksFromBlockHeight(&database, current_block_height.?);
+        const last_valid_block_height = try getLastValidBlockHeight(allocator, &client, rpc_location, auth, &database);
+        if (last_valid_block_height != current_block_height) {
+            try deleteEverythingAfterBlock(last_valid_block_height, &database);
         }
     }
 
@@ -183,8 +169,12 @@ pub fn main() !void {
         }
 
         const block_hash = try rpc.getBlockHash(allocator, &client, res.args.location.?, auth, i);
-
-        try manageBlock(aa, block_hash, &client, res.args.location.?, auth, &pubkeys, &keypath_last_used_index, descriptors_map, &database);
+        if (i == 0) {
+            // genesis block
+            try db.saveBlock(&database, try utils.hexToBytes(32, &block_hash), 0);
+        } else {
+            try manageBlock(aa, block_hash, &client, res.args.location.?, auth, &pubkeys, &keypath_last_used_index, descriptors_map, &database);
+        }
 
         progressbar.completeOne();
         _ = arena.reset(.free_all);
@@ -222,14 +212,63 @@ pub fn main() !void {
         const block_hash = try utils.bytesToHex(64, data[0..32]);
         std.debug.print("block hash {s}\n", .{block_hash});
 
-        try manageBlock(aa, block_hash, &client, res.args.location.?, auth, &pubkeys, &keypath_last_used_index, descriptors_map, &database);
+        manageBlock(aa, block_hash, &client, res.args.location.?, auth, &pubkeys, &keypath_last_used_index, descriptors_map, &database) catch |err| {
+            switch (err) {
+                error.ForkHappened => {
+                    // align blocks
+                    const last_valid_block_height = try getLastValidBlockHeight(allocator, &client, rpc_location, auth, &database);
+                    try deleteEverythingAfterBlock(last_valid_block_height, &database);
+                    const new_block_height = try rpc.getBlockCount(allocator, &client, rpc_location, auth);
+                    for (last_valid_block_height..new_block_height + 1) |h| {
+                        const new_block_hash = try rpc.getBlockHash(allocator, &client, rpc_location, auth, h);
+                        try manageBlock(aa, new_block_hash, &client, rpc_location, auth, &pubkeys, &keypath_last_used_index, descriptors_map, &database);
+                    }
+                },
+                else => unreachable,
+            }
+        };
+        _ = arena.reset(.free_all);
     }
 }
 
-fn manageBlock(aa: std.mem.Allocator, block_hash: [64]u8, client: *std.http.Client, rpc_location: []const u8, rpc_auth: []const u8, pubkeys: *std.AutoHashMap([20]u8, keypath.KeyPath(5)), keypath_last_used_index: *std.AutoHashMap(keypath.KeyPath(4), u32), descriptors_map: std.AutoHashMap(keypath.KeyPath(3), [111]u8), database: *sqlite.Db) !void {
+fn getLastValidBlockHeight(allocator: std.mem.Allocator, client: *std.http.Client, rpc_location: []const u8, rpc_auth: []const u8, database: *sqlite.Db) !usize {
+    const last_block = try db.getLastBlock(database);
+    if (last_block == null) {
+        return 0;
+    }
+    var current_block_height = last_block.?.height;
+    while (current_block_height > 0) {
+        const b = try db.getBlock(database, current_block_height);
+        const node_block_hash = try rpc.getBlockHash(allocator, client, rpc_location, rpc_auth, current_block_height);
+        if (std.mem.eql(u8, &b.hash, &try utils.hexToBytes(32, &node_block_hash))) {
+            break;
+        }
+        current_block_height -= 1;
+    }
+
+    return current_block_height;
+}
+
+fn deleteEverythingAfterBlock(from: usize, database: *sqlite.Db) !void {
+    try db.deleteOutputsFromBlockHeight(database, from);
+    try db.deleteInputsFromBlockHeight(database, from);
+    try db.deleteTransactionsFromBlockHeight(database, from);
+
+    // Blocks need to be the last one since this db transactions are not atomic.
+    try db.deleteBlocksFromBlockHeight(database, from);
+}
+
+fn manageBlock(aa: std.mem.Allocator, block_hash: [64]u8, client: *std.http.Client, rpc_location: []const u8, rpc_auth: []const u8, pubkeys: *std.AutoHashMap([20]u8, keypath.KeyPath(5)), keypath_last_used_index: *std.AutoHashMap(keypath.KeyPath(4), u32), descriptors_map: std.AutoHashMap(keypath.KeyPath(3), [111]u8), database: *sqlite.Db) anyerror!void {
     // Manage possible forks. If block.previous_hash is not the same we have in db we need to go back until we find the last valid block
     const block = try rpc.getBlock(aa, client, rpc_location, rpc_auth, block_hash);
     defer block.deinit();
+
+    const prev_block = try db.getBlock(database, block.height - 1); // if this block does not exist, an error will be thrown
+    if (std.mem.eql(u8, &prev_block.hash, &block.previous_hash) == false) {
+        // A fork happened.
+        return error.ForkHappened;
+    }
+
     const raw_transactions = block.raw_transactions;
 
     var raw_transactions_map = std.AutoHashMap([32]u8, []u8).init(aa);
