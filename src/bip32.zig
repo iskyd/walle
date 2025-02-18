@@ -6,7 +6,6 @@ const utils = @import("utils.zig");
 const Network = @import("const.zig").Network;
 const script = @import("script.zig");
 const KeyPath = @import("keypath.zig").KeyPath;
-const time = std.time;
 
 pub const SerializedPrivateKeyVersion = enum(u32) {
     mainnet = 0x0488aDe4,
@@ -277,7 +276,6 @@ pub fn deriveChildFromExtendedPrivateKey(extended_privkey: ExtendedPrivateKey, i
 }
 
 pub fn deriveChildFromExtendedPublicKey(extended_pubkey: ExtendedPublicKey, index: u32) !ExtendedPublicKey {
-    var timer = try time.Timer.start();
     assert(index >= 0);
     assert(index <= 2147483647);
     const index_bytes: [4]u8 = @bitCast(@byteSwap(index));
@@ -303,8 +301,6 @@ pub fn deriveChildFromExtendedPublicKey(extended_pubkey: ExtendedPublicKey, inde
     var public = crypto.Secp256k1Point{ .x = extended_pubkey.key.point.x, .y = extended_pubkey.key.point.y };
     public.add(point_hmac);
 
-    const time_lap = timer.lap();
-    std.debug.print("time elapsed {?d}", .{time_lap});
     return ExtendedPublicKey{ .key = PublicKey{ .point = public }, .chaincode = I[32..].* };
 }
 
