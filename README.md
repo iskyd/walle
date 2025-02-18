@@ -98,7 +98,7 @@ bitcoin-cli -rpcuser=walle -rpcpassword=password -rpcport=18443 generatetoaddres
 ```
 
 From outside the container, one can communicate with the `btcnode` via RPC.
-Ex: 
+Ex:
 
 ```bash
 curl --verbose -L --user walle --data-binary '{"jsonrpc": "1.0", "id": "walle", "method": "getblockchaininfo", "params": []}' -H 'content-type: text/plain;' 0.0.0.0:18444
