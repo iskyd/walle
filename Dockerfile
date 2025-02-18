@@ -18,4 +18,6 @@ RUN mkdir /.bitcoin
 
 ADD node/bitcoin.conf /.bitcoin/bitcoin.conf
 
+EXPOSE 28332
+
 CMD ["bitcoind", "-conf=/.bitcoin/bitcoin.conf"]

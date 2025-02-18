@@ -1,9 +1,13 @@
 const std = @import("std");
+const RpcBlock = @import("../block.zig").RpcBlock;
+const utils = @import("../utils.zig");
 
 const RpcParams = union(enum) { num: usize, str: []u8 };
 
 const GetBlockRawTxResult = struct {
     result: struct {
+        previousblockhash: [64]u8,
+        height: usize,
         tx: []struct {
             hex: []u8,
         },
@@ -163,6 +167,39 @@ pub fn getBlockRawTx(allocator: std.mem.Allocator, client: *std.http.Client, loc
         result[i] = try allocator.dupe(u8, tx.hex);
     }
     return result;
+}
+
+pub fn getBlock(allocator: std.mem.Allocator, client: *std.http.Client, location: []const u8, auth: []const u8, blockhash: [64]u8) !RpcBlock {
+    const uri = try std.Uri.parse(location);
+    const rpc_id = "walle".*;
+    const rpc_method = "getblock".*;
+    var params = std.ArrayList(RpcParams).init(allocator);
+    defer params.deinit();
+    const p1 = RpcParams{ .str = @constCast(&blockhash) };
+    const p2 = RpcParams{ .num = 2 }; // verbosity
+    try params.append(p1);
+    try params.append(p2);
+    const body = try generateBody(allocator, &rpc_id, &rpc_method, params);
+    defer allocator.free(body);
+    var request = try req(client, uri, auth, body);
+    defer request.deinit();
+    const response = try request.reader().readAllAlloc(allocator, 8192);
+    defer allocator.free(response);
+    const parsed = try std.json.parseFromSlice(GetBlockRawTxResult, allocator, response, .{ .allocate = .alloc_always, .ignore_unknown_fields = true });
+    defer parsed.deinit();
+    const transactions = try allocator.alloc([]u8, parsed.value.result.tx.len);
+    for (0..parsed.value.result.tx.len) |i| {
+        const tx = parsed.value.result.tx[i];
+        transactions[i] = try allocator.dupe(u8, tx.hex);
+    }
+
+    return RpcBlock{
+        .allocator = allocator,
+        .hash = try utils.hexToBytes(32, &blockhash),
+        .previous_hash = try utils.hexToBytes(32, &parsed.value.result.previousblockhash),
+        .raw_transactions = transactions,
+        .height = parsed.value.result.height,
+    };
 }
 
 pub fn sendRawTx(allocator: std.mem.Allocator, client: *std.http.Client, location: []const u8, auth: []const u8, signed_tx_hex: []u8) !void {

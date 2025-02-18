@@ -14,10 +14,10 @@ const clap = @import("clap");
 const rpc = @import("rpc/rpc.zig");
 const db = @import("db/db.zig");
 const sqlite = @import("sqlite");
-const Thread = std.Thread;
-const WaitGroup = Thread.WaitGroup;
+const zzmq = @import("zzmq");
 
-const KEYS_GAP = 100;
+// const KEYS_GAP = 100;
+const KEYS_GAP = 5;
 
 fn generateKeys(pubkeys: *std.AutoHashMap([20]u8, keypath.KeyPath(5)), kp: keypath.KeyPath(4), extended_pubkey: bip32.ExtendedPublicKey, start: usize, end: usize) !void {
     for (start..end) |i| {
@@ -71,7 +71,6 @@ pub fn main() !void {
     const auth = try rpc.generateAuth(allocator, res.args.user.?, res.args.password.?);
     defer allocator.free(auth);
     var client = std.http.Client{ .allocator = allocator };
-    defer client.deinit();
     const rpc_location = res.args.location.?;
 
     // Manage fork.
@@ -103,12 +102,6 @@ pub fn main() !void {
     var block_height = try rpc.getBlockCount(allocator, &client, rpc_location, auth);
     std.debug.print("Total blocks {d}\n", .{block_height});
     std.debug.print("Current blocks {?d}\n", .{current_block_height});
-    if (current_block_height != null and block_height == current_block_height.?) {
-        std.debug.print("Already indexed, do nothing\n", .{});
-        const balance = try db.getBalance(&database, current_block_height.?);
-        std.debug.print("Current balance: {d}\n", .{balance});
-        return;
-    }
 
     // Load descriptors
     const descriptors = try db.getDescriptors(allocator, &database, false); // only public descriptors
@@ -174,69 +167,111 @@ pub fn main() !void {
     std.debug.print("keys generated\n", .{});
 
     var progress = std.Progress.start(.{});
-    const progressbar = progress.start("indexing", block_height);
-    defer progressbar.end();
 
     const start: usize = if (current_block_height == null) 0 else current_block_height.? + 1;
+    const progressbar = progress.start("indexing", if (block_height >= start) block_height - start else 0);
+
     // align to the current block
     var i: usize = start;
     while (true) {
-        if (i >= block_height) {
+        // During the indexes new block can be added. Be sure we are aligned
+        if (i > block_height) {
             block_height = try rpc.getBlockCount(allocator, &client, res.args.location.?, auth);
-        }
-
-        const blockhash = try rpc.getBlockHash(allocator, &client, res.args.location.?, auth, i);
-        const raw_transactions = try rpc.getBlockRawTx(aa, &client, res.args.location.?, auth, blockhash);
-        var raw_transactions_map = std.AutoHashMap([32]u8, []u8).init(aa);
-
-        var block_transactions = std.AutoHashMap([32]u8, tx.Transaction).init(aa);
-        for (raw_transactions) |tx_raw| {
-            const transaction = try tx.decodeRawTx(aa, tx_raw);
-            try raw_transactions_map.put(try transaction.txid(), tx_raw);
-            try block_transactions.put(try transaction.txid(), transaction);
-        }
-
-        const tx_outputs = try getOutputsFor(aa, block_transactions, pubkeys);
-        const tx_inputs = try getInputsFor(aa, block_transactions, pubkeys);
-
-        for (tx_outputs.items) |tx_output| {
-            const kp = tx_output.keypath.?.truncPath(4);
-            const current_last_used = keypath_last_used_index.get(kp).?;
-            // Generate new keys if needed
-            if (tx_output.keypath.?.path[4].value > current_last_used) {
-                const current_descriptor = descriptors_map.get(tx_output.keypath.?.truncPath(3)).?;
-                const extended_pubkey = try ExtendedPublicKey.fromAddress(current_descriptor);
-                try generateKeys(&pubkeys, tx_output.keypath.?.truncPath(4), extended_pubkey, current_last_used + 1, tx_output.keypath.?.path[4].value + 1);
-                try keypath_last_used_index.put(kp, tx_output.keypath.?.path[4].value);
+            if (i > block_height) {
+                break;
             }
         }
 
-        if (tx_outputs.items.len > 0) {
-            try db.saveOutputs(aa, &database, tx_outputs.items);
-        }
-        if (tx_inputs.items.len > 0) {
-            try db.saveInputsAndMarkOutputs(&database, tx_inputs.items);
-        }
-        for (tx_outputs.items) |tx_output| {
-            const transaction = block_transactions.get(tx_output.txid).?;
-            const raw_tx = raw_transactions_map.get(tx_output.txid).?;
-            try db.saveTransaction(&database, tx_output.txid, raw_tx, transaction.isCoinbase(), i);
-        }
+        const block_hash = try rpc.getBlockHash(allocator, &client, res.args.location.?, auth, i);
 
-        // Since db writes are not in a single transaction we commit block as latest so that if we restart we dont't risk loosing information, once block is persisted we are sure outputs, inputs and relevant transactions in that block are persisted too. We can recover from partial commit simply reindexing the block.
-        try db.saveBlock(&database, try utils.hexToBytes(32, &blockhash), i);
+        try manageBlock(aa, block_hash, &client, res.args.location.?, auth, &pubkeys, &keypath_last_used_index, descriptors_map, &database);
 
         progressbar.completeOne();
         _ = arena.reset(.free_all);
 
-        if (block_height == i) {
-            break;
-        }
-
         i += 1;
     }
+    progressbar.end();
 
-    std.debug.print("indexing completed\n", .{});
+    std.debug.print("indexing completed starting zmq\n", .{});
+
+    const zmq_port = 28332;
+    const zmq_host = "127.0.0.1";
+    var context = try zzmq.ZContext.init(allocator);
+    defer context.deinit();
+
+    var socket = try zzmq.ZSocket.init(zzmq.ZSocketType.Sub, &context);
+    defer socket.deinit();
+
+    const endpoint = try std.fmt.allocPrint(allocator, "tcp://{s}:{d}", .{ zmq_host, zmq_port });
+    defer allocator.free(endpoint);
+
+    try socket.connect(endpoint);
+    try socket.setSocketOption(.{ .Subscribe = @constCast("hashblock") });
+
+    while (true) {
+        var topic = try socket.receive(.{});
+        var body = try socket.receive(.{});
+        var seq = try socket.receive(.{});
+
+        defer topic.deinit();
+        defer body.deinit();
+        defer seq.deinit();
+
+        const data = try body.data();
+        const block_hash = try utils.bytesToHex(64, data[0..32]);
+        std.debug.print("block hash {s}\n", .{block_hash});
+
+        try manageBlock(aa, block_hash, &client, res.args.location.?, auth, &pubkeys, &keypath_last_used_index, descriptors_map, &database);
+    }
+}
+
+fn manageBlock(aa: std.mem.Allocator, block_hash: [64]u8, client: *std.http.Client, rpc_location: []const u8, rpc_auth: []const u8, pubkeys: *std.AutoHashMap([20]u8, keypath.KeyPath(5)), keypath_last_used_index: *std.AutoHashMap(keypath.KeyPath(4), u32), descriptors_map: std.AutoHashMap(keypath.KeyPath(3), [111]u8), database: *sqlite.Db) !void {
+    // Manage possible forks. If block.previous_hash is not the same we have in db we need to go back until we find the last valid block
+    const block = try rpc.getBlock(aa, client, rpc_location, rpc_auth, block_hash);
+    defer block.deinit();
+    const raw_transactions = block.raw_transactions;
+
+    var raw_transactions_map = std.AutoHashMap([32]u8, []u8).init(aa);
+    defer raw_transactions_map.deinit();
+
+    var block_transactions = std.AutoHashMap([32]u8, tx.Transaction).init(aa);
+    defer block_transactions.deinit();
+    for (raw_transactions) |tx_raw| {
+        const transaction = try tx.decodeRawTx(aa, tx_raw);
+        try raw_transactions_map.put(try transaction.txid(), tx_raw);
+        try block_transactions.put(try transaction.txid(), transaction);
+    }
+
+    const tx_outputs = try getOutputsFor(aa, block_transactions, pubkeys.*);
+    const tx_inputs = try getInputsFor(aa, block_transactions, pubkeys.*);
+
+    for (tx_outputs.items) |tx_output| {
+        const kp = tx_output.keypath.?.truncPath(4);
+        const current_last_used = keypath_last_used_index.get(kp).?;
+        // Generate new keys if needed
+        if (tx_output.keypath.?.path[4].value > current_last_used) {
+            const current_descriptor = descriptors_map.get(tx_output.keypath.?.truncPath(3)).?;
+            const extended_pubkey = try ExtendedPublicKey.fromAddress(current_descriptor);
+            try generateKeys(pubkeys, tx_output.keypath.?.truncPath(4), extended_pubkey, current_last_used + 1, tx_output.keypath.?.path[4].value + 1);
+            try keypath_last_used_index.put(kp, tx_output.keypath.?.path[4].value);
+        }
+    }
+
+    if (tx_outputs.items.len > 0) {
+        try db.saveOutputs(aa, database, tx_outputs.items);
+    }
+    if (tx_inputs.items.len > 0) {
+        try db.saveInputsAndMarkOutputs(database, tx_inputs.items);
+    }
+    for (tx_outputs.items) |tx_output| {
+        const transaction = block_transactions.get(tx_output.txid).?;
+        const raw_tx = raw_transactions_map.get(tx_output.txid).?;
+        try db.saveTransaction(database, tx_output.txid, raw_tx, transaction.isCoinbase(), block.height);
+    }
+
+    // Since db writes are not in a single transaction we commit block as latest so that if we restart we dont't risk loosing information, once block is persisted we are sure outputs, inputs and relevant transactions in that block are persisted too. We can recover from partial commit simply reindexing the block.
+    try db.saveBlock(database, try utils.hexToBytes(32, &block_hash), block.height);
 }
 
 // return bytes value of pubkey hash

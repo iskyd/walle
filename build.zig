@@ -53,12 +53,15 @@ pub fn build(b: *std.Build) void {
     const clap_module = b.dependency("clap", .{ .target = target, .optimize = optimize }).module("clap");
     const sqlite = b.dependency("sqlite", .{ .target = target, .optimize = optimize });
     const sqlite_module = sqlite.module("sqlite");
+    const zzmq_module = b.dependency("zzmq", .{ .target = target, .optimize = optimize }).module("zzmq");
 
     indexer.root_module.addImport("base58", base58_module);
     indexer.root_module.addImport("clap", clap_module);
     indexer.root_module.addImport("crypto", crypto);
     indexer.linkLibrary(sqlite.artifact("sqlite"));
     indexer.root_module.addImport("sqlite", sqlite_module);
+    indexer.linkSystemLibrary("zmq");
+    indexer.root_module.addImport("zzmq", zzmq_module);
 
     wbx.root_module.addImport("base58", base58_module);
     wbx.root_module.addImport("crypto", crypto);
