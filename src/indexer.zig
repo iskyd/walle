@@ -223,6 +223,7 @@ pub fn main() !void {
                     for (last_valid_block_height..new_block_height + 1) |h| {
                         const new_block_hash = try rpc.getBlockHash(allocator, &client, rpc_location, auth, h);
                         try manageBlock(aa, new_block_hash, &client, rpc_location, auth, &pubkeys, &keypath_last_used_index, descriptors_map, &database);
+                        _ = arena.reset(.free_all);
                     }
                 },
                 else => unreachable,
