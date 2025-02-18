@@ -45,13 +45,14 @@ pub fn main() !void {
     // used for everything else
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
-    // defer std.debug.assert(gpa.deinit() == .ok);
 
     const params = comptime clap.parseParamsComptime(
-        \\-h, --help             Display this help and exit.
-        \\-u, --user <str>       User
-        \\-p, --password <str>   Password
-        \\-l, --location <str>   Location
+        \\-h, --help              Display this help and exit.
+        \\-u, --user <str>        User
+        \\-p, --password <str>    Password
+        \\-l, --location <str>    Location
+        \\-z, --zmqhost <str>     Zmq Host
+        \\--zmqport     <usize>   Zmq Port
     );
 
     var diag = clap.Diagnostic{};
@@ -72,6 +73,8 @@ pub fn main() !void {
     defer allocator.free(auth);
     var client = std.http.Client{ .allocator = allocator };
     const rpc_location = res.args.location.?;
+    const zmq_host = res.args.zmqhost.?;
+    const zmq_port = res.args.zmqport.?;
 
     // Manage fork.
     const last_block = try db.getLastBlock(&database);
@@ -185,8 +188,6 @@ pub fn main() !void {
 
     std.debug.print("indexing completed starting zmq\n", .{});
 
-    const zmq_port = 28332;
-    const zmq_host = "127.0.0.1";
     var context = try zzmq.ZContext.init(allocator);
     defer context.deinit();
 
