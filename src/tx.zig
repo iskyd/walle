@@ -721,7 +721,7 @@ pub fn getCommitmentHash(allocator: std.mem.Allocator, outpoint: Outpoint, amoun
     @memcpy(commitment_hash[105 .. 105 + scriptcode.len], scriptcode);
 
     var current_idx = 105 + scriptcode.len;
-    // value and sequence of the output beign spent
+    // value and sequence of the output being spent
     std.mem.writeInt(u64, commitment_hash[current_idx .. current_idx + 8][0..8], amount, .little);
     std.mem.writeInt(u32, commitment_hash[current_idx + 8 .. current_idx + 12][0..4], sequence, .little);
 
