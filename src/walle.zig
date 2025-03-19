@@ -119,7 +119,7 @@ pub fn main() !void {
             // defer wordlist.deinit();
             var entropy: [16]u8 = undefined;
             bip39.generateEntropy(&entropy, 128);
-            var mnemonic: [12][]u8 = undefined;
+            var mnemonic: [12][]const u8 = undefined;
             try bip39.generateMnemonic(allocator, &entropy, wordlist, &mnemonic);
             std.debug.print("This is your mnemonic. Save it offline and dont forget it, otherwise you will loose your funds\n", .{});
             for (mnemonic) |word| {

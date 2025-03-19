@@ -20,7 +20,7 @@ pub const WordList = struct {
     }
 
     pub fn getWords(self: WordList) [2048][]const u8 {
-        var lines = std.mem.split(u8, self.data, word_separator);
+        var lines = std.mem.tokenizeSequence(u8, self.data, word_separator);
         var words: [2048][]const u8 = undefined;
         var index: u16 = 0;
 
@@ -41,7 +41,7 @@ pub fn generateEntropy(buffer: []u8, ent: u16) void {
     rand.bytes(buffer);
 }
 
-pub fn generateMnemonic(allocator: std.mem.Allocator, entropy: []u8, wordlist: WordList, buffer: [][]const u8) !void {
+pub fn generateMnemonic(allocator: std.mem.Allocator, entropy: []u8, wordlist: WordList, buffer: [][]u8) !void {
     // Checksum is 1 bit for every 32 bits of entropy
     const checksum_bits: u8 = @intCast(entropy.len / 4);
     var checksum: [32]u8 = undefined;
@@ -96,7 +96,7 @@ test "generateMnemonic" {
     defer for (b1) |word| allocator.free(word);
 
     const str1 = "void come effort suffer camp survey warrior heavy shoot primary clutch crush open amazing screen patrol group space point ten exist slush involve unfold";
-    var expected1 = std.mem.split(u8, str1, " ");
+    var expected1 = std.mem.tokenizeScalar(u8, str1, ' ');
     var i: u16 = 0;
     while (expected1.next()) |word| {
         try std.testing.expectEqualStrings(word, b1[i]);
@@ -110,7 +110,7 @@ test "generateMnemonic" {
     defer for (b2) |word| allocator.free(word);
 
     const str2 = "all hour make first leader extend hole alien behind guard gospel lava path output census museum junior mass reopen famous sing advance salt reform";
-    var expected2 = std.mem.split(u8, str2, " ");
+    var expected2 = std.mem.tokenizeScalar(u8, str2, ' ');
     i = 0;
     while (expected2.next()) |word| {
         try std.testing.expectEqualStrings(word, b2[i]);
@@ -123,7 +123,7 @@ test "generateMnemonic" {
     try generateMnemonic(allocator, &e3, wordlist, &b3);
     defer for (b3) |word| allocator.free(word);
     const str3 = "merit police comic universe video security can peace monitor drum crucial traffic";
-    var expected3 = std.mem.split(u8, str3, " ");
+    var expected3 = std.mem.tokenizeScalar(u8, str3, ' ');
     i = 0;
     while (expected3.next()) |word| {
         try std.testing.expectEqualStrings(word, b3[i]);

@@ -60,6 +60,7 @@ pub fn build(b: *std.Build) void {
     indexer.root_module.addImport("crypto", crypto);
     indexer.linkLibrary(sqlite.artifact("sqlite"));
     indexer.root_module.addImport("sqlite", sqlite_module);
+
     indexer.linkSystemLibrary("zmq");
     indexer.root_module.addImport("zzmq", zzmq_module);
 
@@ -75,9 +76,17 @@ pub fn build(b: *std.Build) void {
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
-    b.installArtifact(indexer);
-    b.installArtifact(wbx);
-    b.installArtifact(walle);
+
+    const no_bin = b.option(bool, "no-bin", "skip emitting binary") orelse false;
+    if (no_bin) {
+        b.getInstallStep().dependOn(&indexer.step);
+        b.getInstallStep().dependOn(&walle.step);
+        b.getInstallStep().dependOn(&wbx.step);
+    } else {
+        b.installArtifact(indexer);
+        b.installArtifact(wbx);
+        b.installArtifact(walle);
+    }
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish

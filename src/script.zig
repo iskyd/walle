@@ -321,7 +321,7 @@ pub fn p2pk(allocator: std.mem.Allocator, pubkey: []const u8) !Script {
 }
 
 // pubkeys as str
-pub fn p2ms(allocator: std.mem.Allocator, pubkeys: [][]const u8, m: u8, n: u8) !Script {
+pub fn p2ms(allocator: std.mem.Allocator, pubkeys: [][]u8, m: u8, n: u8) !Script {
     assert(m <= n);
     assert(m != 0);
     assert(n <= 16);

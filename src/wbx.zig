@@ -92,7 +92,7 @@ pub fn main() !void {
                 const entropy = try allocator.alloc(u8, ent / 8);
                 defer allocator.free(entropy);
                 bip39.generateEntropy(entropy, ent);
-                var mnemonic: [24][]u8 = undefined;
+                var mnemonic: [24][]const u8 = undefined;
                 const wordlist = try bip39.WordList.init(allocator, "wordlist/english.txt");
                 defer wordlist.deinit();
                 try bip39.generateMnemonic(allocator, entropy, wordlist, &mnemonic);
@@ -141,7 +141,7 @@ pub fn main() !void {
                 return;
             };
             const path = args[3];
-            var it = std.mem.split(u8, path, "/");
+            var it = std.mem.tokenizeScalar(u8, path, '/');
 
             var current = epk;
             var depth: u8 = 0;

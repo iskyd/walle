@@ -26,6 +26,7 @@
               pkgs.zig
               pkgs.sqlite
               pkgs.zeromq
+              pkgs.pkg-config
               config.pre-commit.settings.enabledPackages
             ];
             shellHook = ''
