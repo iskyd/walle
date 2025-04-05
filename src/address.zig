@@ -4,7 +4,8 @@ const utils = @import("utils.zig");
 const Network = @import("const.zig").Network;
 const script = @import("script.zig");
 const PublicKey = @import("bip32.zig").PublicKey;
-const crypto = @import("crypto");
+const Secp256k1 = std.crypto.ecc.Secp256k1;
+const Bech32Encoder = @import("crypto").Bech32Encoder;
 
 pub const Address = struct {
     val: []const u8,
@@ -88,9 +89,9 @@ pub fn deriveP2WPKHAddress(allocator: std.mem.Allocator, s: script.Script, n: Ne
 
     var bytes: [20]u8 = undefined;
     _ = try std.fmt.hexToBytes(&bytes, pubkey_hash);
-    const cap = crypto.Bech32Encoder.calcSize(hrp, &bytes) + 1; // + 1 is for version
+    const cap = Bech32Encoder.calcSize(hrp, &bytes) + 1; // + 1 is for version
     const encoded = try allocator.alloc(u8, cap);
-    _ = crypto.Bech32Encoder.encode(encoded, hrp, &bytes, version, .bech32);
+    _ = Bech32Encoder.encode(encoded, hrp, &bytes, version, .bech32);
     return try Address.init(allocator, encoded);
 }
 
@@ -104,7 +105,7 @@ test "deriveP2PKHAddress" {
     for (pubkeys) |pubkeystr| {
         const v = try std.fmt.parseInt(u264, &pubkeystr, 16);
         const c: [33]u8 = @bitCast(@byteSwap(v));
-        const p = try crypto.Secp256k1Point.fromCompressed(c);
+        const p = try Secp256k1.fromSec1(&c);
         const pk = PublicKey{ .point = p };
         const addrmainnet = try deriveP2PKHAddress(allocator, pk, Network.mainnet);
         const addrtestnet = try deriveP2PKHAddress(allocator, pk, Network.testnet);

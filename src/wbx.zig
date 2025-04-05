@@ -123,11 +123,8 @@ pub fn main() !void {
                 return;
             };
 
-            const public = bip32.PublicKey.fromPrivateKey(epk.privatekey);
-            const compressed = public.toStrCompressed() catch {
-                std.debug.print("Error while compressing public key", .{});
-                return;
-            };
+            const public = try bip32.PublicKey.fromPrivateKey(epk.privatekey);
+            const compressed = public.toCompressed();
             std.debug.print("Compressed public key {s}\n", .{compressed});
         },
         .derivation => {
@@ -176,7 +173,7 @@ pub fn main() !void {
             const strprivate = current.toStrPrivate() catch {
                 return;
             };
-            const public = bip32.PublicKey.fromPrivateKey(epk.privatekey);
+            const public = try bip32.PublicKey.fromPrivateKey(epk.privatekey);
             const compressedpublic = public.toStrCompressed() catch {
                 std.debug.print("Error while generating parent public key\n", .{});
                 return;

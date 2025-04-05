@@ -15,7 +15,7 @@ pub const DecryptError = error{
 };
 
 pub fn encrypt(allocator: std.mem.Allocator, privatekey: [32]u8, passphrase: []const u8, network: Network) ![58]u8 {
-    const pubkey = bip32.PublicKey.fromPrivateKey(privatekey);
+    const pubkey = try bip32.PublicKey.fromPrivateKey(privatekey);
     const addr = try deriveP2PKHAddress(allocator, pubkey, network);
     defer addr.deinit();
     const salt = utils.calculateChecksum(addr.val);
@@ -136,7 +136,7 @@ pub fn decrypt(allocator: std.mem.Allocator, encoded: [58]u8, passphrase: []cons
     _ = try std.fmt.bufPrint(&privkey_hex, "{s}{s}", .{ hexstrkey1, hexstrkey2 });
     var privkey: [32]u8 = undefined;
     _ = try std.fmt.hexToBytes(&privkey, &privkey_hex);
-    const pubkey = bip32.PublicKey.fromPrivateKey(privkey);
+    const pubkey = try bip32.PublicKey.fromPrivateKey(privkey);
     const addr = try deriveP2PKHAddress(allocator, pubkey, network);
     defer addr.deinit();
     const salt = utils.calculateChecksum(addr.val);
