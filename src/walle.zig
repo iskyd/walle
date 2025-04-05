@@ -134,8 +134,8 @@ pub fn main() !void {
             const cointype: u32 = if (network == .mainnet) keypath.bitcoin_coin_type else keypath.bitcoin_testnet_coin_type;
             const kp = keypath.KeyPath(3){ .path = [3]keypath.KeyPathElement{ keypath.KeyPathElement{ .value = keypath.bip_84_purpose, .is_hardened = true }, keypath.KeyPathElement{ .value = cointype, .is_hardened = true }, keypath.KeyPathElement{ .value = 0, .is_hardened = true } } };
             const descriptor_privkey = try bip32.deriveChildFromKeyPath(bip32.ExtendedPrivateKey, master_extended_privkey, 3, kp);
-            const pubkey = bip32.PublicKey.fromPrivateKey(descriptor_privkey.privatekey);
-            const pubkey_compressed = try pubkey.compress();
+            const pubkey = try bip32.PublicKey.fromPrivateKey(descriptor_privkey.privatekey);
+            const pubkey_compressed = pubkey.toCompressed();
 
             const privkey_version: bip32.SerializedPrivateKeyVersion = if (network == .mainnet) .segwit_mainnet else .segwit_testnet;
             const pubkey_version: bip32.SerializedPublicKeyVersion = if (network == .mainnet) .segwit_mainnet else .segwit_testnet;
@@ -272,7 +272,7 @@ pub fn main() !void {
 
                 const commitment_hash = try tx.getCommitmentHash(allocator, utxo.outpoint, @as(u32, @intCast(utxo.amount)), &scriptcode, all_outpoints, tx_outputs, 2, sequence, 0, .sighash_all);
 
-                witnesses[i] = try tx.getP2WPKHWitness(allocator, privkey.privatekey, commitment_hash, .sighash_all, crypto.nonceFnRfc6979);
+                witnesses[i] = try tx.getP2WPKHWitness(allocator, privkey.privatekey, commitment_hash, .sighash_all);
             }
 
             var send_transaction = try tx.createTx(allocator, tx_inputs, tx_outputs);
