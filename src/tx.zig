@@ -3,7 +3,6 @@ const script = @import("script.zig");
 const utils = @import("utils.zig");
 const KeyPath = @import("keypath.zig").KeyPath;
 const assert = @import("std").debug.assert;
-const signEcdsa = @import("crypto").signEcdsa;
 const nonceFnRfc6979 = @import("crypto").nonceFnRfc6979;
 const db = @import("db/db.zig");
 const sqlite = @import("sqlite");
