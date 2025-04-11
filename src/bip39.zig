@@ -41,6 +41,25 @@ pub fn generateEntropy(buffer: []u8, ent: u16) void {
     rand.bytes(buffer);
 }
 
+// This uses the same method used by seedsigner
+// Rolls are given in string format (123456)
+pub fn generateEntropyFromDiceRoll(rolls: []u8, buffer: []u8) void {
+    // 50 rolls generate 128 bits (12 words mnemonic), 99 rolls generate 256 bits (24 words mnemonic).
+    assert(rolls.len == 50 or rolls.len == 99);
+
+    var rolls_hash: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(rolls, &rolls_hash, .{});
+    if (rolls.len == 50) {
+        assert(buffer.len >= 16);
+        @memcpy(buffer[0..16], rolls_hash[0..16]);
+    } else if (rolls.len == 99) {
+        assert(buffer.len >= 32);
+        @memcpy(buffer[0..32], rolls_hash[0..32]);
+    } else {
+        unreachable;
+    }
+}
+
 pub fn generateMnemonic(allocator: std.mem.Allocator, entropy: []u8, wordlist: WordList, buffer: [][]u8) !void {
     // Checksum is 1 bit for every 32 bits of entropy
     const checksum_bits: u8 = @intCast(entropy.len / 4);
@@ -171,4 +190,84 @@ test "mnemonicToSeed" {
     const actualSeed3 = std.mem.readInt(u512, &s3, .big);
     const expectedSeed3: u512 = 8255326540855321261463521619631741630217762107517752183727119838575482639221952857292840619887401542272957276023929492122223117173190986974270213638571525;
     try std.testing.expectEqual(expectedSeed3, actualSeed3);
+}
+
+test "generateEntropyFrom50DiceRolls" {
+    const allocator = std.testing.allocator;
+    const wordlist = try WordList.init(allocator, "wordlist/english.txt");
+    defer wordlist.deinit();
+
+    var entropy: [16]u8 = undefined;
+    var b1: [12][]u8 = undefined;
+    generateEntropyFromDiceRoll(@constCast("12345612345612345612345612345612345612345612345612"), &entropy);
+    try generateMnemonic(allocator, &entropy, wordlist, &b1);
+    defer for (b1) |word| allocator.free(word);
+    var e1 = std.mem.tokenizeScalar(u8, "unveil nice picture region tragic fault cream strike tourist control recipe tourist", ' ');
+    var i: usize = 0;
+    while (e1.next()) |word| {
+        try std.testing.expectEqualStrings(word, b1[i]);
+        i += 1;
+    }
+
+    var b2: [12][]u8 = undefined;
+    generateEntropyFromDiceRoll(@constCast("11111111111111111111111111111111111111111111111111"), &entropy);
+    try generateMnemonic(allocator, &entropy, wordlist, &b2);
+    defer for (b2) |word| allocator.free(word);
+    var e2 = std.mem.tokenizeScalar(u8, "diet glad hat rural panther lawsuit act drop gallery urge where fit", ' ');
+    i = 0;
+    while (e2.next()) |word| {
+        try std.testing.expectEqualStrings(word, b2[i]);
+        i += 1;
+    }
+
+    var b3: [12][]u8 = undefined;
+    generateEntropyFromDiceRoll(@constCast("66666666666666666666666666666666666666666666666666"), &entropy);
+    try generateMnemonic(allocator, &entropy, wordlist, &b3);
+    defer for (b3) |word| allocator.free(word);
+    var e3 = std.mem.tokenizeScalar(u8, "senior morning song proud recycle toy search apple trigger lend vibrant arrest", ' ');
+    i = 0;
+    while (e3.next()) |word| {
+        try std.testing.expectEqualStrings(word, b3[i]);
+        i += 1;
+    }
+}
+
+test "generateEntropyFrom100DiceRolls" {
+    const allocator = std.testing.allocator;
+    const wordlist = try WordList.init(allocator, "wordlist/english.txt");
+    defer wordlist.deinit();
+
+    var entropy: [32]u8 = undefined;
+    var b1: [24][]u8 = undefined;
+    generateEntropyFromDiceRoll(@constCast("522222222222222222222222222222222222222222222555555555555555555555555555555555555555555555555555555"), &entropy);
+    try generateMnemonic(allocator, &entropy, wordlist, &b1);
+    defer for (b1) |word| allocator.free(word);
+    var e1 = std.mem.tokenizeScalar(u8, "resource timber firm banner horror pupil frozen main pear direct pioneer broken grid core insane begin sister pony end debate task silk empty curious", ' ');
+    var i: usize = 0;
+    while (e1.next()) |word| {
+        try std.testing.expectEqualStrings(word, b1[i]);
+        i += 1;
+    }
+
+    var b2: [24][]u8 = undefined;
+    generateEntropyFromDiceRoll(@constCast("222222222222222222222222222222222222222222222555555555555555555555555555555555555555555555555555555"), &entropy);
+    try generateMnemonic(allocator, &entropy, wordlist, &b2);
+    defer for (b2) |word| allocator.free(word);
+    var e2 = std.mem.tokenizeScalar(u8, "garden uphold level clog sword globe armor issue two cute scorpion improve verb artwork blind tail raw butter combine move produce foil feature wave", ' ');
+    i = 0;
+    while (e2.next()) |word| {
+        try std.testing.expectEqualStrings(word, b2[i]);
+        i += 1;
+    }
+
+    var b3: [24][]u8 = undefined;
+    generateEntropyFromDiceRoll(@constCast("222222222222222222222222222222222222222222222555555555555555555555555555555555555555555555555555556"), &entropy);
+    try generateMnemonic(allocator, &entropy, wordlist, &b3);
+    defer for (b3) |word| allocator.free(word);
+    var e3 = std.mem.tokenizeScalar(u8, "lizard broken love tired depend eyebrow excess lonely advance father various cram ignore panic feed plunge miss regret boring unique galaxy fan detail fly", ' ');
+    i = 0;
+    while (e3.next()) |word| {
+        try std.testing.expectEqualStrings(word, b3[i]);
+        i += 1;
+    }
 }
